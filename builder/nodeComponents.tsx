@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { NodeComponentProps, PanelProps, PageNode } from './types'
 import { StyleProps, buildClassName, buildInlineStyle } from './styleMapper'
 import { FieldGroup, SelectField, SpacingField, CheckField, ColorField, StylePanel } from './panelComponents'
@@ -89,6 +89,479 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children })
     </section>
   )
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AVATAR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AvatarRender({ node }: { node: PageNode }) {
+  const src  = node.props.src as string
+  const size = (node.props.size as number) ?? 56
+  const initials = (node.props.initials as string) || ''
+  return src ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={(node.props.alt as string) || ''}
+      className="rounded-full object-cover shrink-0"
+      style={{ width: size, height: size }}
+    />
+  ) : (
+    <div
+      className="rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none"
+      style={{ width: size, height: size, fontSize: size * 0.36 }}
+    >
+      {initials || '?'}
+    </div>
+  )
+}
+
+export const AvatarEditor:  React.FC<NodeComponentProps> = ({ node }) => <AvatarRender node={node} />
+export const AvatarPreview: React.FC<NodeComponentProps> = ({ node }) => <AvatarRender node={node} />
+
+export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
+  const src = (node.props.src as string) ?? ''
+
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Image">
+        <button
+          onClick={() => openMediaPicker(item => onChange({ src: item.url, alt: item.alt }))}
+          className="w-32 h-32 mx-auto block rounded-full border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden"
+        >
+          {src ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={src} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-400 text-xl">🙂</div>
+          )}
+        </button>
+        {src && (
+          <button
+            onClick={() => onChange({ src: '' })}
+            className="w-full mt-2 text-xs font-medium text-neutral-400 hover:text-red-500 py-1.5 rounded-md hover:bg-red-50 transition-colors"
+          >
+            Remove photo (use initials)
+          </button>
+        )}
+        <label className="block text-xs text-neutral-500 mt-3 mb-1">Initials (shown if no image)</label>
+        <input
+          maxLength={2}
+          className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          value={(node.props.initials as string) ?? ''}
+          onChange={e => onChange({ initials: e.target.value.toUpperCase() })}
+        />
+      </FieldGroup>
+      <FieldGroup label="Size">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">Diameter (px)</span>
+          <input
+            type="number" min={24} max={200} step={4}
+            className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
+            value={(node.props.size as number) ?? 56}
+            onChange={e => onChange({ size: +e.target.value || 56 })}
+          />
+        </div>
+      </FieldGroup>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// QUOTE  (avatar + text + name/role, self-contained testimonial card)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function QuoteRender({ node }: { node: PageNode }) {
+  const s = getStyle(node)
+  const avatarSrc = node.props.avatarSrc as string
+  const initials  = (node.props.initials as string) || (node.props.name as string)?.[0] || '?'
+  return (
+    <div className={buildClassName(s, 'flex flex-col gap-4')} style={buildInlineStyle(s)}>
+      <p className="text-lg leading-relaxed text-neutral-700">
+        “{(node.props.quote as string) || 'A short, glowing quote from a happy customer.'}”
+      </p>
+      <div className="flex items-center gap-3">
+        {avatarSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarSrc} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-semibold shrink-0">
+            {initials}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-neutral-800 truncate">{(node.props.name as string) || 'Jordan Lee'}</p>
+          <p className="text-xs text-neutral-400 truncate">{(node.props.role as string) || 'Customer'}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export const QuoteEditor:  React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} />
+export const QuotePreview: React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} />
+
+export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const s = getStyle(node)
+  const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Content">
+        <label className="block text-xs text-neutral-500 mb-1">Quote</label>
+        <textarea
+          className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          value={(node.props.quote as string) ?? ''}
+          onChange={e => onChange({ quote: e.target.value })}
+        />
+        <label className="block text-xs text-neutral-500 mt-2 mb-1">Name</label>
+        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.name as string) ?? ''} onChange={e => onChange({ name: e.target.value })} />
+        <label className="block text-xs text-neutral-500 mt-2 mb-1">Role / company</label>
+        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.role as string) ?? ''} onChange={e => onChange({ role: e.target.value })} />
+      </FieldGroup>
+      <FieldGroup label="Avatar">
+        <button
+          onClick={() => openMediaPicker(item => onChange({ avatarSrc: item.url }))}
+          className="w-16 h-16 rounded-full border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden"
+        >
+          {node.props.avatarSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={node.props.avatarSrc as string} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-400 text-sm">+</div>
+          )}
+        </button>
+      </FieldGroup>
+      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIDEO  (embed)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function toEmbedUrl(url: string): string | null {
+  if (!url) return null
+  const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/)
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`
+  const vimeo = url.match(/vimeo\.com\/(\d+)/)
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`
+  return url // assume already an embeddable URL
+}
+
+function VideoRender({ node }: { node: PageNode }) {
+  const s = getStyle(node)
+  const raw = (node.props.url as string) || ''
+  const embed = toEmbedUrl(raw)
+  const ratio = (s.aspectRatio && s.aspectRatio !== 'auto') ? s.aspectRatio : '16/9'
+
+  if (!embed) {
+    return (
+      <div
+        className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm')}
+        style={{ ...buildInlineStyle(s), aspectRatio: ratio, minHeight: 160 }}
+      >
+        <span className="text-xl">▶</span>
+        <span className="text-xs font-medium">Paste a YouTube or Vimeo link</span>
+      </div>
+    )
+  }
+  return (
+    <div className={buildClassName(s, 'overflow-hidden')} style={{ ...buildInlineStyle(s), aspectRatio: ratio }}>
+      <iframe
+        src={embed}
+        className="w-full h-full"
+        style={{ border: 0 }}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    </div>
+  )
+}
+
+export const VideoEditor:  React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} />
+export const VideoPreview: React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} />
+
+export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const s = getStyle(node)
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Source">
+        <label className="block text-xs text-neutral-500 mb-1">YouTube / Vimeo URL</label>
+        <input
+          className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          placeholder="https://youtube.com/watch?v=…"
+          value={(node.props.url as string) ?? ''}
+          onChange={e => onChange({ url: e.target.value })}
+        />
+        <p className="text-[10px] text-neutral-400 mt-1">Paste any YouTube or Vimeo link — it&apos;s converted to an embed automatically.</p>
+      </FieldGroup>
+      <FieldGroup label="Frame">
+        <SelectField
+          label="Aspect ratio" value={s.aspectRatio ?? '16/9'}
+          options={[
+            { label: 'Wide 16:9',   value: '16/9' },
+            { label: 'Standard 4:3',value: '4/3' },
+            { label: 'Square 1:1',  value: '1/1' },
+            { label: 'Ultra 21:9',  value: '21/9' },
+          ]}
+          onChange={v => patchStyle(node, onChange, { aspectRatio: v as StyleProps['aspectRatio'] })}
+        />
+        <SelectField label="Rounded" value={s.rounded ?? 'lg'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
+        <SelectField label="Shadow" value={s.shadow ?? 'none'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { shadow: v as StyleProps['shadow'] })} />
+      </FieldGroup>
+    </div>
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACCORDION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface AccordionItem { q: string; a: string }
+
+function accordionItems(node: PageNode): AccordionItem[] {
+  const raw = node.props.items as AccordionItem[] | undefined
+  return raw && raw.length ? raw : [
+    { q: 'What is included in the free plan?', a: 'One project, all core blocks, and community support.' },
+    { q: 'Can I cancel anytime?',               a: 'Yes — there are no contracts or cancellation fees.' },
+  ]
+}
+
+function AccordionRender({ node }: { node: PageNode }) {
+  const s = getStyle(node)
+  const items = accordionItems(node)
+  const [openIdx, setOpenIdx] = useState<number | null>(0)
+
+  return (
+    <div className={buildClassName(s, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200')} style={buildInlineStyle(s)}>
+      {items.map((item, i) => {
+        const isOpen = openIdx === i
+        return (
+          <div key={i}>
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setOpenIdx(isOpen ? null : i) }}
+              className="w-full flex items-center justify-between gap-4 py-4 text-left"
+            >
+              <span className="text-sm font-medium text-neutral-800">{item.q}</span>
+              <span className={['shrink-0 text-neutral-400 transition-transform duration-150', isOpen ? 'rotate-45' : ''].join(' ')}>
+                +
+              </span>
+            </button>
+            <div
+              className="overflow-hidden transition-all duration-200"
+              style={{ maxHeight: isOpen ? 240 : 0 }}
+            >
+              <p className="pb-4 text-sm text-neutral-500 leading-relaxed pr-8">{item.a}</p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export const AccordionEditor:  React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} />
+export const AccordionPreview: React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} />
+
+export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const s = getStyle(node)
+  const items = accordionItems(node)
+
+  function updateItem(i: number, partial: Partial<AccordionItem>) {
+    const next = items.map((it, idx) => idx === i ? { ...it, ...partial } : it)
+    onChange({ items: next })
+  }
+  function addItem() {
+    onChange({ items: [...items, { q: 'New question', a: 'Answer goes here.' }] })
+  }
+  function removeItem(i: number) {
+    onChange({ items: items.filter((_, idx) => idx !== i) })
+  }
+
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Items">
+        <div className="space-y-3">
+          {items.map((item, i) => (
+            <div key={i} className="border border-neutral-200 rounded-lg p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <input
+                  className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  placeholder="Question"
+                  value={item.q}
+                  onChange={e => updateItem(i, { q: e.target.value })}
+                />
+                <button
+                  onClick={() => removeItem(i)}
+                  className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm"
+                  aria-label="Remove item"
+                >
+                  ✕
+                </button>
+              </div>
+              <textarea
+                className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-14 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                placeholder="Answer"
+                value={item.a}
+                onChange={e => updateItem(i, { a: e.target.value })}
+              />
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addItem}
+          className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+        >
+          + Add question
+        </button>
+      </FieldGroup>
+      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIST
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function listItems(node: PageNode): string[] {
+  const raw = node.props.items as string[] | undefined
+  return raw && raw.length ? raw : ['First item', 'Second item', 'Third item']
+}
+
+const LIST_MARKERS: Record<string, string> = {
+  bullet: '•',
+  check:  '✓',
+  arrow:  '→',
+  number: '', // handled specially
+}
+
+function ListRender({ node }: { node: PageNode }) {
+  const s = getStyle(node)
+  const items = listItems(node)
+  const markerType = (node.props.markerType as string) || 'bullet'
+  return (
+    <ul className={buildClassName(s, 'space-y-2 list-none')} style={buildInlineStyle(s)}>
+      {items.map((text, i) => (
+        <li key={i} className="flex items-start gap-2.5">
+          <span className="shrink-0 text-violet-600 font-medium leading-6">
+            {markerType === 'number' ? `${i + 1}.` : LIST_MARKERS[markerType] ?? '•'}
+          </span>
+          <span className="leading-6">{text}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export const ListEditor:  React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} />
+export const ListPreview: React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} />
+
+export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const s = getStyle(node)
+  const items = listItems(node)
+
+  function updateItem(i: number, value: string) {
+    const next = [...items]
+    next[i] = value
+    onChange({ items: next })
+  }
+  function addItem() {
+    onChange({ items: [...items, 'New item'] })
+  }
+  function removeItem(i: number) {
+    onChange({ items: items.filter((_, idx) => idx !== i) })
+  }
+
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Items">
+        <div className="space-y-1.5">
+          {items.map((text, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <input
+                className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                value={text}
+                onChange={e => updateItem(i, e.target.value)}
+              />
+              <button
+                onClick={() => removeItem(i)}
+                className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm"
+                aria-label="Remove item"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addItem}
+          className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+        >
+          + Add item
+        </button>
+        <SelectField
+          label="Marker"
+          value={(node.props.markerType as string) ?? 'bullet'}
+          options={[
+            { label: 'Bullet', value: 'bullet' },
+            { label: 'Check',  value: 'check' },
+            { label: 'Arrow',  value: 'arrow' },
+            { label: 'Number', value: 'number' },
+          ]}
+          onChange={v => onChange({ markerType: v })}
+        />
+      </FieldGroup>
+      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BADGE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BADGE_VARIANTS: Record<string, string> = {
+  solid: 'bg-violet-600 text-white',
+  soft:  'bg-violet-100 text-violet-700',
+  outline: 'border border-violet-300 text-violet-700',
+}
+
+function BadgeRender({ node }: { node: PageNode }) {
+  const variant  = (node.props.variant as string) || 'soft'
+  const varClass = BADGE_VARIANTS[variant] ?? BADGE_VARIANTS.soft
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`}>
+      {(node.props.label as string) || 'Badge'}
+    </span>
+  )
+}
+
+
+
+export const BadgeEditor:  React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
+export const BadgePreview: React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
+
+export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => (
+  <div className="space-y-5 p-4">
+    <FieldGroup label="Content">
+      <label className="block text-xs text-neutral-500 mb-1">Label</label>
+      <input
+        className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+        value={(node.props.label as string) ?? ''}
+        onChange={e => onChange({ label: e.target.value })}
+      />
+    </FieldGroup>
+    <FieldGroup label="Style">
+      <SelectField label="Variant" value={(node.props.variant as string) ?? 'soft'} options={['solid','soft','outline']} onChange={v => onChange({ variant: v })} />
+    </FieldGroup>
+  </div>
+)
 
 export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = getStyle(node)

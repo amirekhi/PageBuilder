@@ -9,6 +9,12 @@ import {
   ButtonEditor,   ButtonPreview,   ButtonPanel,
   SpacerEditor,   SpacerPreview,   SpacerPanel,
   DividerEditor,  DividerPreview,  DividerPanel,
+  ListEditor,   ListPreview,   ListPanel,
+  BadgeEditor,  BadgePreview,  BadgePanel,
+  AvatarEditor, AvatarPreview, AvatarPanel,
+  QuoteEditor,  QuotePreview,  QuotePanel,
+  VideoEditor,  VideoPreview,  VideoPanel,
+ AccordionEditor, AccordionPreview, AccordionPanel,
 } from './nodeComponents'
 
 function makeId() {
@@ -16,6 +22,70 @@ function makeId() {
 }
 
 export const NODE_REGISTRY: Record<NodeType, NodeDefinition> = {
+
+  accordion: {
+    label: 'Accordion', icon: '▾', isContainer: false,
+    EditorComponent:  AccordionEditor,
+    PreviewComponent: AccordionPreview,
+    EditorPanel:      AccordionPanel,
+    defaultProps: {
+      items: [
+        { q: 'What is included in the free plan?', a: 'One project, all core blocks, and community support.' },
+        { q: 'Can I cancel anytime?',               a: 'Yes — there are no contracts or cancellation fees.' },
+        { q: 'Do you offer discounts for teams?',   a: 'Yes, contact sales for volume pricing on 10+ seats.' },
+      ],
+      style: {},
+    },
+  },
+
+   avatar: {
+    label: 'Avatar', icon: '◍', isContainer: false,
+    EditorComponent:  AvatarEditor,
+    PreviewComponent: AvatarPreview,
+    EditorPanel:      AvatarPanel,
+    defaultProps: { src: '', initials: 'JL', size: 56, style: {} },
+  },
+
+  quote: {
+    label: 'Quote Card', icon: '❝', isContainer: false,
+    EditorComponent:  QuoteEditor,
+    PreviewComponent: QuotePreview,
+    EditorPanel:      QuotePanel,
+    defaultProps: {
+      quote: 'A short, glowing quote from a happy customer.',
+      name: 'Jordan Lee', role: 'Head of Growth, Acme Corp', avatarSrc: '',
+      style: { px: 6, py: 6, bgColor: 'neutral-50', rounded: 'xl' },
+    },
+  },
+
+  video: {
+    label: 'Video', icon: '▶', isContainer: false,
+    EditorComponent:  VideoEditor,
+    PreviewComponent: VideoPreview,
+    EditorPanel:      VideoPanel,
+    defaultProps: { url: '', style: { width: 'full', rounded: 'lg', aspectRatio: '16/9' } },
+  },
+
+   list: {
+    label: 'List', icon: '☰', isContainer: false,
+    EditorComponent:  ListEditor,
+    PreviewComponent: ListPreview,
+    EditorPanel:      ListPanel,
+    defaultProps: {
+      items: ['First item', 'Second item', 'Third item'],
+      markerType: 'check',
+      style: { fontSize: 'base', textColor: 'neutral-700' },
+    },
+  },
+
+  badge: {
+    label: 'Badge', icon: '◐', isContainer: false,
+    EditorComponent:  BadgeEditor,
+    PreviewComponent: BadgePreview,
+    EditorPanel:      BadgePanel,
+    defaultProps: { label: 'New', variant: 'soft', style: {} },
+  },
+
 
   section: {
     label: 'Section', icon: '▤', isContainer: true,
@@ -113,6 +183,6 @@ export const NODE_REGISTRY: Record<NodeType, NodeDefinition> = {
 
 export const BLOCK_GROUPS: { label: string; types: NodeType[] }[] = [
   { label: 'Layout',   types: ['section', 'columns', 'spacer', 'divider'] },
-  { label: 'Content',  types: ['heading', 'text', 'image'] },
-  { label: 'Elements', types: ['button'] },
+  { label: 'Content',  types: ['heading', 'text', 'image', 'list', 'video', 'accordion'] },
+  { label: 'Elements', types: ['button', 'badge', 'avatar', 'quote'] },
 ]

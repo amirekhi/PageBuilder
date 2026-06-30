@@ -1,15 +1,12 @@
 // ─── Node types ───────────────────────────────────────────────────────────────
 
 export type NodeType =
-  | 'section'
-  | 'columns'
-  | 'column'
-  | 'text'
-  | 'heading'
-  | 'image'
-  | 'button'
-  | 'spacer'
-  | 'divider'
+  | 'section' | 'columns' | 'column'
+  | 'text' | 'heading' | 'image' | 'button'
+  | 'spacer' | 'divider'
+  | 'list' | 'badge'
+  | 'avatar' | 'quote' | 'video'
+  | 'accordion'
 
 export interface PageNode {
   id:       string
