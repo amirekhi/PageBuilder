@@ -3,10 +3,16 @@
 // BUT: dynamically assembled strings like `px-${n}` are NOT scanned.
 //
 // Strategy: store structured style props, then map them to:
-//   1. Tailwind utility classes for enum-like values (colors, display, flex direction…)
+//   1. Tailwind utility classes for enum-like values (display, flex direction…)
 //   2. CSS custom properties via `style` prop for numeric/dynamic values (spacing, sizes)
-//
-// This gives us the best of both worlds: Tailwind theming + dynamic values.
+//   3. Inline CSS for anything color/background related (bgColor, textColor,
+//      borderColor, bgImage, bgGradient) — these were previously built as
+//      dynamic Tailwind classes (e.g. `bg-${bgColor}`), which Tailwind 4's
+//      static scanner can never see, so most of them silently rendered
+//      nothing. Resolving to real hex values / CSS strings and applying via
+//      the `style` attribute sidesteps the scanner entirely and guarantees
+//      every color/gradient/image actually renders, both in the live editor
+//      and in the exported static HTML.
 
 export interface StyleProps {
   // Spacing — stored as px numbers, applied as CSS vars
@@ -17,7 +23,7 @@ export interface StyleProps {
   mt?: number; mb?: number
   gap?: number
 
-  // Colors — enum values → static Tailwind classes (these are scanned at build time)
+  // Colors — resolved to real CSS colors and applied inline (see resolveColor)
   bgColor?:    string   // e.g. 'violet-500', 'white', 'transparent'
   textColor?:  string   // e.g. 'neutral-700', 'white'
   borderColor?: string
@@ -60,29 +66,82 @@ export interface StyleProps {
   aspectRatio?:    'auto'|'1/1'|'4/3'|'16/9'|'3/2'|'21/9'
   objectPosition?: 'center'|'top'|'bottom'|'left'|'right'|'top left'|'top right'|'bottom left'|'bottom right'
 
+  // Background image / gradient / overlay — primarily used on sections
+  // bgImage:   full URL string, applied as CSS background-image
+  // bgSize:    controls how the image fills the element
+  // bgPos:     focal point of the background image
+  // bgOverlay: 0-90 opacity of a dark overlay on top of the image (for text legibility)
+  // bgGradient: a preset value from GRADIENT_PRESETS — stored as a ready-to-use
+  //             CSS `linear-gradient(...)` string, applied directly as background-image
+  bgImage?:    string
+  bgSize?:     'cover' | 'contain' | 'auto'
+  bgPos?:      'center' | 'top' | 'bottom' | 'left' | 'right'
+  bgOverlay?:  number   // 0–90, percentage darkness
+  bgGradient?: string   // e.g. 'linear-gradient(to right, #7c3aed, #4f46e5)'
+
   // Helpers
   centerContent?: boolean  // mx-auto
 }
 
+// ─── Color resolution (hex values, used inline — bypasses Tailwind's scanner) ─
+// Keep the *keys* here in sync with COLOR_PRESETS below so every preset in
+// the picker actually renders. If someone ever passes a raw hex/CSS color
+// string that isn't a known key, we just pass it through unchanged so custom
+// colors keep working too.
+
+const COLOR_HEX: Record<string, string> = {
+  white: '#ffffff',
+  black: '#000000',
+  transparent: 'transparent',
+
+  'slate-50': '#f8fafc',
+  'slate-100': '#f1f5f9',
+  'slate-200': '#e2e8f0',
+  'slate-700': '#334155',
+  'slate-800': '#1e293b',
+  'slate-900': '#0f172a',
+
+  'neutral-50': '#fafafa',
+  'neutral-100': '#f5f5f5',
+  'neutral-200': '#e5e5e5',
+  'neutral-700': '#404040',
+  'neutral-900': '#171717',
+
+  'violet-50': '#f5f3ff',
+  'violet-100': '#ede9fe',
+  'violet-500': '#8b5cf6',
+  'violet-600': '#7c3aed',
+  'violet-700': '#6d28d9',
+
+  'blue-50': '#eff6ff',
+  'blue-500': '#3b82f6',
+  'blue-600': '#2563eb',
+
+  'green-50': '#f0fdf4',
+  'green-500': '#22c55e',
+  'green-600': '#16a34a',
+
+  'red-50': '#fef2f2',
+  'red-500': '#ef4444',
+  'red-600': '#dc2626',
+
+  'amber-50': '#fffbeb',
+  'amber-400': '#fbbf24',
+  'amber-500': '#f59e0b',
+}
+
+export function resolveColor(value?: string): string | undefined {
+  if (!value) return undefined
+  return COLOR_HEX[value] ?? value // fall back to raw value (hex, rgb(), etc.)
+}
+
 // ─── Build className (enum/keyword values only) ───────────────────────────────
 // These classes exist statically in your source — Tailwind 4 will scan them.
+// NOTE: color-related utilities (bg-*, text-*, border-* colors) are
+// deliberately NOT generated here anymore — see resolveColor / buildInlineStyle.
 
 export function buildClassName(style: StyleProps = {}, extra?: string): string {
   const c: string[] = []
-
-  // Background
-  if (style.bgColor === 'white')       c.push('bg-white')
-  else if (style.bgColor === 'black')  c.push('bg-black')
-  else if (style.bgColor === 'transparent') c.push('bg-transparent')
-  else if (style.bgColor)              c.push(`bg-${style.bgColor}`)
-
-  // Text color
-  if (style.textColor === 'white')     c.push('text-white')
-  else if (style.textColor === 'black') c.push('text-black')
-  else if (style.textColor)            c.push(`text-${style.textColor}`)
-
-  // Border color
-  if (style.borderColor)               c.push(`border-${style.borderColor}`)
 
   // Typography
   if (style.fontSize)    c.push(`text-${style.fontSize}`)
@@ -144,7 +203,7 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   return c.filter(Boolean).join(' ')
 }
 
-// ─── Build inline style (numeric/dynamic values) ──────────────────────────────
+// ─── Build inline style (numeric/dynamic values + colors + backgrounds) ───────
 
 export function buildInlineStyle(style: StyleProps = {}): React.CSSProperties {
   const s: React.CSSProperties = {}
@@ -174,10 +233,34 @@ export function buildInlineStyle(style: StyleProps = {}): React.CSSProperties {
     s.aspectRatio = style.aspectRatio
   }
 
+  // Colors — resolved to real CSS values, applied inline (see resolveColor).
+  // This is the fix for "some colors show, some don't": these used to be
+  // built as dynamic Tailwind classes which the Tailwind 4 compiler can't
+  // discover at build time.
+  if (style.bgColor)     s.backgroundColor = resolveColor(style.bgColor)
+  if (style.textColor)   s.color           = resolveColor(style.textColor)
+  if (style.borderColor) s.borderColor     = resolveColor(style.borderColor)
+
+  // Background image / gradient — this is the actual fix for images not
+  // showing at all: previously nothing ever wrote background-image here.
+  // Image takes priority; if there's no image but a gradient is set, the
+  // gradient becomes the background-image instead. bgColor (above) still
+  // applies underneath, so it shows through transparent areas / while the
+  // image loads.
+  if (style.bgImage) {
+    s.backgroundImage    = `url(${style.bgImage})`
+    s.backgroundSize     = style.bgSize ?? 'cover'
+    s.backgroundPosition = style.bgPos ?? 'center'
+    s.backgroundRepeat   = 'no-repeat'
+  } else if (style.bgGradient) {
+    s.backgroundImage = style.bgGradient
+  }
+
   return s
 }
 
 // ─── Color presets (used in panel UI) ────────────────────────────────────────
+// Keep in sync with COLOR_HEX above.
 
 export const COLOR_PRESETS = [
   // Neutrals
@@ -218,3 +301,35 @@ export const COLOR_PRESETS = [
   { label: 'Amber 400',    value: 'amber-400' },
   { label: 'Amber 500',    value: 'amber-500' },
 ]
+
+// ─── Gradient presets ─────────────────────────────────────────────────────────
+// Stored as ready-to-use CSS `linear-gradient(...)` strings (not Tailwind
+// utility fragments) so they can be applied directly via backgroundImage in
+// buildInlineStyle, with zero dependency on Tailwind's class scanner.
+
+export const GRADIENT_PRESETS: { label: string; value: string }[] = [
+  { label: '— None —',              value: '' },
+  { label: 'Violet → Indigo',       value: 'linear-gradient(to right, #7c3aed, #4f46e5)' },
+  { label: 'Violet → Pink',         value: 'linear-gradient(to right, #7c3aed, #ec4899)' },
+  { label: 'Blue → Cyan',           value: 'linear-gradient(to right, #2563eb, #22d3ee)' },
+  { label: 'Indigo → Blue',         value: 'linear-gradient(to right, #4f46e5, #3b82f6)' },
+  { label: 'Rose → Orange',         value: 'linear-gradient(to right, #f43f5e, #fb923c)' },
+  { label: 'Green → Teal',          value: 'linear-gradient(to right, #22c55e, #2dd4bf)' },
+  { label: 'Dark: Slate → Neutral', value: 'linear-gradient(to bottom right, #0f172a, #262626)' },
+  { label: 'Subtle: White → Slate', value: 'linear-gradient(to bottom, #ffffff, #f8fafc)' },
+]
+
+// ─── Overlay helper ───────────────────────────────────────────────────────────
+// Returns inline styles for a dark scrim div that sits between the background
+// and the section content. Used by SectionEditor and SectionPreview.
+
+export function buildOverlayStyle(opacity: number | undefined): React.CSSProperties | null {
+  if (!opacity || opacity <= 0) return null
+  return {
+    position:        'absolute',
+    inset:           0,
+    backgroundColor: `rgba(0,0,0,${opacity / 100})`,
+    pointerEvents:   'none',
+    zIndex:          0,
+  }
+}

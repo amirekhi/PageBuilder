@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { StyleProps, COLOR_PRESETS } from './styleMapper'
+import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor } from './styleMapper'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -88,25 +88,182 @@ export function CheckField({
 }
 
 // ─── Color picker ─────────────────────────────────────────────────────────────
+// Real hex color picker: a native <input type="color"> swatch synced with a
+// free-typed hex text field, plus quick-pick preset swatches below. Accepts
+// (and displays correctly) either a raw hex string or one of the legacy
+// COLOR_PRESETS keys (e.g. 'violet-500') via resolveColor, so existing saved
+// pages keep working. Any value typed or picked going forward is a plain hex
+// string, so users are no longer limited to the fixed preset list.
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
 export function ColorField({
   label, value, onChange,
 }: {
   label: string; value?: string; onChange: (v: string) => void
 }) {
+  const resolved   = resolveColor(value)
+  const swatchHex  = resolved && HEX_RE.test(resolved) ? resolved : '#ffffff'
+  const isTransparent = value === 'transparent'
+
   return (
     <div>
-      <span className="text-xs text-neutral-500 block mb-1">{label}</span>
-      <select
-        className="w-full border border-neutral-200 rounded text-xs p-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-400"
-        value={value ?? ''}
-        onChange={e => onChange(e.target.value)}
-      >
-        <option value="">—</option>
-        {COLOR_PRESETS.map(c => (
-          <option key={c.value} value={c.value}>{c.label}</option>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-neutral-500">{label}</span>
+        {value && (
+          <button
+            onClick={() => onChange('')}
+            className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={swatchHex}
+          onChange={e => onChange(e.target.value)}
+          className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
+          title="Pick a color"
+        />
+        <input
+          type="text"
+          value={value ?? ''}
+          onChange={e => onChange(e.target.value)}
+          placeholder="#ffffff or transparent"
+          spellCheck={false}
+          className="flex-1 border border-neutral-200 rounded-md text-xs p-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-violet-400"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {COLOR_PRESETS.filter(c => c.value !== 'transparent').map(c => (
+          <button
+            key={c.value}
+            onClick={() => onChange(c.value)}
+            title={c.label}
+            className={[
+              'w-5 h-5 rounded-full border transition-transform hover:scale-110',
+              value === c.value ? 'ring-2 ring-offset-1 ring-violet-500 border-transparent' : 'border-neutral-200',
+            ].join(' ')}
+            style={{ backgroundColor: resolveColor(c.value) }}
+          />
         ))}
-      </select>
+        <button
+          onClick={() => onChange('transparent')}
+          title="Transparent"
+          className={[
+            'w-5 h-5 rounded-full border bg-[conic-gradient(#e5e5e5_90deg,white_90deg_180deg,#e5e5e5_180deg_270deg,white_270deg)] bg-[length:6px_6px] transition-transform hover:scale-110',
+            isTransparent ? 'ring-2 ring-offset-1 ring-violet-500 border-transparent' : 'border-neutral-200',
+          ].join(' ')}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── Gradient picker ──────────────────────────────────────────────────────────
+// Builds a real `linear-gradient(direction, from, to)` CSS string from two
+// color pickers + a direction dropdown, with a live preview and quick-pick
+// presets. Parses an incoming value back into its parts so editing an
+// existing (or preset) gradient continues to work.
+
+const GRADIENT_DIRECTIONS: { label: string; value: string }[] = [
+  { label: '→ Left to right', value: 'to right' },
+  { label: '← Right to left', value: 'to left' },
+  { label: '↓ Top to bottom', value: 'to bottom' },
+  { label: '↑ Bottom to top', value: 'to top' },
+  { label: '↘ Diagonal',      value: 'to bottom right' },
+  { label: '↙ Diagonal',      value: 'to bottom left' },
+  { label: '↗ Diagonal',      value: 'to top right' },
+  { label: '↖ Diagonal',      value: 'to top left' },
+]
+
+interface ParsedGradient { direction: string; from: string; to: string }
+
+function parseGradient(css?: string): ParsedGradient | null {
+  if (!css) return null
+  const m = css.match(/^linear-gradient\(\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*\)$/i)
+  if (!m) return null
+  return { direction: m[1].trim(), from: m[2].trim(), to: m[3].trim() }
+}
+
+const DEFAULT_GRADIENT: ParsedGradient = { direction: 'to right', from: '#7c3aed', to: '#4f46e5' }
+
+export function GradientField({
+  value, onChange,
+}: {
+  value?: string
+  onChange: (v: string) => void
+}) {
+  const parsed = parseGradient(value) ?? DEFAULT_GRADIENT
+
+  function build(partial: Partial<ParsedGradient>) {
+    const next = { ...parsed, ...partial }
+    onChange(`linear-gradient(${next.direction}, ${next.from}, ${next.to})`)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-neutral-500">Gradient</span>
+        {value && (
+          <button
+            onClick={() => onChange('')}
+            className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {/* Live preview */}
+      <div
+        className="w-full h-10 rounded-md border border-neutral-200 mb-2"
+        style={value ? { backgroundImage: value } : { backgroundColor: '#f5f5f5' }}
+      />
+
+      <div className="flex items-center gap-2 mb-1.5">
+        <input
+          type="color"
+          value={HEX_RE.test(parsed.from) ? parsed.from : '#7c3aed'}
+          onChange={e => build({ from: e.target.value })}
+          className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
+          title="Start color"
+        />
+        <span className="text-xs text-neutral-400 shrink-0">→</span>
+        <input
+          type="color"
+          value={HEX_RE.test(parsed.to) ? parsed.to : '#4f46e5'}
+          onChange={e => build({ to: e.target.value })}
+          className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
+          title="End color"
+        />
+        <select
+          value={parsed.direction}
+          onChange={e => build({ direction: e.target.value })}
+          className="flex-1 border border-neutral-200 rounded text-xs p-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-400"
+        >
+          {GRADIENT_DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {GRADIENT_PRESETS.filter(g => g.value).map(g => (
+          <button
+            key={g.value}
+            onClick={() => onChange(g.value)}
+            title={g.label}
+            className={[
+              'w-7 h-7 rounded-md border transition-transform hover:scale-110',
+              value === g.value ? 'ring-2 ring-offset-1 ring-violet-500 border-transparent' : 'border-neutral-200',
+            ].join(' ')}
+            style={{ backgroundImage: g.value }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -132,7 +289,7 @@ export function StylePanel({
       </FieldGroup>
 
       <FieldGroup label="Background">
-        <ColorField label="Color" value={style.bgColor} onChange={v => onChange({ bgColor: v })} />
+        <ColorField label="Color" value={style.bgColor} onChange={v => onChange({ bgColor: v || undefined })} />
       </FieldGroup>
 
       <FieldGroup label="Typography">
@@ -151,7 +308,7 @@ export function StylePanel({
           options={[{label:'—',value:''}, 'left','center','right','justify']}
           onChange={v => onChange({ textAlign: v as StyleProps['textAlign'] || undefined })}
         />
-        <ColorField label="Text color" value={style.textColor} onChange={v => onChange({ textColor: v })} />
+        <ColorField label="Text color" value={style.textColor} onChange={v => onChange({ textColor: v || undefined })} />
       </FieldGroup>
 
       <FieldGroup label="Image fit">

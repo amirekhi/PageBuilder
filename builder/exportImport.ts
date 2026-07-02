@@ -2,7 +2,7 @@
 
 import { NodeMap, PageNode, NodeType } from './types'
 import { NODE_REGISTRY } from './registry'
-import { StyleProps, buildClassName } from './styleMapper'
+import { StyleProps, buildClassName, resolveColor } from './styleMapper'
 
 // ─── LocalStorage ─────────────────────────────────────────────────────────────
 
@@ -90,6 +90,10 @@ export function readFileAsText(file: File): Promise<string> {
 // already generates, loaded at runtime via the official Tailwind CDN script
 // so the file works in any browser with an internet connection — no build
 // step, no Tailwind installation needed on the receiving end.
+//
+// Colors, gradients, and background images are written as real inline CSS
+// (via resolveColor / raw gradient strings from styleMapper) rather than
+// dynamic Tailwind classes, so they render identically to the live editor.
 
 function esc(str: string): string {
   return String(str)
@@ -119,6 +123,17 @@ function inlineStyleStr(style: StyleProps | undefined): string {
   if (typeof style.height    === 'number') s.push(`height:${style.height}px`)
   if (style.opacity !== undefined) s.push(`opacity:${style.opacity/100}`)
   if (style.aspectRatio && style.aspectRatio !== 'auto') s.push(`aspect-ratio:${style.aspectRatio}`)
+
+  // Colors — resolved to real CSS values (see styleMapper.resolveColor) instead
+  // of relying on a dynamically-built Tailwind class existing in the CDN's
+  // runtime scan. Fixes colors being missing/inconsistent in exported HTML.
+  const bg = resolveColor(style.bgColor)
+  if (bg) s.push(`background-color:${bg}`)
+  const fg = resolveColor(style.textColor)
+  if (fg) s.push(`color:${fg}`)
+  const bd = resolveColor(style.borderColor)
+  if (bd) s.push(`border-color:${bd}`)
+
   return s.join(';')
 }
 
@@ -137,8 +152,29 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
 
   switch (node.type as NodeType) {
 
-    case 'section':
-      return `${pad}<section${attrs(s, 'w-full')}>\n${kids}\n${pad}</section>`
+    case 'section': {
+      // Build inline background styles that can't be expressed via Tailwind classes
+      const extraInline: string[] = []
+      if (s?.bgImage) {
+        extraInline.push(`background-image:url(${s.bgImage})`)
+        extraInline.push(`background-size:${s.bgSize ?? 'cover'}`)
+        extraInline.push(`background-position:${s.bgPos ?? 'center'}`)
+        extraInline.push('background-repeat:no-repeat')
+      } else if (s?.bgGradient) {
+        // bgGradient is stored as a ready-to-use CSS linear-gradient(...) string
+        extraInline.push(`background-image:${s.bgGradient}`)
+      }
+      const baseInline = inlineStyleStr(s)
+      const combined   = [baseInline, ...extraInline].filter(Boolean).join(';')
+      const baseClass  = buildClassName(s ?? {}, 'w-full relative')
+      const overlay    = s?.bgOverlay && s.bgOverlay > 0
+        ? `\n${pad}  <div style="position:absolute;inset:0;background:rgba(0,0,0,${s.bgOverlay/100});pointer-events:none;z-index:0" aria-hidden="true"></div>`
+        : ''
+      const hasBackground = !!(s?.bgImage || s?.bgGradient)
+      const innerOpen  = hasBackground ? `\n${pad}  <div style="position:relative;z-index:1;width:100%">` : ''
+      const innerClose = hasBackground ? `\n${pad}  </div>` : ''
+      return `${pad}<section class="${baseClass}"${combined ? ` style="${combined}"` : ''}>${overlay}${innerOpen}\n${kids}${innerClose}\n${pad}</section>`
+    }
 
     case 'columns':
       return `${pad}<div${attrs(s, 'w-full flex flex-row')}>\n${kids}\n${pad}</div>`
