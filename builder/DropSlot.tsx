@@ -197,10 +197,34 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const rect    = anchorRef.current?.getBoundingClientRect()
-  const top     = (rect?.bottom ?? 0) + 8 + window.scrollY
-  const rawLeft = rect?.left ?? 0
-  const left    = Math.min(rawLeft, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 272 - 8)
+    const rect = anchorRef.current?.getBoundingClientRect()
+
+    // The picker is `position: fixed`, so it's already positioned relative to
+    // the viewport — window.scrollY doesn't belong here (that would only be
+    // correct for `position: absolute` in document flow), and more importantly
+    // there was no vertical bounds check at all: only `left` was clamped to
+    // stay on-screen horizontally, so clicking "+" anywhere in the bottom
+    // ~400px of the viewport pushed the picker past the bottom edge with no
+    // way to scroll to it. Fix: measure space below vs. above the anchor and
+    // flip to open upward when there isn't enough room below.
+    const viewportH   = typeof window !== 'undefined' ? window.innerHeight : 800
+    const viewportW   = typeof window !== 'undefined' ? window.innerWidth  : 1200
+    const PICKER_H    = 360  // approx max height (search bar + tabs + max-h-72 list + padding)
+    const PICKER_W    = 256  // matches w-64
+    const GAP         = 8
+
+    const anchorTop    = rect?.top    ?? 0
+    const anchorBottom = rect?.bottom ?? 0
+    const anchorLeft   = rect?.left   ?? 0
+
+    const spaceBelow = viewportH - anchorBottom
+    const opensUp    = spaceBelow < PICKER_H && anchorTop > spaceBelow
+
+    const top = opensUp
+      ? Math.max(GAP, anchorTop - PICKER_H - GAP)
+      : anchorBottom + GAP
+
+    const left = Math.min(Math.max(GAP, anchorLeft), viewportW - PICKER_W - GAP)
 
   const filteredGroups = BLOCK_GROUPS
     .map(g => ({
@@ -219,7 +243,7 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
     <div
       ref={pickerRef}
       style={{ position: 'fixed', top, left, zIndex: 9999 }}
-      className="w-64 bg-white rounded-xl border border-neutral-200 shadow-xl p-3"
+      className="w-64 bg-white rounded-xl border border-neutral-200 shadow-xl p-3 max-h-[80vh] overflow-y-auto"
       onMouseDown={e => e.stopPropagation()}
     >
       <input

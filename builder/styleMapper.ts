@@ -332,6 +332,13 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
   if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
 
   if (style.aspectRatio && style.aspectRatio !== 'auto') s.aspectRatio = style.aspectRatio
+  if (typeof style.mx === 'number') { s.marginLeft = style.mx * 4; s.marginRight = style.mx * 4 }
+  if (typeof style.my === 'number') { s.marginTop  = style.my * 4; s.marginBottom = style.my * 4 }
+
+  if (typeof style.mx === 'number') { s.marginLeft = style.mx * 4; s.marginRight  = style.mx * 4 }
+  if (typeof style.my === 'number') { s.marginTop  = style.my * 4; s.marginBottom = style.my * 4 }
+  if (typeof style.mt === 'number')   s.marginTop    = style.mt * 4
+  if (typeof style.mb === 'number')   s.marginBottom = style.mb * 4
 
   Object.assign(s, buildAlignMargin(style))
 

@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { NodeComponentProps, PanelProps, PageNode } from './types'
 import { StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle } from './styleMapper'
-import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel } from './panelComponents'
+import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField } from './panelComponents'
 import { useBuilderStore } from './store'
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -106,9 +106,25 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Align"     value={s.align ?? 'start'} options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
         <SpacingField label="Gap"      value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
       </FieldGroup>
-      <FieldGroup label="Spacing">
-        <SpacingField label="Padding X" value={s.px} onChange={v => patchStyle(node, onChange, { px: v })} />
-        <SpacingField label="Padding Y" value={s.py} onChange={v => patchStyle(node, onChange, { py: v })} />
+      <FieldGroup label="Padding">
+        <BoxSpacingField
+          label="Padding"
+          values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
+          onChange={next => patchStyle(node, onChange, {
+            pt: next.top as number | undefined, pr: next.right as number | undefined,
+            pb: next.bottom as number | undefined, pl: next.left as number | undefined,
+          })}
+        />
+      </FieldGroup>
+      <FieldGroup label="Margin">
+        <BoxSpacingField
+          label="Margin"
+          values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
+          onChange={next => patchStyle(node, onChange, {
+            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+          })}
+        />
       </FieldGroup>
       <FieldGroup label="Width">
         <SelectField label="Max Width" value={s.maxWidth as string ?? ''} options={[{label:'—',value:''},'sm','md','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','full']} onChange={v => patchStyle(node, onChange, { maxWidth: (v || undefined) as StyleProps['maxWidth'] })} />
@@ -123,7 +139,6 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           onChange={v => patchStyle(node, onChange, { bgGradient: v || undefined })}
         />
 
-        {/* Background image picker */}
         <div>
           <label className="block text-xs text-neutral-500 mb-1">Image</label>
           <button
@@ -159,7 +174,6 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           )}
         </div>
 
-        {/* Size, position, overlay — only when a bg image is set */}
         {s.bgImage && (
           <>
             <SelectField
@@ -473,10 +487,6 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BADGE
 // ═══════════════════════════════════════════════════════════════════════════════
-// NOTE: previously this rendered with hardcoded classes only and never read
-// node.props.style at all, which meant a resize handle here would visually
-// do nothing. Now wired through buildClassName/buildInlineStyle like every
-// other block, so width/height (and bg/rounded/shadow etc.) actually apply.
 
 const BADGE_VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white',
@@ -509,6 +519,13 @@ export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => (
     </FieldGroup>
     <FieldGroup label="Style">
       <SelectField label="Variant" value={(node.props.variant as string) ?? 'soft'} options={['solid','soft','outline']} onChange={v => onChange({ variant: v })} />
+      <FieldGroup label="Position">
+        <AlignField style={getStyle(node)} onChange={partial => patchStyle(node, onChange, partial)} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider than the button itself</p>
+      </FieldGroup>
+       <FieldGroup label="Position">
+      <AlignField style={getStyle(node)} onChange={partial => patchStyle(node, onChange, partial)} />
+    </FieldGroup>
     </FieldGroup>
   </div>
 )
@@ -558,9 +575,25 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = getStyle(node)
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Spacing">
-        <SpacingField label="Padding X" value={s.px} onChange={v => patchStyle(node, onChange, { px: v })} />
-        <SpacingField label="Padding Y" value={s.py} onChange={v => patchStyle(node, onChange, { py: v })} />
+      <FieldGroup label="Padding">
+        <BoxSpacingField
+          label="Padding"
+          values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
+          onChange={next => patchStyle(node, onChange, {
+            pt: next.top as number | undefined, pr: next.right as number | undefined,
+            pb: next.bottom as number | undefined, pl: next.left as number | undefined,
+          })}
+        />
+      </FieldGroup>
+      <FieldGroup label="Margin">
+        <BoxSpacingField
+          label="Margin"
+          values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
+          onChange={next => patchStyle(node, onChange, {
+            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+          })}
+        />
       </FieldGroup>
       <FieldGroup label="Background">
         <ColorField label="Color" value={s.bgColor} onChange={v => patchStyle(node, onChange, { bgColor: v || undefined })} />
@@ -735,8 +768,6 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUTTON
 // ═══════════════════════════════════════════════════════════════════════════════
-// NOTE: same fix as Badge above — now honors node.props.style so the resize
-// handles (and any future StylePanel usage) actually have an effect.
 
 const VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white hover:bg-violet-700',

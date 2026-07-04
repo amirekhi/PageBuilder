@@ -1,6 +1,6 @@
 'use client'
+import React, { useState } from 'react'
 
-import React from 'react'
 import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, getBoxAlign, setBoxAlign } from './styleMapper'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -41,8 +41,82 @@ export function SelectField({
   )
 }
 
+// ─── Box spacing (Elementor-style linked 4-side padding/margin) ───────────
+// Four independent px inputs (top/right/bottom/left) with a link toggle:
+// locked (default when all sides already match) means editing any one side
+// sets all four together; unlocked lets each side vary independently.
+// Values are stored in the same "unit × 4 = px" scale as px/py/mx/my (see
+// buildInlineStyle) — this component just shows/accepts real pixels and
+// converts, so the UI feels direct while staying compatible with the
+// existing shorthand properties.
+
+type SideValue = number | 'auto' | undefined
+export interface BoxSides { top?: SideValue; right?: SideValue; bottom?: SideValue; left?: SideValue }
+
+export function BoxSpacingField({
+  label, values, onChange,
+}: {
+  label: string
+  values: BoxSides
+  onChange: (next: BoxSides) => void
+}) {
+  const nums = [values.top, values.right, values.bottom, values.left]
+  const [linked, setLinked] = useState(nums.every(v => v === nums[0]) && nums[0] !== undefined)
+
+  function setSide(side: keyof BoxSides, raw: string) {
+    if (raw === '') {
+      onChange(linked ? { top: undefined, right: undefined, bottom: undefined, left: undefined } : { ...values, [side]: undefined })
+      return
+    }
+    const px   = Math.max(0, Math.min(400, Math.round(+raw) || 0))
+    const unit = Math.round(px / 4)
+    onChange(linked ? { top: unit, right: unit, bottom: unit, left: unit } : { ...values, [side]: unit })
+  }
+
+  const display = (v: SideValue) => (v === undefined || v === 'auto') ? '' : String(v * 4)
+  const placeholderFor = (v: SideValue) => (v === 'auto' ? 'auto' : '0')
+
+  const SIDES: [keyof BoxSides, string][] = [
+    ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left'],
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs text-neutral-500">{label} (px)</span>
+        <button
+          type="button"
+          title={linked ? 'Sides linked — click to edit independently' : 'Sides independent — click to link'}
+          onClick={() => setLinked(v => !v)}
+          className={[
+            'w-6 h-6 flex items-center justify-center rounded text-sm transition-colors',
+            linked ? 'bg-violet-100 text-violet-600' : 'text-neutral-400 hover:bg-neutral-100 border border-neutral-200',
+          ].join(' ')}
+        >
+          {linked ? '🔗' : '⛓'}
+        </button>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {SIDES.map(([side, sideLabel]) => (
+          <div key={side} className="flex flex-col items-center gap-0.5">
+            <input
+              type="number" min={0} max={400} step={2}
+              placeholder={placeholderFor(values[side])}
+              value={display(values[side])}
+              onChange={e => setSide(side, e.target.value)}
+              className="w-full border border-neutral-200 rounded text-xs p-1.5 text-center focus:outline-none focus:ring-1 focus:ring-violet-400"
+            />
+            <span className="text-[9px] text-neutral-400">{sideLabel}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Spacing slider ───────────────────────────────────────────────────────────
 // Values map to multiples of 4px. Scale: 0,1,2,3,4,5,6,8,10,12,16,20,24,32,40,48,64
+// Still used for gap (which has no "sides") — padding/margin now use BoxSpacingField.
 
 const SCALE = [0,1,2,3,4,5,6,8,10,12,16,20,24,32,40,48,64]
 
@@ -67,6 +141,7 @@ export function SpacingField({
     </div>
   )
 }
+
 // ─── Alignment (left / center / right) ─────────────────────────────────────
 // Backed by ml/mr margins (see styleMapper's getBoxAlign/setBoxAlign), so
 // this is the one place that ever writes alignment — the wrapper in
@@ -128,12 +203,6 @@ export function CheckField({
 }
 
 // ─── Color picker ─────────────────────────────────────────────────────────────
-// Real hex color picker: a native <input type="color"> swatch synced with a
-// free-typed hex text field, plus quick-pick preset swatches below. Accepts
-// (and displays correctly) either a raw hex string or one of the legacy
-// COLOR_PRESETS keys (e.g. 'violet-500') via resolveColor, so existing saved
-// pages keep working. Any value typed or picked going forward is a plain hex
-// string, so users are no longer limited to the fixed preset list.
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
@@ -205,10 +274,6 @@ export function ColorField({
 }
 
 // ─── Gradient picker ──────────────────────────────────────────────────────────
-// Builds a real `linear-gradient(direction, from, to)` CSS string from two
-// color pickers + a direction dropdown, with a live preview and quick-pick
-// presets. Parses an incoming value back into its parts so editing an
-// existing (or preset) gradient continues to work.
 
 const GRADIENT_DIRECTIONS: { label: string; value: string }[] = [
   { label: '→ Left to right', value: 'to right' },
@@ -259,7 +324,6 @@ export function GradientField({
         )}
       </div>
 
-      {/* Live preview */}
       <div
         className="w-full h-10 rounded-md border border-neutral-200 mb-2"
         style={value ? { backgroundImage: value } : { backgroundColor: '#f5f5f5' }}
@@ -309,10 +373,6 @@ export function GradientField({
 }
 
 // ─── Shared StylePanel (spacing + color + typography) ─────────────────────────
-// Used as the "Style" tab in ControlPanel for all node types.
-// Includes image fit/aspect-ratio controls so the Style tab works for Image
-// blocks too — previously only the Content tab's ImagePanel had these, which
-// made the Style tab look "broken" (missing fields) whenever an image was selected.
 
 export function StylePanel({
   style, onChange,
@@ -325,11 +385,38 @@ export function StylePanel({
       <FieldGroup label="Position">
         <AlignField style={style} onChange={onChange} />
         <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
-     </FieldGroup>
-      <FieldGroup label="Spacing">
-        <SpacingField label="Padding X" value={style.px} onChange={v => onChange({ px: v })} />
-        <SpacingField label="Padding Y" value={style.py} onChange={v => onChange({ py: v })} />
-        <SpacingField label="Gap"       value={style.gap} onChange={v => onChange({ gap: v })} />
+      </FieldGroup>
+
+      <FieldGroup label="Padding">
+        <BoxSpacingField
+          label="Padding"
+          values={{
+            top: style.pt ?? style.py, right: style.pr ?? style.px,
+            bottom: style.pb ?? style.py, left: style.pl ?? style.px,
+          }}
+          onChange={next => onChange({
+            pt: next.top as number | undefined, pr: next.right as number | undefined,
+            pb: next.bottom as number | undefined, pl: next.left as number | undefined,
+          })}
+        />
+        <SpacingField label="Gap" value={style.gap} onChange={v => onChange({ gap: v })} />
+      </FieldGroup>
+
+      <FieldGroup label="Margin">
+        <BoxSpacingField
+          label="Margin"
+          values={{
+            top: style.mt ?? style.my, right: style.mr ?? style.mx,
+            bottom: style.mb ?? style.my, left: style.ml ?? style.mx,
+          }}
+          onChange={next => onChange({
+            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+          })}
+        />
+        <p className="text-[10px] text-neutral-400 -mt-1">
+          Left/Right margin is overridden by the Align control above whenever it's set to Center or Right
+        </p>
       </FieldGroup>
 
       <FieldGroup label="Background">

@@ -2,7 +2,7 @@
 
 import { NodeMap, PageNode, NodeType } from './types'
 import { NODE_REGISTRY } from './registry'
-import { StyleProps, buildClassName, resolveColor } from './styleMapper'
+import { StyleProps, buildClassName, resolveColor, buildAlignMargin } from './styleMapper'
 
 // ─── LocalStorage ─────────────────────────────────────────────────────────────
 
@@ -116,6 +116,14 @@ function inlineStyleStr(style: StyleProps | undefined): string {
   if (style.my  !== undefined) { s.push(`margin-top:${style.my*4}px`);   s.push(`margin-bottom:${style.my*4}px`) }
   if (style.mt  !== undefined) s.push(`margin-top:${style.mt*4}px`)
   if (style.mb  !== undefined) s.push(`margin-bottom:${style.mb*4}px`)
+  // ml/mr (and the legacy centerContent fallback) are what actually drive
+  // the Align control (Left/Center/Right) — reusing buildAlignMargin here
+  // instead of re-deriving it means this can never drift out of sync with
+  // what the live editor shows, the way it just did (this function simply
+  // never read ml/mr before, so exported pages silently lost alignment).
+  const align = buildAlignMargin(style)
+  if (align.marginLeft  !== undefined) s.push(`margin-left:${typeof align.marginLeft  === 'number' ? align.marginLeft  + 'px' : align.marginLeft}`)
+  if (align.marginRight !== undefined) s.push(`margin-right:${typeof align.marginRight === 'number' ? align.marginRight + 'px' : align.marginRight}`)
   if (style.gap !== undefined) s.push(`gap:${style.gap*4}px`)
   if (typeof style.width     === 'number') s.push(`width:${style.width}px`)
   if (typeof style.maxWidth  === 'number') s.push(`max-width:${style.maxWidth}px`)
