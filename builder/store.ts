@@ -51,12 +51,6 @@ const INITIAL_NODES: NodeMap = {
 }
 
 // ─── One-time image normalization ──────────────────────────────────────────
-// Images created before aspectRatio/objectFit existed (or added via early
-// versions of the media picker) may be missing these fields entirely, which
-// makes every image render at its own natural size. This walks the node map
-// once and backfills sane defaults ONLY where they're missing — it never
-// touches a node that already has an explicit aspectRatio/objectFit, so
-// template-authored ratios and anything the user deliberately set are left alone.
 function normalizeImageNodes(nodes: NodeMap): NodeMap {
   const next = { ...nodes }
   let changed = false
@@ -92,8 +86,6 @@ export const PREVIEW_WIDTHS: Record<PreviewWidth, { px: number; label: string; i
   mobile:  { px: 390,  label: 'Mobile',  icon: '📱' },
 }
 
-// Callback invoked with the chosen MediaItem's url. Set when opening the
-// picker for a specific field (e.g. an image node's `src` prop), cleared on close.
 type MediaPickCallback = (item: MediaItem) => void
 
 interface BuilderStore {
@@ -101,6 +93,7 @@ interface BuilderStore {
   rootId:       string
   selectedId:   string | null
   draggingId:   string | null
+  resizingId:   string | null
   mode:         'edit' | 'preview'
   previewWidth: PreviewWidth
   past:         NodeMap[]
@@ -119,6 +112,7 @@ interface BuilderStore {
   setPreviewWidth: (w: PreviewWidth) => void
   selectNode:      (id: string | null) => void
   setDragging:     (id: string | null) => void
+  setResizing:     (id: string | null) => void
   updateProps:     (id: string, props: Record<string, unknown>) => void
   addNode:         (type: NodeType, parentId: string, index: number) => void
   moveNode:        (id: string, newParentId: string, index: number) => void
@@ -140,6 +134,7 @@ export const useBuilderStore = create<BuilderStore>()(
       rootId:       ROOT_ID,
       selectedId:   null,
       draggingId:   null,
+      resizingId:   null,
       mode:         'edit',
       previewWidth: 'desktop',
       past:         [],
@@ -160,6 +155,7 @@ export const useBuilderStore = create<BuilderStore>()(
       setPreviewWidth: (w)    => set(s => { s.previewWidth = w }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
+      setResizing:     (id)   => set(s => { s.resizingId = id }),
 
       updateProps: (id, props) => set(s => {
         pushHistory(s)
@@ -246,8 +242,6 @@ export const useBuilderStore = create<BuilderStore>()(
       // ── Media ──
       openMediaPicker: (onPick) => set(s => {
         s.isMediaPickerOpen = true
-        // Functions can't be stored directly via immer's draft assignment in a
-        // type-safe way, so we wrap it — immer treats functions as opaque values.
         s.mediaPickCallback = onPick
       }),
 

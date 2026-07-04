@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor } from './styleMapper'
+import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, getBoxAlign, setBoxAlign } from './styleMapper'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -64,6 +64,46 @@ export function SpacingField({
         onChange={e => onChange(SCALE[+e.target.value])}
       />
       <span className="text-xs text-neutral-400 w-6 text-right">{value ?? 0}</span>
+    </div>
+  )
+}
+// ─── Alignment (left / center / right) ─────────────────────────────────────
+// Backed by ml/mr margins (see styleMapper's getBoxAlign/setBoxAlign), so
+// this is the one place that ever writes alignment — the wrapper in
+// SelectableShell and the node's own rendered element both read it from the
+// same ml/mr values, so they can't fall out of sync the way the old
+// class-only `centerContent` did.
+
+export function AlignField({
+  style, onChange,
+}: {
+  style: StyleProps
+  onChange: (partial: Partial<StyleProps>) => void
+}) {
+  const current = getBoxAlign(style)
+  const OPTIONS: { v: BoxAlign; icon: string; title: string }[] = [
+    { v: 'left',   icon: '⇤', title: 'Align left' },
+    { v: 'center', icon: '↔', title: 'Center' },
+    { v: 'right',  icon: '⇥', title: 'Align right' },
+  ]
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-neutral-500 w-20 shrink-0">Align</span>
+      <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+        {OPTIONS.map(o => (
+          <button
+            key={o.v}
+            title={o.title}
+            onClick={() => onChange(setBoxAlign(o.v))}
+            className={[
+              'flex-1 py-1 text-xs transition-colors',
+              current === o.v ? 'bg-violet-600 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50',
+            ].join(' ')}
+          >
+            {o.icon}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -282,6 +322,10 @@ export function StylePanel({
 }) {
   return (
     <div className="space-y-5 p-4">
+      <FieldGroup label="Position">
+        <AlignField style={style} onChange={onChange} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
+     </FieldGroup>
       <FieldGroup label="Spacing">
         <SpacingField label="Padding X" value={style.px} onChange={v => onChange({ px: v })} />
         <SpacingField label="Padding Y" value={style.py} onChange={v => onChange({ py: v })} />

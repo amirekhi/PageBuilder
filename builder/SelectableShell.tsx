@@ -5,6 +5,8 @@ import { useDraggable } from '@dnd-kit/core'
 import { useBuilderStore } from './store'
 import { PageNode } from './types'
 import { NODE_REGISTRY } from './registry'
+import { ResizeHandles } from './ResizeHandles'
+import { StyleProps, buildBoxSizingStyle } from './styleMapper'
 
 interface SelectableShellProps {
   node:     PageNode
@@ -23,6 +25,17 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
   const isRoot        = node.id === rootId
   const isContainer   = NODE_REGISTRY[node.type]?.isContainer ?? false
   const ref           = useRef<HTMLDivElement>(null)
+
+  // Everything gets resize handles except text/heading (kept auto-sized to
+  // their content) and the root node (the page canvas itself isn't resizable).
+  const canResize = !isRoot
+
+  // The wrapper (this div) is the thing that actually participates in the
+  // parent's layout (flex item inside Columns/Section, etc). It needs to
+  // carry the same box-affecting style as the node itself, or the outline/
+  // resize handles will visually detach from what's rendering inside them.
+  const nodeStyle       = (node.props.style as StyleProps) ?? {}
+  const boxSizingStyle  = isRoot ? {} : buildBoxSizingStyle(nodeStyle)
 
   const { attributes, listeners, setNodeRef, setActivatorNodeRef } = useDraggable({
     id:       node.id,
@@ -74,6 +87,7 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
         opacity:       isDragging ? 0.35 : 1,
         transition:    'opacity 0.1s',
         cursor:        isRoot ? 'default' : 'pointer',
+        ...boxSizingStyle,
       }}
       {...attributes}
     >
@@ -101,6 +115,11 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
       )}
 
       {children}
+
+      {/* Drag-to-resize handles — only when selected and this type supports it */}
+      {isSelected && canResize && (
+        <ResizeHandles node={node} shellRef={ref} />
+      )}
     </div>
   )
 }

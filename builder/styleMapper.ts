@@ -6,13 +6,8 @@
 //   1. Tailwind utility classes for enum-like values (display, flex direction…)
 //   2. CSS custom properties via `style` prop for numeric/dynamic values (spacing, sizes)
 //   3. Inline CSS for anything color/background related (bgColor, textColor,
-//      borderColor, bgImage, bgGradient) — these were previously built as
-//      dynamic Tailwind classes (e.g. `bg-${bgColor}`), which Tailwind 4's
-//      static scanner can never see, so most of them silently rendered
-//      nothing. Resolving to real hex values / CSS strings and applying via
-//      the `style` attribute sidesteps the scanner entirely and guarantees
-//      every color/gradient/image actually renders, both in the live editor
-//      and in the exported static HTML.
+//      borderColor, bgImage, bgGradient) — resolved to real hex/CSS values and
+//      applied via the `style` attribute, sidestepping Tailwind's static scanner.
 
 export interface StyleProps {
   // Spacing — stored as px numbers, applied as CSS vars
@@ -22,10 +17,13 @@ export interface StyleProps {
   mx?: number; my?: number
   mt?: number; mb?: number
   gap?: number
-
+  
+  
+  ml?: number | 'auto'   // NEW — supports 'auto' for left/center/right alignment
+  mr?: number | 'auto'   // NEW
   // Colors — resolved to real CSS colors and applied inline (see resolveColor)
-  bgColor?:    string   // e.g. 'violet-500', 'white', 'transparent'
-  textColor?:  string   // e.g. 'neutral-700', 'white'
+  bgColor?:    string   // e.g. 'violet-500', 'white', 'transparent', or any hex
+  textColor?:  string   // e.g. 'neutral-700', 'white', or any hex
   borderColor?: string
 
   // Typography
@@ -59,20 +57,12 @@ export interface StyleProps {
   shadow?:    'none'|'sm'|'md'|'lg'|'xl'|'2xl'
   opacity?:   number   // 0-100
 
-  // Image-specific (Elementor-style fit controls) — keeps every image the
-  // same box size regardless of its native dimensions, with control over
-  // how the image fills that box.
+  // Image-specific (Elementor-style fit controls)
   objectFit?:      'cover'|'contain'|'fill'|'none'
   aspectRatio?:    'auto'|'1/1'|'4/3'|'16/9'|'3/2'|'21/9'
   objectPosition?: 'center'|'top'|'bottom'|'left'|'right'|'top left'|'top right'|'bottom left'|'bottom right'
 
   // Background image / gradient / overlay — primarily used on sections
-  // bgImage:   full URL string, applied as CSS background-image
-  // bgSize:    controls how the image fills the element
-  // bgPos:     focal point of the background image
-  // bgOverlay: 0-90 opacity of a dark overlay on top of the image (for text legibility)
-  // bgGradient: a preset value from GRADIENT_PRESETS — stored as a ready-to-use
-  //             CSS `linear-gradient(...)` string, applied directly as background-image
   bgImage?:    string
   bgSize?:     'cover' | 'contain' | 'auto'
   bgPos?:      'center' | 'top' | 'bottom' | 'left' | 'right'
@@ -84,10 +74,6 @@ export interface StyleProps {
 }
 
 // ─── Color resolution (hex values, used inline — bypasses Tailwind's scanner) ─
-// Keep the *keys* here in sync with COLOR_PRESETS below so every preset in
-// the picker actually renders. If someone ever passes a raw hex/CSS color
-// string that isn't a known key, we just pass it through unchanged so custom
-// colors keep working too.
 
 const COLOR_HEX: Record<string, string> = {
   white: '#ffffff',
@@ -136,9 +122,6 @@ export function resolveColor(value?: string): string | undefined {
 }
 
 // ─── Build className (enum/keyword values only) ───────────────────────────────
-// These classes exist statically in your source — Tailwind 4 will scan them.
-// NOTE: color-related utilities (bg-*, text-*, border-* colors) are
-// deliberately NOT generated here anymore — see resolveColor / buildInlineStyle.
 
 export function buildClassName(style: StyleProps = {}, extra?: string): string {
   const c: string[] = []
@@ -188,7 +171,7 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   // Effects
   if (style.shadow && style.shadow !== 'none') c.push(`shadow-${style.shadow}`)
 
-  // Image fit (static enum classes — scanned fine by Tailwind)
+  // Image fit
   if (style.objectFit === 'cover')     c.push('object-cover')
   else if (style.objectFit === 'contain') c.push('object-contain')
   else if (style.objectFit === 'fill')    c.push('object-fill')
@@ -196,8 +179,7 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
 
   if (style.objectPosition) c.push(`object-${style.objectPosition.replace(' ', '-')}`)
 
-  // Helpers
-  if (style.centerContent) c.push('mx-auto')
+
 
   if (extra) c.push(extra)
   return c.filter(Boolean).join(' ')
@@ -219,34 +201,46 @@ export function buildInlineStyle(style: StyleProps = {}): React.CSSProperties {
   if (style.mt  !== undefined)   s.marginTop    = style.mt * 4
   if (style.mb  !== undefined)   s.marginBottom = style.mb * 4
   if (style.gap !== undefined)   s.gap          = style.gap * 4
+Object.assign(s, buildAlignMargin(style))
 
-  // Numeric sizes
-  if (typeof style.width     === 'number') s.width     = style.width
-  if (typeof style.maxWidth  === 'number') s.maxWidth  = style.maxWidth
-  if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
-  if (typeof style.height    === 'number') s.height    = style.height
+// Numeric sizes
+if (typeof style.width === 'number') {
+  s.width      = style.width
+  s.flexGrow   = 0
+  s.flexShrink = 0
+  // No flexBasis here — flex-basis sizes the *main* axis of the parent
+  // flex container (height when the parent is flex-col, width when it's
+  // flex-row). Setting it from `width` unconditionally was forcing a
+  // column-direction parent's height to whatever pixel width you'd just
+  // dragged. Leaving flex-basis at its default (auto) makes it fall back
+  // to reading width/height directly for whichever axis is actually the
+  // main one — so width only ever affects width, on any parent.
+}
+
+if (typeof style.maxWidth === 'number') {
+  s.maxWidth = style.maxWidth
+} else if (style.maxWidth === 'full') {
+  s.maxWidth = '100%'
+} else if (typeof style.width === 'number') {
+  // A drag-resized pixel width is a preferred width, not a guarantee — it
+  // should never exceed whatever room its container actually has.
+  s.maxWidth = '100%'
+}
+
+if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
+if (typeof style.height    === 'number') s.height    = style.height
   if (style.opacity !== undefined)         s.opacity   = style.opacity / 100
 
-  // Aspect ratio — this is what makes every image box the SAME shape
-  // regardless of the source photo's native dimensions
   if (style.aspectRatio && style.aspectRatio !== 'auto') {
     s.aspectRatio = style.aspectRatio
   }
 
   // Colors — resolved to real CSS values, applied inline (see resolveColor).
-  // This is the fix for "some colors show, some don't": these used to be
-  // built as dynamic Tailwind classes which the Tailwind 4 compiler can't
-  // discover at build time.
   if (style.bgColor)     s.backgroundColor = resolveColor(style.bgColor)
   if (style.textColor)   s.color           = resolveColor(style.textColor)
   if (style.borderColor) s.borderColor     = resolveColor(style.borderColor)
 
-  // Background image / gradient — this is the actual fix for images not
-  // showing at all: previously nothing ever wrote background-image here.
-  // Image takes priority; if there's no image but a gradient is set, the
-  // gradient becomes the background-image instead. bgColor (above) still
-  // applies underneath, so it shows through transparent areas / while the
-  // image loads.
+  // Background image / gradient
   if (style.bgImage) {
     s.backgroundImage    = `url(${style.bgImage})`
     s.backgroundSize     = style.bgSize ?? 'cover'
@@ -259,11 +253,93 @@ export function buildInlineStyle(style: StyleProps = {}): React.CSSProperties {
   return s
 }
 
+export type BoxAlign = 'left' | 'center' | 'right'
+
+// Single source of truth for "where does this box sit when it's narrower
+// than its container" — used by both the node's own rendered style and by
+// SelectableShell's wrapper, so they can never drift apart the way
+// centerContent-as-a-class did.
+export function getBoxAlign(style: StyleProps = {}): BoxAlign {
+  if (style.ml === 'auto' && style.mr === 'auto') return 'center'
+  if (style.ml === 'auto') return 'right'
+  if (style.mr === 'auto') return 'left'
+  if (style.centerContent) return 'center' // legacy pages/templates
+  return 'left'
+}
+
+export function setBoxAlign(align: BoxAlign): Partial<StyleProps> {
+  // Clearing centerContent means ml/mr become the only source of truth
+  // going forward — no risk of the old flag and new margins disagreeing.
+  if (align === 'center') return { ml: 'auto', mr: 'auto', centerContent: undefined }
+  if (align === 'right')  return { ml: 'auto', mr: 0,      centerContent: undefined }
+  return                       { ml: 0,      mr: 'auto', centerContent: undefined }
+}
+
+export function buildAlignMargin(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {}
+  const hasML = style.ml !== undefined
+  const hasMR = style.mr !== undefined
+  if (hasML) s.marginLeft  = style.ml === 'auto' ? 'auto' : (style.ml as number) * 4
+  if (hasMR) s.marginRight = style.mr === 'auto' ? 'auto' : (style.mr as number) * 4
+  // Legacy fallback for anything saved before ml/mr existed.
+  if (style.centerContent && !hasML && !hasMR) {
+    s.marginLeft  = 'auto'
+    s.marginRight = 'auto'
+  }
+  return s
+}
+// ─── Box sizing for the SelectableShell wrapper ────────────────────────────
+// buildInlineStyle() applies width/height to whichever element the node's
+// own Editor component happens to render at its root. But in a flex parent
+// (Columns, or a Section with flexDir row), the thing actually participating
+// in that flex layout is the SelectableShell wrapper *around* the node, not
+// the node's own inner element one level down. If the wrapper doesn't carry
+// the same width/height, the outline and resize handles drift away from
+// what you're actually seeing resize.
+//
+// This intentionally mirrors only box-affecting properties (never padding,
+// margin, or colors) so nothing gets doubled up visually — it just makes
+// sure the *box* the wrapper occupies matches the box the content renders.
+export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {
+    minWidth:  0,
+    minHeight: 0,
+  }
+
+  if (typeof style.width === 'number') {
+    s.width      = style.width
+    s.flexGrow   = 0
+    s.flexShrink = 0
+    // (see buildInlineStyle above — no flexBasis, same reasoning)
+  } else if (style.width === 'full')  s.width = '100%'
+  else if (style.width === '1/2')     s.width = '50%'
+  else if (style.width === '1/3')     s.width = '33.3333%'
+  else if (style.width === '2/3')     s.width = '66.6667%'
+  else if (style.width === '1/4')     s.width = '25%'
+  else if (style.width === '3/4')     s.width = '75%'
+
+  if (typeof style.maxWidth === 'number') s.maxWidth = style.maxWidth
+  else if (style.maxWidth === 'full')     s.maxWidth = '100%'
+  else if (typeof style.width === 'number') {
+    // Mirror the inner element's clamp exactly (see buildInlineStyle) —
+    // this was missing here before, which is why the wrapper (the box
+    // that actually shows the outline/handles) could still overflow even
+    // though the content inside it was correctly capped.
+    s.maxWidth = '100%'
+  }
+
+  if (typeof style.height === 'number')    s.height    = style.height
+  if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
+
+  if (style.aspectRatio && style.aspectRatio !== 'auto') s.aspectRatio = style.aspectRatio
+
+  Object.assign(s, buildAlignMargin(style))
+
+  return s
+}
 // ─── Color presets (used in panel UI) ────────────────────────────────────────
-// Keep in sync with COLOR_HEX above.
 
 export const COLOR_PRESETS = [
-  // Neutrals
   { label: 'White',        value: 'white' },
   { label: 'Black',        value: 'black' },
   { label: 'Transparent',  value: 'transparent' },
@@ -278,34 +354,26 @@ export const COLOR_PRESETS = [
   { label: 'Neutral 200',  value: 'neutral-200' },
   { label: 'Neutral 700',  value: 'neutral-700' },
   { label: 'Neutral 900',  value: 'neutral-900' },
-  // Violet
   { label: 'Violet 50',    value: 'violet-50' },
   { label: 'Violet 100',   value: 'violet-100' },
   { label: 'Violet 500',   value: 'violet-500' },
   { label: 'Violet 600',   value: 'violet-600' },
   { label: 'Violet 700',   value: 'violet-700' },
-  // Blue
   { label: 'Blue 50',      value: 'blue-50' },
   { label: 'Blue 500',     value: 'blue-500' },
   { label: 'Blue 600',     value: 'blue-600' },
-  // Green
   { label: 'Green 50',     value: 'green-50' },
   { label: 'Green 500',    value: 'green-500' },
   { label: 'Green 600',    value: 'green-600' },
-  // Red
   { label: 'Red 50',       value: 'red-50' },
   { label: 'Red 500',      value: 'red-500' },
   { label: 'Red 600',      value: 'red-600' },
-  // Amber
   { label: 'Amber 50',     value: 'amber-50' },
   { label: 'Amber 400',    value: 'amber-400' },
   { label: 'Amber 500',    value: 'amber-500' },
 ]
 
 // ─── Gradient presets ─────────────────────────────────────────────────────────
-// Stored as ready-to-use CSS `linear-gradient(...)` strings (not Tailwind
-// utility fragments) so they can be applied directly via backgroundImage in
-// buildInlineStyle, with zero dependency on Tailwind's class scanner.
 
 export const GRADIENT_PRESETS: { label: string; value: string }[] = [
   { label: '— None —',              value: '' },
@@ -320,8 +388,6 @@ export const GRADIENT_PRESETS: { label: string; value: string }[] = [
 ]
 
 // ─── Overlay helper ───────────────────────────────────────────────────────────
-// Returns inline styles for a dark scrim div that sits between the background
-// and the section content. Used by SectionEditor and SectionPreview.
 
 export function buildOverlayStyle(opacity: number | undefined): React.CSSProperties | null {
   if (!opacity || opacity <= 0) return null

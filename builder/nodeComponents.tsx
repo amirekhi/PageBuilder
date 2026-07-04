@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { NodeComponentProps, PanelProps, PageNode } from './types'
 import { StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle } from './styleMapper'
-import { FieldGroup, SelectField, SpacingField, CheckField, ColorField, GradientField, StylePanel } from './panelComponents'
+import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel } from './panelComponents'
 import { useBuilderStore } from './store'
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
       <FieldGroup label="Width">
         <SelectField label="Max Width" value={s.maxWidth as string ?? ''} options={[{label:'—',value:''},'sm','md','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','full']} onChange={v => patchStyle(node, onChange, { maxWidth: (v || undefined) as StyleProps['maxWidth'] })} />
-        <CheckField  label="Center"    value={s.centerContent ?? false} onChange={v => patchStyle(node, onChange, { centerContent: v })} />
+        <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
 
       <FieldGroup label="Background">
@@ -235,6 +235,7 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           <span className="text-xs text-neutral-500 w-20 shrink-0">Diameter (px)</span>
           <input type="number" min={24} max={200} step={4} className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.size as number) ?? 56} onChange={e => onChange({ size: +e.target.value || 56 })} />
         </div>
+        <p className="text-[10px] text-neutral-400">Tip: drag the corner handle on the canvas to resize instead</p>
       </FieldGroup>
     </div>
   )
@@ -472,6 +473,10 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BADGE
 // ═══════════════════════════════════════════════════════════════════════════════
+// NOTE: previously this rendered with hardcoded classes only and never read
+// node.props.style at all, which meant a resize handle here would visually
+// do nothing. Now wired through buildClassName/buildInlineStyle like every
+// other block, so width/height (and bg/rounded/shadow etc.) actually apply.
 
 const BADGE_VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white',
@@ -480,9 +485,17 @@ const BADGE_VARIANTS: Record<string, string> = {
 }
 
 function BadgeRender({ node }: { node: PageNode }) {
+  const s        = getStyle(node)
   const variant  = (node.props.variant as string) || 'soft'
   const varClass = BADGE_VARIANTS[variant] ?? BADGE_VARIANTS.soft
-  return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`}>{(node.props.label as string) || 'Badge'}</span>
+  return (
+    <span
+      className={buildClassName(s, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`)}
+      style={buildInlineStyle(s)}
+    >
+      {(node.props.label as string) || 'Badge'}
+    </span>
+  )
 }
 
 export const BadgeEditor:  React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
@@ -722,6 +735,8 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUTTON
 // ═══════════════════════════════════════════════════════════════════════════════
+// NOTE: same fix as Badge above — now honors node.props.style so the resize
+// handles (and any future StylePanel usage) actually have an effect.
 
 const VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white hover:bg-violet-700',
@@ -730,9 +745,17 @@ const VARIANTS: Record<string, string> = {
 }
 
 function ButtonRender({ node }: { node: PageNode }) {
+  const s        = getStyle(node)
   const variant  = (node.props.variant as string) || 'solid'
   const varClass = VARIANTS[variant] ?? VARIANTS.solid
-  return <button className={`inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`}>{(node.props.label as string) || 'Button'}</button>
+  return (
+    <button
+      className={buildClassName(s, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`)}
+      style={buildInlineStyle(s)}
+    >
+      {(node.props.label as string) || 'Button'}
+    </button>
+  )
 }
 
 export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} />
@@ -771,6 +794,7 @@ export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
     <FieldGroup label="Size">
       <label className="block text-xs text-neutral-500 mb-1">Height (px)</label>
       <input type="number" min={4} max={400} step={4} className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.height as number) ?? 40} onChange={e => onChange({ height: +e.target.value })} />
+      <p className="text-[10px] text-neutral-400">Tip: drag the bottom handle on the canvas to resize instead</p>
     </FieldGroup>
   </div>
 )
