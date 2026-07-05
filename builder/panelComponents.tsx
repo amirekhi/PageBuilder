@@ -48,7 +48,9 @@ export function SelectField({
 // Values are stored in the same "unit × 4 = px" scale as px/py/mx/my (see
 // buildInlineStyle) — this component just shows/accepts real pixels and
 // converts, so the UI feels direct while staying compatible with the
-// existing shorthand properties.
+// existing shorthand properties. This is the ONE spacing control used by
+// every panel now — SpacingField (below) is only for non-4-sided values
+// like Gap, which has no "sides" to speak of.
 
 type SideValue = number | 'auto' | undefined
 export interface BoxSides { top?: SideValue; right?: SideValue; bottom?: SideValue; left?: SideValue }
@@ -115,8 +117,8 @@ export function BoxSpacingField({
 }
 
 // ─── Spacing slider ───────────────────────────────────────────────────────────
-// Values map to multiples of 4px. Scale: 0,1,2,3,4,5,6,8,10,12,16,20,24,32,40,48,64
-// Still used for gap (which has no "sides") — padding/margin now use BoxSpacingField.
+// Values map to multiples of 4px. Only used for Gap now (no "sides" exist for
+// a gap value) — every padding/margin control uses BoxSpacingField instead.
 
 const SCALE = [0,1,2,3,4,5,6,8,10,12,16,20,24,32,40,48,64]
 
@@ -142,12 +144,24 @@ export function SpacingField({
   )
 }
 
-// ─── Alignment (left / center / right) ─────────────────────────────────────
+// ─── Box position (left / center / right) ──────────────────────────────────
 // Backed by ml/mr margins (see styleMapper's getBoxAlign/setBoxAlign), so
 // this is the one place that ever writes alignment — the wrapper in
 // SelectableShell and the node's own rendered element both read it from the
 // same ml/mr values, so they can't fall out of sync the way the old
 // class-only `centerContent` did.
+//
+// NOTE ON NAMING: there are three unrelated things in this app that all
+// involve the word "align" —
+//   1. This control (AlignField): where THIS block sits within its parent
+//      when it's narrower than the parent (Left/Center/Right via margin).
+//   2. Flex "align items" (SectionPanel/ColumnsPanel "Align children" or
+//      "Align items"): how a container lines up its CHILDREN on the
+//      cross-axis. Different mechanism (CSS align-items, not margin).
+//   3. Text align (StylePanel "Text align"): how text sits INSIDE this
+//      block. Different mechanism again (CSS text-align).
+// Always labeled distinctly in the panels below — if you're renaming
+// labels, keep these three visually distinguishable from each other.
 
 export function AlignField({
   style, onChange,
@@ -163,7 +177,7 @@ export function AlignField({
   ]
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-neutral-500 w-20 shrink-0">Align</span>
+      <span className="text-xs text-neutral-500 w-20 shrink-0">Position</span>
       <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
         {OPTIONS.map(o => (
           <button
@@ -373,6 +387,9 @@ export function GradientField({
 }
 
 // ─── Shared StylePanel (spacing + color + typography) ─────────────────────────
+// Used as the "Style" tab in ControlPanel for all node types that don't need
+// a fully custom panel. Includes image fit/aspect-ratio controls so the
+// Style tab works for Image blocks too.
 
 export function StylePanel({
   style, onChange,
@@ -415,7 +432,7 @@ export function StylePanel({
           })}
         />
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Left/Right margin is overridden by the Align control above whenever it's set to Center or Right
+          Left/Right margin is overridden by the Position control above whenever it's set to Center or Right
         </p>
       </FieldGroup>
 
@@ -435,7 +452,7 @@ export function StylePanel({
           onChange={v => onChange({ fontWeight: v as StyleProps['fontWeight'] || undefined })}
         />
         <SelectField
-          label="Align" value={style.textAlign ?? ''}
+          label="Text align" value={style.textAlign ?? ''}
           options={[{label:'—',value:''}, 'left','center','right','justify']}
           onChange={v => onChange({ textAlign: v as StyleProps['textAlign'] || undefined })}
         />

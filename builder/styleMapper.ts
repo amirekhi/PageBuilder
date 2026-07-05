@@ -344,6 +344,32 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
 
   return s
 }
+
+
+// ─── Flex layout mirror (fixes Section's inner wrapper div) ───────────────
+// SectionEditor/SectionPreview render an inner <div> between <section> and
+// the actual child nodes (needed for the background-overlay z-index stack).
+// Without this, display/flexDir/justify/align/gap set on the Section only
+// ever apply to <section> itself — which has exactly one child (this div)
+// — so they never reach the real content, and Justify/Align/gap all
+// silently no-op. This mirrors ONLY the layout-relevant subset onto that
+// wrapper (not padding/color/border, which would visibly double up).
+
+export function buildFlexLayoutClassName(style: StyleProps = {}): string {
+  const c: string[] = []
+  if (style.display)  c.push(style.display)
+  if (style.flexDir)  c.push(`flex-${style.flexDir}`)
+  if (style.flexWrap) c.push(`flex-${style.flexWrap}`)
+  if (style.justify)  c.push(`justify-${style.justify}`)
+  if (style.align)    c.push(`items-${style.align}`)
+  return c.join(' ')
+}
+
+export function buildFlexLayoutStyle(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {}
+  if (style.gap !== undefined) s.gap = style.gap * 4
+  return s
+}
 // ─── Color presets (used in panel UI) ────────────────────────────────────────
 
 export const COLOR_PRESETS = [

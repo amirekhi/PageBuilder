@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { NodeComponentProps, PanelProps, PageNode } from './types'
-import { StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle } from './styleMapper'
+import { StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle, buildFlexLayoutClassName, buildFlexLayoutStyle } from './styleMapper'
 import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField } from './panelComponents'
 import { useBuilderStore } from './store'
 
@@ -71,7 +71,10 @@ export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) 
       style={{ ...buildInlineStyle(s), minHeight: s.minHeight ? undefined : 64 }}
     >
       {overlayStyle && <div style={overlayStyle} aria-hidden />}
-      <div className={hasBackground ? 'relative z-10 w-full' : undefined}>
+      <div
+       className={[buildFlexLayoutClassName(s), 'w-full', hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
+        style={buildFlexLayoutStyle(s)}
+      >
         {children}
       </div>
     </section>
@@ -84,9 +87,15 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children })
   const hasBackground = !!(s.bgImage || s.bgGradient)
 
   return (
-    <section className={buildClassName(s, 'w-full relative')} style={buildInlineStyle(s)}>
+        <section
+      className={buildClassName(s, 'w-full relative')}
+      style={{ ...buildInlineStyle(s), minHeight: s.minHeight ? undefined : 64 }}
+       >
       {overlayStyle && <div style={overlayStyle} aria-hidden />}
-      <div className={hasBackground ? 'relative z-10 w-full' : undefined}>
+      <div
+        className={[buildFlexLayoutClassName(s), 'w-full', hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
+        style={buildFlexLayoutStyle(s)}
+      >
         {children}
       </div>
     </section>
@@ -102,10 +111,11 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       <FieldGroup label="Layout">
         <SelectField label="Display"   value={s.display ?? 'flex'} options={['flex','block','grid']} onChange={v => patchStyle(node, onChange, { display: v as StyleProps['display'] })} />
         <SelectField label="Direction" value={s.flexDir ?? 'col'}  options={['col','row','row-reverse','col-reverse']} onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })} />
-        <SelectField label="Justify"   value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
-        <SelectField label="Align"     value={s.align ?? 'start'} options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+        <SelectField label="Justify"        value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+        <SelectField label="Align children" value={s.align ?? 'start'}  options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
         <SpacingField label="Gap"      value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
       </FieldGroup>
+
       <FieldGroup label="Padding">
         <BoxSpacingField
           label="Padding"
@@ -116,6 +126,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
       </FieldGroup>
+
       <FieldGroup label="Margin">
         <BoxSpacingField
           label="Margin"
@@ -126,9 +137,14 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
       </FieldGroup>
+
       <FieldGroup label="Width">
         <SelectField label="Max Width" value={s.maxWidth as string ?? ''} options={[{label:'—',value:''},'sm','md','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','full']} onChange={v => patchStyle(node, onChange, { maxWidth: (v || undefined) as StyleProps['maxWidth'] })} />
+      </FieldGroup>
+
+      <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Where this Section sits if its Max Width is narrower than the page</p>
       </FieldGroup>
 
       <FieldGroup label="Background">
@@ -355,6 +371,10 @@ export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Rounded" value={s.rounded ?? 'lg'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
         <SelectField label="Shadow"  value={s.shadow ?? 'none'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { shadow: v as StyleProps['shadow'] })} />
       </FieldGroup>
+      <FieldGroup label="Position">
+        <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
+      </FieldGroup>
     </div>
   )
 }
@@ -511,24 +531,23 @@ function BadgeRender({ node }: { node: PageNode }) {
 export const BadgeEditor:  React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
 export const BadgePreview: React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
 
-export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => (
-  <div className="space-y-5 p-4">
-    <FieldGroup label="Content">
-      <label className="block text-xs text-neutral-500 mb-1">Label</label>
-      <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
-    </FieldGroup>
-    <FieldGroup label="Style">
-      <SelectField label="Variant" value={(node.props.variant as string) ?? 'soft'} options={['solid','soft','outline']} onChange={v => onChange({ variant: v })} />
-      <FieldGroup label="Position">
-        <AlignField style={getStyle(node)} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider than the button itself</p>
+export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const s = getStyle(node)
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Content">
+        <label className="block text-xs text-neutral-500 mb-1">Label</label>
+        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
       </FieldGroup>
-       <FieldGroup label="Position">
-      <AlignField style={getStyle(node)} onChange={partial => patchStyle(node, onChange, partial)} />
-    </FieldGroup>
-    </FieldGroup>
-  </div>
-)
+      <FieldGroup label="Style">
+        <SelectField label="Variant" value={(node.props.variant as string) ?? 'soft'} options={['solid','soft','outline']} onChange={v => onChange({ variant: v })} />
+      </FieldGroup>
+      <FieldGroup label="Position">
+        <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+      </FieldGroup>
+    </div>
+  )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLUMNS
@@ -549,9 +568,10 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Layout">
-        <SpacingField label="Gap"     value={s.gap}    onChange={v => patchStyle(node, onChange, { gap: v })} />
-        <SelectField  label="Align"   value={s.align ?? 'stretch'} options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
-        <SelectField  label="Justify" value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+        <SpacingField label="Gap"          value={s.gap}    onChange={v => patchStyle(node, onChange, { gap: v })} />
+        <SelectField  label="Align items"  value={s.align ?? 'stretch'} options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+        <SelectField  label="Justify"      value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Controls how the Columns inside line up — each Column's own position is set on the Column itself via Justify above, not on the Column</p>
       </FieldGroup>
     </div>
   )
@@ -560,6 +580,12 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLUMN
 // ═══════════════════════════════════════════════════════════════════════════════
+// Deliberately NO AlignField here. A Column's position within its parent
+// Columns row is already controlled by ColumnsPanel's own Justify setting —
+// adding a second, competing left/center/right control on the Column itself
+// would be a real duplicate (two mechanisms fighting for the same visual
+// result), not a missing feature. If per-column override is ever needed,
+// that should replace Justify's behavior rather than sit alongside it.
 
 export const ColumnEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const s = getStyle(node)
@@ -755,11 +781,14 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
             <input type="number" min={20} max={2000} step={10} className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400" value={s.width} onChange={e => patchStyle(node, onChange, { width: +e.target.value || 0 })} />
           </div>
         )}
-        <p className="text-[10px] text-neutral-400">Fixed pixels keeps this image the same size no matter what container it&apos;s placed in</p>
+        <p className="text-[10px] text-neutral-400">Fixed pixels keeps this image the same size no matter what container it&apos;s placed in — combine with Position below to place it left/center/right in a wider container</p>
         <SelectField label="Aspect ratio" value={s.aspectRatio ?? '4/3'} options={[{ label:'Original',value:'auto' },{ label:'Square 1:1',value:'1/1' },{ label:'Standard 4:3',value:'4/3' },{ label:'Wide 16:9',value:'16/9' },{ label:'Classic 3:2',value:'3/2' },{ label:'Ultra 21:9',value:'21/9' }]} onChange={v => patchStyle(node, onChange, { aspectRatio: v as StyleProps['aspectRatio'] })} />
         <SelectField label="Fit" value={s.objectFit ?? 'cover'} options={[{ label:'Cover (fill & crop)',value:'cover' },{ label:'Contain (fit inside)',value:'contain' },{ label:'Fill (stretch)',value:'fill' },{ label:'None (original size)',value:'none' }]} onChange={v => patchStyle(node, onChange, { objectFit: v as StyleProps['objectFit'] })} />
         {s.objectFit !== 'fill' && <SelectField label="Focal point" value={s.objectPosition ?? 'center'} options={['center','top','bottom','left','right','top left','top right','bottom left','bottom right']} onChange={v => patchStyle(node, onChange, { objectPosition: v as StyleProps['objectPosition'] })} />}
         <SelectField label="Rounded" value={s.rounded ?? 'none'} options={['none','sm','md','lg','xl','2xl','full']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
+      </FieldGroup>
+      <FieldGroup label="Position">
+        <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
     </div>
   )
@@ -792,19 +821,26 @@ function ButtonRender({ node }: { node: PageNode }) {
 export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} />
 export const ButtonPreview: React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} />
 
-export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => (
-  <div className="space-y-5 p-4">
-    <FieldGroup label="Content">
-      <label className="block text-xs text-neutral-500 mb-1">Label</label>
-      <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
-      <label className="block text-xs text-neutral-500 mt-2 mb-1">Link (href)</label>
-      <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="https://…" value={(node.props.href as string) ?? ''} onChange={e => onChange({ href: e.target.value })} />
-    </FieldGroup>
-    <FieldGroup label="Style">
-      <SelectField label="Variant" value={(node.props.variant as string) ?? 'solid'} options={['solid','outline','ghost']} onChange={v => onChange({ variant: v })} />
-    </FieldGroup>
-  </div>
-)
+export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const s = getStyle(node)
+  return (
+    <div className="space-y-5 p-4">
+      <FieldGroup label="Content">
+        <label className="block text-xs text-neutral-500 mb-1">Label</label>
+        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
+        <label className="block text-xs text-neutral-500 mt-2 mb-1">Link (href)</label>
+        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="https://…" value={(node.props.href as string) ?? ''} onChange={e => onChange({ href: e.target.value })} />
+      </FieldGroup>
+      <FieldGroup label="Style">
+        <SelectField label="Variant" value={(node.props.variant as string) ?? 'solid'} options={['solid','outline','ghost']} onChange={v => onChange({ variant: v })} />
+      </FieldGroup>
+      <FieldGroup label="Position">
+        <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider than the button itself</p>
+      </FieldGroup>
+    </div>
+  )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SPACER
@@ -850,8 +886,19 @@ export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Style" value={s.borderStyle ?? 'solid'} options={['solid','dashed','dotted']} onChange={v => patchStyle(node, onChange, { borderStyle: v as StyleProps['borderStyle'] })} />
         <ColorField  label="Color" value={s.borderColor} onChange={v => patchStyle(node, onChange, { borderColor: v || undefined })} />
       </FieldGroup>
-      <FieldGroup label="Spacing">
-        <SpacingField label="Margin Y" value={s.my} onChange={v => patchStyle(node, onChange, { my: v })} />
+      <FieldGroup label="Margin">
+        <BoxSpacingField
+          label="Margin"
+          values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
+          onChange={next => patchStyle(node, onChange, {
+            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+          })}
+        />
+      </FieldGroup>
+      <FieldGroup label="Position">
+        <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+        <p className="text-[10px] text-neutral-400 -mt-1">Only has a visible effect if this Divider's width has been resized narrower than its container</p>
       </FieldGroup>
     </div>
   )

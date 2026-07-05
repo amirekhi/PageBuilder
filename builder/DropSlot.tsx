@@ -132,14 +132,14 @@ export function DropSlot({ parentId, index, isOnly, isPersistent }: DropSlotProp
         ref={setNodeRef}
         onClick={e => { e.stopPropagation(); if (!isDragging) setOpen(v => !v) }}
         className={[
-          'w-full flex items-center justify-center cursor-pointer select-none transition-all duration-150',
+          'w-full flex items-center justify-center cursor-pointer select-none transition-all duration-150 overflow-hidden',
           isDragging
             ? isOver
               ? 'py-5 border-2 border-dashed border-violet-400 bg-violet-50 rounded-lg'
               : 'py-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
             // Invisible by default, revealed when the nearest group-hover parent is hovered
             // The 'group-hover/container' class is set on SelectableShell for containers
-            : 'py-1 opacity-0 group-hover/container:opacity-100 hover:!opacity-100',
+            : 'h-2 opacity-0 group-hover/container:h-6 group-hover/container:opacity-100 hover:!h-6 hover:!opacity-100',
         ].join(' ')}
       >
         {isDragging ? (
