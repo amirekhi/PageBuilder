@@ -78,6 +78,8 @@ function normalizeImageNodes(nodes: NodeMap): NodeMap {
   return changed ? next : nodes
 }
 
+// ─── Breakpoint / preview width ────────────────────────────────────────────
+
 export type PreviewWidth = 'desktop' | 'tablet' | 'mobile'
 
 export const PREVIEW_WIDTHS: Record<PreviewWidth, { px: number; label: string; icon: string }> = {
@@ -96,6 +98,18 @@ interface BuilderStore {
   resizingId:   string | null
   mode:         'edit' | 'preview'
   previewWidth: PreviewWidth
+  editingBreakpoint: PreviewWidth
+
+  // The current zoom factor the EditorRenderer canvas is being displayed
+  // at (1 = full size, <1 = shrunk to fit available panel width). The
+  // canvas is always rendered internally at its true logical pixel width
+  // (e.g. 1440px for desktop) so layout math (maxWidth, fixed widths,
+  // percentages) resolves exactly as it would on a real page — this value
+  // is purely the visual scale-down applied on top, and ResizeHandles
+  // reads it to convert raw pointer-movement pixels back into logical
+  // canvas pixels so dragging still feels 1:1 regardless of zoom.
+  canvasScale: number
+
   past:         NodeMap[]
   future:       NodeMap[]
 
@@ -108,8 +122,10 @@ interface BuilderStore {
   canUndo:         () => boolean
   canRedo:         () => boolean
 
-  setMode:         (mode: 'edit' | 'preview') => void
-  setPreviewWidth: (w: PreviewWidth) => void
+  setMode:              (mode: 'edit' | 'preview') => void
+  setPreviewWidth:      (w: PreviewWidth) => void
+  setEditingBreakpoint: (bp: PreviewWidth) => void
+  setCanvasScale:       (scale: number) => void
   selectNode:      (id: string | null) => void
   setDragging:     (id: string | null) => void
   setResizing:     (id: string | null) => void
@@ -137,6 +153,8 @@ export const useBuilderStore = create<BuilderStore>()(
       resizingId:   null,
       mode:         'edit',
       previewWidth: 'desktop',
+      editingBreakpoint: 'desktop',
+      canvasScale: 1,
       past:         [],
       future:       [],
 
@@ -151,8 +169,10 @@ export const useBuilderStore = create<BuilderStore>()(
       canUndo: () => get().past.length > 0,
       canRedo: () => get().future.length > 0,
 
-      setMode:         (mode) => set(s => { s.mode = mode }),
-      setPreviewWidth: (w)    => set(s => { s.previewWidth = w }),
+      setMode:              (mode) => set(s => { s.mode = mode }),
+      setPreviewWidth:      (w)    => set(s => { s.previewWidth = w }),
+      setEditingBreakpoint: (bp)   => set(s => { s.editingBreakpoint = bp }),
+      setCanvasScale:       (scale) => set(s => { s.canvasScale = scale }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
       setResizing:     (id)   => set(s => { s.resizingId = id }),

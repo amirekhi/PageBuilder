@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -20,14 +20,68 @@ import { DropSlot, parseSlotId } from './DropSlot'
 import { EmptyCanvasPrompt } from './TemplatePicker'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
+// Desktop editing: the canvas simply fills 100% of whatever horizontal room
+// is actually available in the editor panel (window minus the ControlPanel
+// sidebar). No artificial simulated width, no scaling — a real page has no
+// fixed desktop width either, so the most accurate thing the editor can show
+// is "as much of the real page as this panel has room for," full stop. This
+// is necessarily narrower than someone's actual monitor (the sidebar has to
+// live somewhere), but it's never MORE constrained than that unavoidable
+// limit — no extra cap is layered on top of it.
+//
+// Tablet/Mobile editing: these represent actual physical devices with fixed
+// widths (768px / 390px from PREVIEW_WIDTHS), so those stay simulated at
+// their true size, scaled down only if the panel is narrower than the
+// device width itself (rare, but keeps things usable on small screens).
 
 export function EditorRenderer() {
-  const nodes       = useBuilderStore(s => s.nodes)
-  const rootId      = useBuilderStore(s => s.rootId)
-  const moveNode    = useBuilderStore(s => s.moveNode)
-  const selectNode  = useBuilderStore(s => s.selectNode)
-  const setDragging = useBuilderStore(s => s.setDragging)
-  const draggingId  = useBuilderStore(s => s.draggingId)
+  const nodes             = useBuilderStore(s => s.nodes)
+  const rootId            = useBuilderStore(s => s.rootId)
+  const moveNode          = useBuilderStore(s => s.moveNode)
+  const selectNode        = useBuilderStore(s => s.selectNode)
+  const setDragging       = useBuilderStore(s => s.setDragging)
+  const draggingId        = useBuilderStore(s => s.draggingId)
+  const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
+  const setCanvasScale    = useBuilderStore(s => s.setCanvasScale)
+
+  const outerRef  = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
+
+  const [availableWidth, setAvailableWidth] = useState(1280)
+  const [canvasHeight, setCanvasHeight]     = useState(600)
+
+  useEffect(() => {
+    const el = outerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) setAvailableWidth(entry.contentRect.width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) setCanvasHeight(entry.contentRect.height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const isDesktop = editingBreakpoint === 'desktop'
+
+  // Desktop: simulate at exactly however much room is available — so
+  // scale is always 1 (nothing to shrink; it already fills the space).
+  // Tablet/Mobile: simulate the device's true fixed width, only shrinking
+  // if the panel is narrower than that.
+  const simWidth = isDesktop ? availableWidth : PREVIEW_WIDTHS[editingBreakpoint].px
+  const scale    = isDesktop ? 1 : Math.min(1, availableWidth / simWidth)
+
+  useEffect(() => {
+    setCanvasScale(scale)
+  }, [scale, setCanvasScale])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -73,20 +127,35 @@ export function EditorRenderer() {
         }}
         onClick={() => selectNode(null)}
       >
-        {/* Page surface — identical maxWidth to desktop preview so edit and preview match */}
-        <div
-          className="bg-white mx-auto min-h-full"
-          style={{
-            maxWidth:     1280,
-            minHeight:    600,
-            borderRadius: 6,
-            border:       '1px solid #e2e8f0',
-            boxShadow:    '0 2px 12px 0 rgba(0,0,0,0.06)',
-            overflow:     'visible',
-          }}
-        >
-          <EmptyCanvasPrompt />
-          <RenderEditorNode nodeId={rootId} nodes={nodes} />
+        <div ref={outerRef} className="w-full flex justify-center">
+          <div
+            style={{
+              position: 'relative',
+              width:    simWidth * scale,
+              height:   Math.max(canvasHeight * scale, 1),
+            }}
+          >
+            <div
+              ref={canvasRef}
+              className="bg-white"
+              style={{
+                position:        'absolute',
+                top:             0,
+                left:            0,
+                width:           simWidth,
+                minHeight:       600,
+                borderRadius:    isDesktop ? 6 : 12,
+                border:          '1px solid #e2e8f0',
+                boxShadow:       '0 2px 12px 0 rgba(0,0,0,0.06)',
+                transform:       `scale(${scale})`,
+                transformOrigin: 'top left',
+                transition:      'width 0.15s ease, transform 0.15s ease',
+              }}
+            >
+              <EmptyCanvasPrompt />
+              <RenderEditorNode nodeId={rootId} nodes={nodes} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -155,6 +224,15 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
 }
 
 // ─── PreviewRenderer ──────────────────────────────────────────────────────────
+// Desktop preview: full-bleed to the actual browser viewport, no ceiling —
+// this is what genuinely represents the final published page. Any width
+// limiting is entirely up to what each Section's own Max Width is set to;
+// PreviewRenderer itself must never impose one on top, or "Preview" stops
+// meaning "what visitors will actually see."
+//
+// Tablet/Mobile preview: still simulated as actual device widths (with the
+// phone/tablet chrome), since that's genuinely representing a different
+// physical screen, not just "a page that happens to be narrower."
 
 export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: string }) {
   const previewWidth = useBuilderStore(s => s.previewWidth)
@@ -195,15 +273,9 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
           <RenderPreviewNode nodeId={rootId} nodes={nodes} />
         </div>
       ) : (
-        <div style={{ width: '100%', maxWidth: 1280, background: 'white', minHeight: '100vh' }}>
+        <div style={{ width: '100%', background: 'white', minHeight: '100vh' }}>
           <RenderPreviewNode nodeId={rootId} nodes={nodes} />
         </div>
-      )}
-
-      {previewWidth !== 'desktop' && (
-        <p style={{ marginTop: 12, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
-          {cfg.label} — {cfg.px}px
-        </p>
       )}
     </div>
   )

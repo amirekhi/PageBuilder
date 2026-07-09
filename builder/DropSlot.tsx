@@ -139,7 +139,7 @@ export function DropSlot({ parentId, index, isOnly, isPersistent }: DropSlotProp
               : 'py-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
             // Invisible by default, revealed when the nearest group-hover parent is hovered
             // The 'group-hover/container' class is set on SelectableShell for containers
-            : 'h-2 opacity-0 group-hover/container:h-6 group-hover/container:opacity-100 hover:!h-6 hover:!opacity-100',
+            : 'h-0 opacity-0 group-hover/container:h-6 group-hover/container:opacity-100 hover:!h-6 hover:!opacity-100',
         ].join(' ')}
       >
         {isDragging ? (

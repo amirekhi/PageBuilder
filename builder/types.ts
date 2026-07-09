@@ -44,4 +44,14 @@ export interface NodeDefinition {
   defaultProps:     Record<string, unknown>
   // Optional: spawn extra child nodes when this type is inserted (e.g. columns → 2 column children)
   createExtras?:    (parentId: string) => PageNode[]
+  // True for node types whose own render function hardcodes a `w-full`
+  // class regardless of style.width (Section, Columns, Image, Divider,
+  // Accordion). The SelectableShell wrapper needs to mirror this exact
+  // same default — otherwise, when style.width is genuinely unset AND the
+  // node sits in a flex parent that isn't using the default `stretch`
+  // alignment (e.g. align:'center'), the wrapper shrink-wraps to content
+  // while the component's own inner element still renders full-width one
+  // level deeper inside it — invisible until the wrapper is the thing
+  // constraining the box.
+  defaultFullWidth?: boolean
 }

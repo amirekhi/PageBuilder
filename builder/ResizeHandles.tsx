@@ -5,6 +5,7 @@ import { PageNode, NodeType } from './types'
 import { StyleProps } from './styleMapper'
 import { useBuilderStore } from './store'
 import { NODE_REGISTRY } from './registry'
+import { patchNodeStyle } from './responsive'
 
 // ─── Sizing modes ───────────────────────────────────────────────────────────
 type Edge = 'right' | 'bottom' | 'corner'
@@ -17,18 +18,27 @@ const SIZE_MODE: Partial<Record<NodeType, SizeMode>> = {
   heading: 'widthOnly',
 }
 
-const GENERAL_MIN = 40
-const SPACER_MIN  = 4
-const SPACER_MAX  = 400
-const AVATAR_MIN  = 24
-const AVATAR_MAX  = 200
+const GENERAL_MIN   = 40
+const SPACER_MIN    = 4
+const SPACER_MAX    = 400
+const AVATAR_MIN    = 24
+const AVATAR_MAX    = 200
+const WIDTH_PCT_MIN = 5 // never let a width drag collapse below 5% of its container
 
 interface DragState {
-  edge:   Edge
-  startX: number
-  startY: number
-  startW: number
-  startH: number
+  edge:        Edge
+  startX:      number
+  startY:      number
+  startW:      number
+  startH:      number
+  // Logical (unscaled) width of this node's immediate DOM parent, captured
+  // ONCE at drag start. This is the number a width drag gets converted
+  // into a percentage OF — e.g. dragging to 300px inside a 600px-wide
+  // parent stores 50%, which then means "50% of whatever parent this ends
+  // up in" everywhere the node is rendered, including a much wider Preview
+  // canvas. This is the entire mechanism that makes editor-canvas-width and
+  // final-page-width independent of each other.
+  parentWidth: number
 }
 
 function clamp(v: number, min: number, max?: number): number {
@@ -44,16 +54,18 @@ export function ResizeHandles({
 }) {
   const updateProps = useBuilderStore(s => s.updateProps)
   const setResizing = useBuilderStore(s => s.setResizing)
+  const canvasScale  = useBuilderStore(s => s.canvasScale)
 
-  const mode          = SIZE_MODE[node.type] ?? 'full'
-  const isCircle      = mode === 'diameter'
-  const isContainer   = NODE_REGISTRY[node.type]?.isContainer ?? false
+  const mode        = SIZE_MODE[node.type] ?? 'full'
+  const isCircle    = mode === 'diameter'
+  const isContainer = NODE_REGISTRY[node.type]?.isContainer ?? false
 
   const [drag, setDrag] = useState<DragState | null>(null)
   const [live, setLive] = useState<{ w: number; h: number } | null>(null)
 
-  const dragRef = useRef<DragState | null>(null)
-  const liveRef = useRef<{ w: number; h: number } | null>(null)
+  const dragRef  = useRef<DragState | null>(null)
+  const liveRef  = useRef<{ w: number; h: number } | null>(null)
+  const scaleRef = useRef(1)
 
   const getStartSize = useCallback((): { w: number; h: number } => {
     if (mode === 'diameter') {
@@ -64,33 +76,37 @@ export function ResizeHandles({
       const h = (node.props.height as number) ?? 40
       return { w: 0, h }
     }
-    // Read the actual rendered box, not node.props.style — this is correct
-    // whether the current height came from a literal `height` (leaf nodes)
-    // or a `minHeight` that content has since grown past (containers).
-    const rect = shellRef.current?.getBoundingClientRect()
-    return { w: rect?.width ?? 200, h: rect?.height ?? 100 }
-  }, [mode, node.props.size, node.props.height, shellRef])
+    const rect  = shellRef.current?.getBoundingClientRect()
+    const scale = canvasScale || 1
+    return { w: (rect?.width ?? 200) / scale, h: (rect?.height ?? 100) / scale }
+  }, [mode, node.props.size, node.props.height, shellRef, canvasScale])
 
-  // The parent element here is always the actual container box (Section's
-  // inner wrapper, ColumnsEditor's flex row, ColumnEditor's own div) — since
-  // SelectableShell nests directly inside whatever EditorComponent renders.
-  // Capping drag width to this stops a resize from pushing past the
-  // container's own boundary, which is what was happening once resized
-  // items got `flexShrink: 0` and had no ceiling on how wide they could go.
-
+  // Measures the logical (unscaled) width of shellRef's actual DOM parent —
+  // this is the real container the percentage will be computed against.
+  // getBoundingClientRect reports the visually-scaled size whenever the
+  // canvas is currently shown shrunk down, so we divide that back out by
+  // canvasScale to recover the true underlying CSS width.
+  const getParentLogicalWidth = useCallback((): number => {
+    const parentEl = shellRef.current?.parentElement
+    if (!parentEl) return 0
+    const rect  = parentEl.getBoundingClientRect()
+    const scale = canvasScale || 1
+    return rect.width / scale
+  }, [shellRef, canvasScale])
 
   const startDrag = useCallback((edge: Edge) => (e: React.PointerEvent) => {
     e.stopPropagation()
     e.preventDefault()
     const { w, h } = getStartSize()
-
-    const state: DragState = { edge, startX: e.clientX, startY: e.clientY, startW: w, startH: h }
+    scaleRef.current = canvasScale || 1
+    const parentWidth = getParentLogicalWidth()
+    const state: DragState = { edge, startX: e.clientX, startY: e.clientY, startW: w, startH: h, parentWidth }
     dragRef.current = state
     liveRef.current = { w, h }
     setDrag(state)
     setLive({ w, h })
     setResizing(node.id)
- }, [getStartSize,  node.id, setResizing])
+  }, [getStartSize, getParentLogicalWidth, node.id, setResizing, canvasScale])
 
   useEffect(() => {
     if (!drag) return
@@ -98,8 +114,9 @@ export function ResizeHandles({
     function onMove(e: PointerEvent) {
       const d = dragRef.current
       if (!d) return
-      const dx = e.clientX - d.startX
-      const dy = e.clientY - d.startY
+      const scale = scaleRef.current
+      const dx = (e.clientX - d.startX) / scale
+      const dy = (e.clientY - d.startY) / scale
 
       let nextW = d.startW
       let nextH = d.startH
@@ -140,27 +157,31 @@ export function ResizeHandles({
         return
       }
 
-      const currentStyle = (node.props.style as StyleProps) ?? {}
       const patch: Partial<StyleProps> = {}
 
       if (d.edge === 'right' || d.edge === 'corner') {
-        patch.width = l.w
+        if (d.parentWidth > 0) {
+          const pct = clamp(Math.round((l.w / d.parentWidth) * 1000) / 10, WIDTH_PCT_MIN, 100)
+          patch.width     = pct
+          patch.widthUnit = '%'
+        } else {
+          // Couldn't measure a parent — fall back to absolute px rather
+          // than silently discarding the resize.
+          patch.width     = l.w
+          patch.widthUnit = 'px'
+        }
       }
 
       if (d.edge === 'bottom' || d.edge === 'corner') {
         if (isContainer) {
-          // A container can receive dropped-in children (or an accordion
-          // item can expand, etc) after being resized. Writing a hard
-          // `height` would clip that — write `minHeight` instead, so
-          // dragging sets a floor but the box is free to grow taller.
           patch.minHeight = l.h
-          if (currentStyle.height !== undefined) patch.height = undefined
+          patch.height = undefined
         } else {
           patch.height = l.h
         }
       }
 
-      updateProps(node.id, { style: { ...currentStyle, ...patch } })
+      patchNodeStyle(node, (props) => updateProps(node.id, props), patch)
     }
 
     window.addEventListener('pointermove', onMove)
@@ -172,8 +193,13 @@ export function ResizeHandles({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag, mode, node.id, isContainer, updateProps, setResizing])
 
+  const widthPct = drag && live && drag.parentWidth > 0
+    ? Math.round((live.w / drag.parentWidth) * 100)
+    : null
+  const widthLabel = live
+    ? (widthPct !== null ? `${live.w}px (${widthPct}%)` : `${live.w}px`)
+    : ''
 
-  
   return (
     <>
       {/* Live size guide + pixel readout while dragging */}
@@ -214,9 +240,9 @@ export function ResizeHandles({
               ? `${live.h}px`
               : mode === 'diameter'
                 ? `${live.w}px`
-                 : mode === 'widthOnly'
-                  ? `${live.w}px`
-                : `${live.w} × ${live.h}`}
+                : mode === 'widthOnly'
+                  ? widthLabel
+                  : `${widthLabel} × ${live.h}px`}
           </div>
         </>
       )}

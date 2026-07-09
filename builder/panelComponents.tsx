@@ -102,7 +102,7 @@ export function BoxSpacingField({
         {SIDES.map(([side, sideLabel]) => (
           <div key={side} className="flex flex-col items-center gap-0.5">
             <input
-              type="number" min={0} max={400} step={2}
+              type="number" min={0} max={400} step={4}
               placeholder={placeholderFor(values[side])}
               value={display(values[side])}
               onChange={e => setSide(side, e.target.value)}

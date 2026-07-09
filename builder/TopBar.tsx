@@ -13,16 +13,18 @@ import {
 } from './exportImport'
 
 export function TopBar() {
-  const mode            = useBuilderStore(s => s.mode)
-  const setMode         = useBuilderStore(s => s.setMode)
-  const previewWidth    = useBuilderStore(s => s.previewWidth)
-  const setPreviewWidth = useBuilderStore(s => s.setPreviewWidth)
-  const canUndo         = useBuilderStore(s => s.canUndo())
-  const canRedo         = useBuilderStore(s => s.canRedo())
-  const undo            = useBuilderStore(s => s.undo)
-  const redo            = useBuilderStore(s => s.redo)
-  const del             = useBuilderStore(s => s.deleteNode)
-  const dup             = useBuilderStore(s => s.duplicateNode)
+  const mode                = useBuilderStore(s => s.mode)
+  const setMode              = useBuilderStore(s => s.setMode)
+  const previewWidth         = useBuilderStore(s => s.previewWidth)
+  const setPreviewWidth      = useBuilderStore(s => s.setPreviewWidth)
+  const editingBreakpoint    = useBuilderStore(s => s.editingBreakpoint)
+  const setEditingBreakpoint = useBuilderStore(s => s.setEditingBreakpoint)
+  const canUndo              = useBuilderStore(s => s.canUndo())
+  const canRedo              = useBuilderStore(s => s.canRedo())
+  const undo                 = useBuilderStore(s => s.undo)
+  const redo                 = useBuilderStore(s => s.redo)
+  const del                  = useBuilderStore(s => s.deleteNode)
+  const dup                  = useBuilderStore(s => s.duplicateNode)
 
   const [toast, setToast]         = useState<string | null>(null)
   const [menuOpen, setMenuOpen]   = useState(false)
@@ -47,6 +49,15 @@ export function TopBar() {
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 2800)
+  }
+
+  // Switching into Preview mode also snaps previewWidth to whatever
+  // breakpoint you were just editing — so Preview always opens showing the
+  // same width you were actively working on, instead of silently defaulting
+  // back to desktop regardless of what you'd been editing.
+  function handleSetMode(next: 'edit' | 'preview') {
+    if (next === 'preview') setPreviewWidth(editingBreakpoint)
+    setMode(next)
   }
 
   // Keyboard shortcuts
@@ -158,9 +169,38 @@ export function TopBar() {
       {/* Centre: mode + responsive width */}
       <div className="flex items-center gap-2 flex-1 justify-center">
         <div className="flex bg-neutral-100 rounded-lg p-0.5">
-          <ModeBtn active={mode === 'edit'}    onClick={() => setMode('edit')}>Edit</ModeBtn>
-          <ModeBtn active={mode === 'preview'} onClick={() => setMode('preview')}>Preview</ModeBtn>
+          <ModeBtn active={mode === 'edit'}    onClick={() => handleSetMode('edit')}>Edit</ModeBtn>
+          <ModeBtn active={mode === 'preview'} onClick={() => handleSetMode('preview')}>Preview</ModeBtn>
         </div>
+
+        {/* Edit mode: which breakpoint's styles you're currently authoring.
+            This drives useNodeStyle/patchNodeStyle everywhere (see
+            responsive.ts) — it's independent from the Preview-mode width
+            switcher below, though switching into Preview snaps that one to
+            match (see handleSetMode above). */}
+        {mode === 'edit' && (
+          <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5">
+            {(Object.entries(PREVIEW_WIDTHS) as [PreviewWidth, typeof PREVIEW_WIDTHS[PreviewWidth]][]).map(([key, cfg]) => (
+              <button
+                key={key}
+                title={`Edit ${cfg.label} styles (${cfg.px}px)`}
+                onClick={() => setEditingBreakpoint(key)}
+                className={[
+                  'w-8 h-7 flex items-center justify-center rounded-md text-sm transition-colors',
+                  editingBreakpoint === key ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-400 hover:text-neutral-600',
+                ].join(' ')}
+              >
+                {cfg.icon}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === 'edit' && editingBreakpoint !== 'desktop' && (
+          <span className="text-xs text-violet-500 font-medium hidden md:block">
+            Editing {PREVIEW_WIDTHS[editingBreakpoint].label}
+          </span>
+        )}
 
         {mode === 'preview' && (
           <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5">

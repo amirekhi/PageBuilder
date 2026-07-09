@@ -6,7 +6,8 @@ import { useBuilderStore } from './store'
 import { PageNode } from './types'
 import { NODE_REGISTRY } from './registry'
 import { ResizeHandles } from './ResizeHandles'
-import { StyleProps, buildBoxSizingStyle } from './styleMapper'
+import { buildBoxSizingStyle } from './styleMapper'
+import { useNodeStyle } from './responsive'
 
 interface SelectableShellProps {
   node:     PageNode
@@ -26,16 +27,34 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
   const isContainer   = NODE_REGISTRY[node.type]?.isContainer ?? false
   const ref           = useRef<HTMLDivElement>(null)
 
-  // Everything gets resize handles except text/heading (kept auto-sized to
-  // their content) and the root node (the page canvas itself isn't resizable).
+  // Everything gets resize handles except the root node (the page canvas
+  // itself isn't resizable).
   const canResize = !isRoot
 
   // The wrapper (this div) is the thing that actually participates in the
   // parent's layout (flex item inside Columns/Section, etc). It needs to
   // carry the same box-affecting style as the node itself, or the outline/
   // resize handles will visually detach from what's rendering inside them.
-  const nodeStyle       = (node.props.style as StyleProps) ?? {}
-  const boxSizingStyle  = isRoot ? {} : buildBoxSizingStyle(nodeStyle)
+  // useNodeStyle resolves for whichever breakpoint is currently being
+  // edited, so the wrapper always matches what's actually on screen.
+  const nodeStyle = useNodeStyle(node)
+
+  // Some node types (Section, Columns, Image, Divider, Accordion) hardcode
+  // a 'w-full' class in their own render regardless of style.width — see
+  // NodeDefinition.defaultFullWidth. If style.width is genuinely unset,
+  // the wrapper needs to assume the exact same "full width" default those
+  // components already visually commit to — otherwise, in a flex parent
+  // that isn't using default `stretch` alignment (e.g. a Section with
+  // align:'center'), the wrapper shrink-wraps to content while the actual
+  // rendered element one level deeper still renders full-width, producing
+  // a wrapper (and its outline/handles) that's much smaller than the
+  // visible colored content inside it.
+  const defaultsFullWidth = NODE_REGISTRY[node.type]?.defaultFullWidth ?? false
+  const styleForSizing = (nodeStyle.width === undefined && defaultsFullWidth)
+    ? { ...nodeStyle, width: 'full' as const }
+    : nodeStyle
+
+  const boxSizingStyle = isRoot ? {} : buildBoxSizingStyle(styleForSizing)
 
   const { attributes, listeners, setNodeRef, setActivatorNodeRef } = useDraggable({
     id:       node.id,

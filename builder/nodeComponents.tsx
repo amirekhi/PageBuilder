@@ -2,18 +2,37 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { NodeComponentProps, PanelProps, PageNode } from './types'
-import { StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle, buildFlexLayoutClassName, buildFlexLayoutStyle } from './styleMapper'
+import {
+  StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle,
+  buildFlexLayoutClassName, buildFlexLayoutStyle,
+  buildSectionOuterStyle, buildSectionInnerClassName, buildSectionInnerStyle,
+} from './styleMapper'
 import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField } from './panelComponents'
 import { useBuilderStore } from './store'
+import { useNodeStyle, patchNodeStyle } from './responsive'
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
-
-function getStyle(node: PageNode): StyleProps {
-  return (node.props.style as StyleProps) ?? {}
-}
+// getStyle() is gone — every component below now calls useNodeStyle(node)
+// instead, which resolves style for whichever breakpoint (desktop/tablet/
+// mobile) is currently being edited (see responsive.ts). patchStyle() now
+// routes through patchNodeStyle so writes land in the correct breakpoint's
+// style bucket instead of always overwriting desktop.
+//
+// SIZING NOTE: every *Editor component is rendered inside SelectableShell,
+// whose wrapper already applies width/maxWidth via buildBoxSizingStyle (see
+// styleMapper.ts). If the Editor's own root element ALSO applies width via
+// buildInlineStyle, that's harmless for a plain pixel width (623px means
+// 623px regardless of nesting) but actively wrong for a percentage width:
+// 45% of an element whose own parent is already 45% of the real container
+// resolves to ~20%, not 45% — invisible until something has a background
+// color to reveal the compounding. So every *Editor component below calls
+// buildInlineStyle(s, { skipSizing: true }). *Preview components have NO
+// such wrapper (RenderPreviewNode renders them directly) and must keep
+// applying sizing themselves — they call buildInlineStyle(s) with no
+// options, unchanged.
 
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
-  onChange({ style: { ...getStyle(node), ...partial } })
+  patchNodeStyle(node, onChange, partial)
 }
 
 // ─── Inline editable hook ─────────────────────────────────────────────────────
@@ -59,21 +78,57 @@ function useInlineEdit(node: PageNode, prop: string = 'content') {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
+// Split into an OUTER full-bleed "band" (background + vertical padding, no
+// max-width) and an INNER centered "column" (max-width + horizontal padding
+// + centering + flex layout) — see styleMapper.ts's buildSectionOuterStyle/
+// buildSectionInnerStyle/buildSectionInnerClassName for why this split
+// exists: one element can't both paint a full-width background AND be a
+// centered max-width box at the same time.
+//
+// ROOT OVERRIDE (PREVIEW ONLY): the root node is rendered through this same
+// Section component, but it's not a real visual "block" the way nested
+// sections are — it's just the invisible page-level stack that those real
+// sections live inside. In PREVIEW, if the root also applies its own
+// py/px/gap on top of every nested section's own py/px/gap, you get
+// doubled-up spacing (padding inside padding, gap sitting on top of gap).
+// So SectionPreview zeros out root padding/gap before building its styles.
+//
+// In the EDITOR, though, that same root padding/gap is left alone on
+// purpose — it gives you a bit of breathing room around the canvas edges
+// and between top-level blocks, which makes the drop-target/drag-handle
+// areas easier to grab. It never renders in Preview, so it's free real
+// estate for editing ergonomics with zero visual cost in the final page.
+
+function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
+  const rootId = useBuilderStore(st => st.rootId)
+  const isRoot = node.id === rootId
+  if (!isRoot) return s
+  return {
+    ...s,
+    px: undefined, py: undefined,
+    pt: undefined, pb: undefined, pl: undefined, pr: undefined,
+    gap: undefined,
+  }
+}
 
 export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
-  const s = getStyle(node)
-  const overlayStyle  = buildOverlayStyle(s.bgOverlay)
-  const hasBackground = !!(s.bgImage || s.bgGradient)
+  const rawStyle       = useNodeStyle(node)
+  const s              = useRootAdjustedStyle(node, rawStyle)   // ← was: no adjustment
+  const overlayStyle   = buildOverlayStyle(s.bgOverlay)
+  const hasBackground  = !!(s.bgImage || s.bgGradient)
 
   return (
     <section
-      className={buildClassName(s, 'w-full relative')}
-      style={{ ...buildInlineStyle(s), minHeight: s.minHeight ? undefined : 64 }}
+      className="w-full relative"
+      style={{
+        ...buildSectionOuterStyle(s, { skipSizing: true }),
+        minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64,
+      }}
     >
       {overlayStyle && <div style={overlayStyle} aria-hidden />}
       <div
-       className={[buildFlexLayoutClassName(s), 'w-full', hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
-        style={buildFlexLayoutStyle(s)}
+        className={[buildSectionInnerClassName(s), hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
+        style={buildSectionInnerStyle(s)}
       >
         {children}
       </div>
@@ -82,15 +137,16 @@ export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) 
 }
 
 export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children }) => {
-  const s = getStyle(node)
+  const rawStyle = useNodeStyle(node)
+  const s        = useRootAdjustedStyle(node, rawStyle)   // ← only change
   const overlayStyle  = buildOverlayStyle(s.bgOverlay)
   const hasBackground = !!(s.bgImage || s.bgGradient)
 
   return (
-        <section
+    <section
       className={buildClassName(s, 'w-full relative')}
-      style={{ ...buildInlineStyle(s), minHeight: s.minHeight ? undefined : 64 }}
-       >
+      style={{ ...buildInlineStyle(s), minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64 }}
+    >
       {overlayStyle && <div style={overlayStyle} aria-hidden />}
       <div
         className={[buildFlexLayoutClassName(s), 'w-full', hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
@@ -103,7 +159,7 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children })
 }
 
 export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
 
   return (
@@ -229,6 +285,8 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // AVATAR
 // ═══════════════════════════════════════════════════════════════════════════════
+// Unaffected by the sizing split — sizes itself off node.props.size (a
+// diameter), not via buildInlineStyle at all.
 
 function AvatarRender({ node }: { node: PageNode }) {
   const src      = node.props.src as string
@@ -274,13 +332,15 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // QUOTE
 // ═══════════════════════════════════════════════════════════════════════════════
+// Was one shared render function for Editor+Preview — split so Editor can
+// skip sizing (wrapper owns it) while Preview still applies it (no wrapper).
 
-function QuoteRender({ node }: { node: PageNode }) {
-  const s         = getStyle(node)
+function QuoteRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+  const s         = useNodeStyle(node)
   const avatarSrc = node.props.avatarSrc as string
   const initials  = (node.props.initials as string) || (node.props.name as string)?.[0] || '?'
   return (
-    <div className={buildClassName(s, 'flex flex-col gap-4')} style={buildInlineStyle(s)}>
+    <div className={buildClassName(s, 'flex flex-col gap-4')} style={buildInlineStyle(s, { skipSizing })}>
       <p className="text-lg leading-relaxed text-neutral-700">"{(node.props.quote as string) || 'A short, glowing quote from a happy customer.'}"</p>
       <div className="flex items-center gap-3">
         {avatarSrc
@@ -295,11 +355,11 @@ function QuoteRender({ node }: { node: PageNode }) {
   )
 }
 
-export const QuoteEditor:  React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} />
-export const QuotePreview: React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} />
+export const QuoteEditor:  React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} skipSizing={true} />
+export const QuotePreview: React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} skipSizing={false} />
 
 export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   return (
     <div className="space-y-5 p-4">
@@ -326,6 +386,7 @@ export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // VIDEO
 // ═══════════════════════════════════════════════════════════════════════════════
+// Same split pattern as Quote above.
 
 function toEmbedUrl(url: string): string | null {
   if (!url) return null
@@ -336,29 +397,29 @@ function toEmbedUrl(url: string): string | null {
   return url
 }
 
-function VideoRender({ node }: { node: PageNode }) {
-  const s     = getStyle(node)
+function VideoRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+  const s     = useNodeStyle(node)
   const raw   = (node.props.url as string) || ''
   const embed = toEmbedUrl(raw)
   const ratio = (s.aspectRatio && s.aspectRatio !== 'auto') ? s.aspectRatio : '16/9'
   if (!embed) return (
-    <div className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm')} style={{ ...buildInlineStyle(s), aspectRatio: ratio, minHeight: 160 }}>
+    <div className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm')} style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, minHeight: 160 }}>
       <span className="text-xl">▶</span>
       <span className="text-xs font-medium">Paste a YouTube or Vimeo link</span>
     </div>
   )
   return (
-    <div className={buildClassName(s, 'overflow-hidden')} style={{ ...buildInlineStyle(s), aspectRatio: ratio }}>
+    <div className={buildClassName(s, 'overflow-hidden')} style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio }}>
       <iframe src={embed} className="w-full h-full" style={{ border: 0 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
     </div>
   )
 }
 
-export const VideoEditor:  React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} />
-export const VideoPreview: React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} />
+export const VideoEditor:  React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} skipSizing={true} />
+export const VideoPreview: React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} skipSizing={false} />
 
 export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Source">
@@ -382,6 +443,7 @@ export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACCORDION
 // ═══════════════════════════════════════════════════════════════════════════════
+// Same split pattern.
 
 interface AccordionItem { q: string; a: string }
 
@@ -393,12 +455,12 @@ function accordionItems(node: PageNode): AccordionItem[] {
   ]
 }
 
-function AccordionRender({ node }: { node: PageNode }) {
-  const s     = getStyle(node)
+function AccordionRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+  const s     = useNodeStyle(node)
   const items = accordionItems(node)
   const [openIdx, setOpenIdx] = useState<number | null>(0)
   return (
-    <div className={buildClassName(s, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200')} style={buildInlineStyle(s)}>
+    <div className={buildClassName(s, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200')} style={buildInlineStyle(s, { skipSizing })}>
       {items.map((item, i) => {
         const isOpen = openIdx === i
         return (
@@ -417,11 +479,11 @@ function AccordionRender({ node }: { node: PageNode }) {
   )
 }
 
-export const AccordionEditor:  React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} />
-export const AccordionPreview: React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} />
+export const AccordionEditor:  React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} skipSizing={true} />
+export const AccordionPreview: React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} skipSizing={false} />
 
 export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s     = getStyle(node)
+  const s     = useNodeStyle(node)
   const items = accordionItems(node)
   function updateItem(i: number, partial: Partial<AccordionItem>) {
     onChange({ items: items.map((it, idx) => idx === i ? { ...it, ...partial } : it) })
@@ -452,6 +514,7 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIST
 // ═══════════════════════════════════════════════════════════════════════════════
+// Same split pattern.
 
 function listItems(node: PageNode): string[] {
   const raw = node.props.items as string[] | undefined
@@ -460,12 +523,12 @@ function listItems(node: PageNode): string[] {
 
 const LIST_MARKERS: Record<string, string> = { bullet: '•', check: '✓', arrow: '→', number: '' }
 
-function ListRender({ node }: { node: PageNode }) {
-  const s          = getStyle(node)
+function ListRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+  const s          = useNodeStyle(node)
   const items      = listItems(node)
   const markerType = (node.props.markerType as string) || 'bullet'
   return (
-    <ul className={buildClassName(s, 'space-y-2 list-none')} style={buildInlineStyle(s)}>
+    <ul className={buildClassName(s, 'space-y-2 list-none')} style={buildInlineStyle(s, { skipSizing })}>
       {items.map((text, i) => (
         <li key={i} className="flex items-start gap-2.5">
           <span className="shrink-0 text-violet-600 font-medium leading-6">{markerType === 'number' ? `${i + 1}.` : LIST_MARKERS[markerType] ?? '•'}</span>
@@ -476,11 +539,11 @@ function ListRender({ node }: { node: PageNode }) {
   )
 }
 
-export const ListEditor:  React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} />
-export const ListPreview: React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} />
+export const ListEditor:  React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} skipSizing={true} />
+export const ListPreview: React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} skipSizing={false} />
 
 export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s     = getStyle(node)
+  const s     = useNodeStyle(node)
   const items = listItems(node)
   function updateItem(i: number, value: string) { const next = [...items]; next[i] = value; onChange({ items: next }) }
   function addItem()    { onChange({ items: [...items, 'New item'] }) }
@@ -507,6 +570,7 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BADGE
 // ═══════════════════════════════════════════════════════════════════════════════
+// Same split pattern.
 
 const BADGE_VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white',
@@ -514,25 +578,25 @@ const BADGE_VARIANTS: Record<string, string> = {
   outline: 'border border-violet-300 text-violet-700',
 }
 
-function BadgeRender({ node }: { node: PageNode }) {
-  const s        = getStyle(node)
+function BadgeRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+  const s        = useNodeStyle(node)
   const variant  = (node.props.variant as string) || 'soft'
   const varClass = BADGE_VARIANTS[variant] ?? BADGE_VARIANTS.soft
   return (
     <span
       className={buildClassName(s, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`)}
-      style={buildInlineStyle(s)}
+      style={buildInlineStyle(s, { skipSizing })}
     >
       {(node.props.label as string) || 'Badge'}
     </span>
   )
 }
 
-export const BadgeEditor:  React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
-export const BadgePreview: React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} />
+export const BadgeEditor:  React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} skipSizing={true} />
+export const BadgePreview: React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} skipSizing={false} />
 
 export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
@@ -554,17 +618,17 @@ export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const ColumnsEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
-  const s = getStyle(node)
-  return <div className={buildClassName(s, 'w-full flex flex-row')} style={{ ...buildInlineStyle(s), minHeight: 48 }}>{children}</div>
+  const s = useNodeStyle(node)
+  return <div className={buildClassName(s, 'w-full flex flex-row')} style={{ ...buildInlineStyle(s, { skipSizing: true }), minHeight: 48 }}>{children}</div>
 }
 
 export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return <div className={buildClassName(s, 'w-full flex flex-row')} style={buildInlineStyle(s)}>{children}</div>
 }
 
 export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Layout">
@@ -584,21 +648,20 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // Columns row is already controlled by ColumnsPanel's own Justify setting —
 // adding a second, competing left/center/right control on the Column itself
 // would be a real duplicate (two mechanisms fighting for the same visual
-// result), not a missing feature. If per-column override is ever needed,
-// that should replace Justify's behavior rather than sit alongside it.
+// result), not a missing feature.
 
 export const ColumnEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
-  const s = getStyle(node)
-  return <div className={buildClassName(s, 'flex-1 min-w-0 min-h-12')} style={buildInlineStyle(s)}>{children}</div>
+  const s = useNodeStyle(node)
+  return <div className={buildClassName(s, 'flex-1 min-w-0 min-h-12')} style={buildInlineStyle(s, { skipSizing: true })}>{children}</div>
 }
 
 export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return <div className={buildClassName(s, 'flex-1 min-w-0')} style={buildInlineStyle(s)}>{children}</div>
 }
 
 export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Padding">
@@ -633,7 +696,7 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   const { ref, isSelected, onFocus, onBlur, onKeyDown, onInput } = useInlineEdit(node, 'content')
   return (
     <p
@@ -642,19 +705,19 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
       suppressContentEditableWarning
       onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown} onInput={onInput}
       className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text ring-1 ring-violet-300 ring-inset rounded' : '', !node.props.content && !isSelected ? 'text-neutral-300 italic' : ''].join(' '))}
-      style={buildInlineStyle(s)}
+      style={buildInlineStyle(s, { skipSizing: true })}
       data-placeholder="Click to edit text…"
     />
   )
 }
 
 export const TextPreview: React.FC<NodeComponentProps> = ({ node }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return <p className={buildClassName(s)} style={buildInlineStyle(s)}>{node.props.content as string}</p>
 }
 
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
@@ -674,7 +737,7 @@ export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 type HTag = 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'
 
 export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
-  const s   = getStyle(node)
+  const s   = useNodeStyle(node)
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
   const { ref, isSelected, onFocus, onBlur, onKeyDown, onInput } = useInlineEdit(node, 'content')
   return (
@@ -684,19 +747,19 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
       suppressContentEditableWarning
       onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown} onInput={onInput}
       className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text ring-1 ring-violet-300 ring-inset rounded' : ''].join(' '))}
-      style={buildInlineStyle(s)}
+      style={buildInlineStyle(s, { skipSizing: true })}
     />
   )
 }
 
 export const HeadingPreview: React.FC<NodeComponentProps> = ({ node }) => {
-  const s   = getStyle(node)
+  const s   = useNodeStyle(node)
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
   return <Tag className={buildClassName(s)} style={buildInlineStyle(s)}>{node.props.content as string}</Tag>
 }
 
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
@@ -715,7 +778,7 @@ export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
-  const s               = getStyle(node)
+  const s               = useNodeStyle(node)
   const src             = node.props.src as string
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const updateProps     = useBuilderStore(st => st.updateProps)
@@ -723,37 +786,40 @@ export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
   function handleEmptyClick(e: React.MouseEvent) {
     e.stopPropagation()
     openMediaPicker(item => {
-      updateProps(node.id, { src: item.url, alt: item.alt || node.props.alt, style: { ...s, aspectRatio: s.aspectRatio ?? '4/3', objectFit: s.objectFit ?? 'cover' } })
+      updateProps(node.id, { src: item.url, alt: item.alt || node.props.alt, style: { ...(node.props.style as StyleProps ?? {}), aspectRatio: s.aspectRatio ?? '4/3', objectFit: s.objectFit ?? 'cover' } })
     })
   }
 
   if (!src) return (
-    <div onClick={handleEmptyClick} className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors')} style={{ ...buildInlineStyle(s), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
+    <div onClick={handleEmptyClick} className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors')} style={{ ...buildInlineStyle(s, { skipSizing: true }), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
       <span className="text-xl">🖼️</span>
       <span className="text-xs font-medium">Click to choose an image</span>
     </div>
   )
 
-  const hasFixedWidth = typeof s.width === 'number'
+  // Editor: no explicit width/height override here either — the wrapper
+  // already sizes this element via buildBoxSizingStyle, so this element
+  // itself should simply fill the wrapper (100%) rather than recompute its
+  // own width from s.width.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, hasFixedWidth ? 'block' : 'max-w-full block')} style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s) }} />
+  return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, 'block w-full')} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
 }
 
 export const ImagePreview: React.FC<NodeComponentProps> = ({ node }) => {
-  const s             = getStyle(node)
+  const s             = useNodeStyle(node)
   const hasFixedWidth = typeof s.width === 'number'
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={node.props.src as string} alt={(node.props.alt as string) || ''} className={buildClassName(s, hasFixedWidth ? 'block' : 'max-w-full block')} style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s) }} />
 }
 
 export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s               = getStyle(node)
+  const s               = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const src             = (node.props.src as string) ?? ''
 
   function handleBrowse() {
     openMediaPicker(item => {
-      onChange({ src: item.url, alt: item.alt || node.props.alt, style: { ...s, aspectRatio: s.aspectRatio ?? '4/3', objectFit: s.objectFit ?? 'cover' } })
+      onChange({ src: item.url, alt: item.alt || node.props.alt, style: { ...(node.props.style as StyleProps ?? {}), aspectRatio: s.aspectRatio ?? '4/3', objectFit: s.objectFit ?? 'cover' } })
     })
   }
 
@@ -773,12 +839,12 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
       <FieldGroup label="Size">
         <SelectField label="Width mode" value={typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'full'} options={[{ label:'Fill container',value:'full' },{ label:'Fixed pixels',value:'fixed' },{ label:'Half',value:'1/2' },{ label:'Third',value:'1/3' },{ label:'Two thirds',value:'2/3' },{ label:'Quarter',value:'1/4' },{ label:'Three quarters',value:'3/4' },{ label:'Auto',value:'auto' }]}
-          onChange={v => { if (v === 'fixed') { patchStyle(node, onChange, { width: typeof s.width === 'number' ? s.width : 320 }) } else { patchStyle(node, onChange, { width: v as StyleProps['width'] }) } }}
+          onChange={v => { if (v === 'fixed') { patchStyle(node, onChange, { width: typeof s.width === 'number' ? s.width : 320, widthUnit: 'px' }) } else { patchStyle(node, onChange, { width: v as StyleProps['width'], widthUnit: undefined }) } }}
         />
         {typeof s.width === 'number' && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-neutral-500 w-20 shrink-0">Width (px)</span>
-            <input type="number" min={20} max={2000} step={10} className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400" value={s.width} onChange={e => patchStyle(node, onChange, { width: +e.target.value || 0 })} />
+            <input type="number" min={20} max={2000} step={10} className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400" value={s.width} onChange={e => patchStyle(node, onChange, { width: +e.target.value || 0, widthUnit: 'px' })} />
           </div>
         )}
         <p className="text-[10px] text-neutral-400">Fixed pixels keeps this image the same size no matter what container it&apos;s placed in — combine with Position below to place it left/center/right in a wider container</p>
@@ -797,6 +863,7 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUTTON
 // ═══════════════════════════════════════════════════════════════════════════════
+// Same split pattern.
 
 const VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white hover:bg-violet-700',
@@ -804,25 +871,25 @@ const VARIANTS: Record<string, string> = {
   ghost:   'text-violet-600 hover:bg-violet-50',
 }
 
-function ButtonRender({ node }: { node: PageNode }) {
-  const s        = getStyle(node)
+function ButtonRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+  const s        = useNodeStyle(node)
   const variant  = (node.props.variant as string) || 'solid'
   const varClass = VARIANTS[variant] ?? VARIANTS.solid
   return (
     <button
       className={buildClassName(s, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`)}
-      style={buildInlineStyle(s)}
+      style={buildInlineStyle(s, { skipSizing })}
     >
       {(node.props.label as string) || 'Button'}
     </button>
   )
 }
 
-export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} />
-export const ButtonPreview: React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} />
+export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} skipSizing={true} />
+export const ButtonPreview: React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} skipSizing={false} />
 
 export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
@@ -845,6 +912,8 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SPACER
 // ═══════════════════════════════════════════════════════════════════════════════
+// Unaffected — sizes itself off node.props.height directly, never through
+// buildInlineStyle at all.
 
 export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
   <div style={{ height: (node.props.height as number) ?? 40 }} className="w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none">
@@ -871,15 +940,15 @@ export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const DividerEditor:  React.FC<NodeComponentProps> = ({ node }) => {
-  const s = getStyle(node)
-  return <hr className={buildClassName(s, 'w-full border-neutral-200')} style={buildInlineStyle(s)} />
+  const s = useNodeStyle(node)
+  return <hr className={buildClassName(s, 'w-full border-neutral-200')} style={buildInlineStyle(s, { skipSizing: true })} />
 }
 export const DividerPreview: React.FC<NodeComponentProps> = ({ node }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return <hr className={buildClassName(s, 'w-full')} style={buildInlineStyle(s)} />
 }
 export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = getStyle(node)
+  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Style">

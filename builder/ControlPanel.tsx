@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useBuilderStore } from './store'
+import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap, PageNode } from './types'
-import { StyleProps } from './styleMapper'
 import { StylePanel } from './panelComponents'
+import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 
 type Tab = 'layers' | 'style' | 'content'
 
@@ -108,19 +108,55 @@ function LayerNode({
 }
 
 // ─── Style tab ────────────────────────────────────────────────────────────────
+// Resolves style through useNodeStyle (breakpoint-aware) instead of reading
+// node.props.style directly, and writes through patchNodeStyle so edits
+// land in the correct style/styleTablet/styleMobile bucket depending on
+// which breakpoint the toolbar is currently set to (see responsive.ts).
+//
+// When editing a non-desktop breakpoint, shows a small badge naming which
+// breakpoint is active, plus a "Reset to Desktop" button that only appears
+// once this specific node actually has an override at that breakpoint —
+// so it's not showing a reset option that would do nothing.
 
 function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
+  const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
+  const style             = useNodeStyle(node)
+
   if (!node) return <Empty text="Select a block to edit its style" />
-  const style   = (node.props.style as StyleProps) ?? {}
+
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  const hasOverride           = isOverrideBreakpoint && hasOverrideAt(node, editingBreakpoint)
+
   return (
-    <StylePanel
-      style={style}
-      onChange={partial => onUpdate(node.id, { style: { ...style, ...partial } })}
-    />
+    <div>
+      {isOverrideBreakpoint && (
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+            {PREVIEW_WIDTHS[editingBreakpoint].icon} Editing {PREVIEW_WIDTHS[editingBreakpoint].label} style
+          </span>
+          {hasOverride && (
+            <button
+              onClick={() => clearNodeStyleOverride(node, p => onUpdate(node.id, p), editingBreakpoint)}
+              className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+              title="Remove all overrides for this block at this breakpoint"
+            >
+              Reset to Desktop
+            </button>
+          )}
+        </div>
+      )}
+      <StylePanel
+        style={style}
+        onChange={partial => patchNodeStyle(node, p => onUpdate(node.id, p), partial)}
+      />
+    </div>
   )
 }
 
 // ─── Content tab ──────────────────────────────────────────────────────────────
+// Unchanged — each block's own EditorPanel already calls useNodeStyle /
+// patchNodeStyle internally (see NodeComponents.tsx) wherever it deals with
+// style, so nothing extra is needed here.
 
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   if (!node) return <Empty text="Select a block to edit its content" />

@@ -17,13 +17,13 @@ export interface StyleProps {
   mx?: number; my?: number
   mt?: number; mb?: number
   gap?: number
-  
-  
-  ml?: number | 'auto'   // NEW — supports 'auto' for left/center/right alignment
-  mr?: number | 'auto'   // NEW
+
+  ml?: number | 'auto'
+  mr?: number | 'auto'
+
   // Colors — resolved to real CSS colors and applied inline (see resolveColor)
-  bgColor?:    string   // e.g. 'violet-500', 'white', 'transparent', or any hex
-  textColor?:  string   // e.g. 'neutral-700', 'white', or any hex
+  bgColor?:    string
+  textColor?:  string
   borderColor?: string
 
   // Typography
@@ -42,8 +42,19 @@ export interface StyleProps {
   align?:     'start'|'end'|'center'|'stretch'|'baseline'
   flex?:      '1'|'auto'|'none'
 
-  // Sizing — stored as numbers (px) applied via CSS
+  // Sizing — stored as numbers, unit depends on widthUnit
   width?:     number | 'full' | 'auto' | 'screen' | '1/2' | '1/3' | '2/3' | '1/4' | '3/4'
+  // When width is a plain number, widthUnit says how to interpret it:
+  //   'px' (default if unset) — an absolute pixel width. Used by explicit
+  //     "Fixed pixels" choices (e.g. ImagePanel's Width mode dropdown) —
+  //     deliberately container-agnostic, stays the same size everywhere.
+  //   '%' — a percentage of this element's immediate parent container.
+  //     Used by interactive canvas resize-handle drags (see ResizeHandles),
+  //     so a block resized to "look right" in a narrower editor panel keeps
+  //     the SAME visual proportion in a wider Preview/live page, instead of
+  //     an absolute px number silently becoming a smaller or larger
+  //     fraction of a differently-sized container.
+  widthUnit?: 'px' | '%'
   maxWidth?:  number | 'xs'|'sm'|'md'|'lg'|'xl'|'2xl'|'3xl'|'4xl'|'5xl'|'6xl'|'7xl'|'full'
   minHeight?: number | 'screen' | 'full'
   height?:    number | 'auto' | 'full' | 'screen'
@@ -66,14 +77,14 @@ export interface StyleProps {
   bgImage?:    string
   bgSize?:     'cover' | 'contain' | 'auto'
   bgPos?:      'center' | 'top' | 'bottom' | 'left' | 'right'
-  bgOverlay?:  number   // 0–90, percentage darkness
-  bgGradient?: string   // e.g. 'linear-gradient(to right, #7c3aed, #4f46e5)'
+  bgOverlay?:  number
+  bgGradient?: string
 
   // Helpers
-  centerContent?: boolean  // mx-auto
+  centerContent?: boolean  // legacy — see buildAlignMargin
 }
 
-// ─── Color resolution (hex values, used inline — bypasses Tailwind's scanner) ─
+// ─── Color resolution ──────────────────────────────────────────────────────
 
 const COLOR_HEX: Record<string, string> = {
   white: '#ffffff',
@@ -118,7 +129,7 @@ const COLOR_HEX: Record<string, string> = {
 
 export function resolveColor(value?: string): string | undefined {
   if (!value) return undefined
-  return COLOR_HEX[value] ?? value // fall back to raw value (hex, rgb(), etc.)
+  return COLOR_HEX[value] ?? value
 }
 
 // ─── Build className (enum/keyword values only) ───────────────────────────────
@@ -126,7 +137,6 @@ export function resolveColor(value?: string): string | undefined {
 export function buildClassName(style: StyleProps = {}, extra?: string): string {
   const c: string[] = []
 
-  // Typography
   if (style.fontSize)    c.push(`text-${style.fontSize}`)
   if (style.fontWeight)  c.push(`font-${style.fontWeight}`)
   if (style.textAlign)   c.push(`text-${style.textAlign}`)
@@ -134,7 +144,6 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   if (style.italic)      c.push('italic')
   if (style.uppercase)   c.push('uppercase')
 
-  // Layout
   if (style.display)    c.push(style.display)
   if (style.flexDir)    c.push(`flex-${style.flexDir}`)
   if (style.flexWrap)   c.push(`flex-${style.flexWrap}`)
@@ -142,7 +151,6 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   if (style.align)      c.push(`items-${style.align}`)
   if (style.flex)       c.push(`flex-${style.flex}`)
 
-  // Sizing (keyword variants)
   if (style.width === 'full')   c.push('w-full')
   else if (style.width === 'auto')   c.push('w-auto')
   else if (style.width === 'screen') c.push('w-screen')
@@ -162,16 +170,13 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   else if (style.height === 'full')   c.push('h-full')
   else if (style.height === 'screen') c.push('h-screen')
 
-  // Border
   if (style.rounded && style.rounded !== 'none') c.push(`rounded-${style.rounded}`)
   if (style.borderWidth !== undefined && style.borderWidth > 0)
     c.push(style.borderWidth === 1 ? 'border' : `border-${style.borderWidth}`)
   if (style.borderStyle)  c.push(`border-${style.borderStyle}`)
 
-  // Effects
   if (style.shadow && style.shadow !== 'none') c.push(`shadow-${style.shadow}`)
 
-  // Image fit
   if (style.objectFit === 'cover')     c.push('object-cover')
   else if (style.objectFit === 'contain') c.push('object-contain')
   else if (style.objectFit === 'fill')    c.push('object-fill')
@@ -179,15 +184,16 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
 
   if (style.objectPosition) c.push(`object-${style.objectPosition.replace(' ', '-')}`)
 
-
-
   if (extra) c.push(extra)
   return c.filter(Boolean).join(' ')
 }
 
 // ─── Build inline style (numeric/dynamic values + colors + backgrounds) ───────
 
-export function buildInlineStyle(style: StyleProps = {}): React.CSSProperties {
+export function buildInlineStyle(
+  style: StyleProps = {},
+  opts: { skipSizing?: boolean } = {},
+): React.CSSProperties {
   const s: React.CSSProperties = {}
 
   if (style.px  !== undefined) { s.paddingLeft  = style.px * 4;  s.paddingRight  = style.px * 4 }
@@ -201,46 +207,48 @@ export function buildInlineStyle(style: StyleProps = {}): React.CSSProperties {
   if (style.mt  !== undefined)   s.marginTop    = style.mt * 4
   if (style.mb  !== undefined)   s.marginBottom = style.mb * 4
   if (style.gap !== undefined)   s.gap          = style.gap * 4
-Object.assign(s, buildAlignMargin(style))
 
-// Numeric sizes
-if (typeof style.width === 'number') {
-  s.width      = style.width
-  s.flexGrow   = 0
-  s.flexShrink = 0
-  // No flexBasis here — flex-basis sizes the *main* axis of the parent
-  // flex container (height when the parent is flex-col, width when it's
-  // flex-row). Setting it from `width` unconditionally was forcing a
-  // column-direction parent's height to whatever pixel width you'd just
-  // dragged. Leaving flex-basis at its default (auto) makes it fall back
-  // to reading width/height directly for whichever axis is actually the
-  // main one — so width only ever affects width, on any parent.
-}
+  Object.assign(s, buildAlignMargin(style))
 
-if (typeof style.maxWidth === 'number') {
-  s.maxWidth = style.maxWidth
-} else if (style.maxWidth === 'full') {
-  s.maxWidth = '100%'
-} else if (typeof style.width === 'number') {
-  // A drag-resized pixel width is a preferred width, not a guarantee — it
-  // should never exceed whatever room its container actually has.
-  s.maxWidth = '100%'
-}
+  // skipSizing is used by every *Editor* component (rendered inside
+  // SelectableShell) — the wrapper already applies width/maxWidth via
+  // buildBoxSizingStyle. Applying the SAME numeric/percentage width a
+  // second time, nested one level deeper, is harmless for an absolute px
+  // value (623px means 623px regardless of nesting) but actively WRONG
+  // for a percentage: 45% of an element whose own parent is already 45%
+  // of the real container resolves to ~20%, not 45%. That compounding —
+  // invisible until something has a background color to reveal it — was
+  // the actual cause of "background only fills part of the box."
+  // *Preview* components have no such wrapper (RenderPreviewNode renders
+  // them directly), so they must keep calling this without skipSizing.
+  if (!opts.skipSizing) {
+    if (typeof style.width === 'number') {
+      s.width      = style.widthUnit === '%' ? `${style.width}%` : style.width
+      s.flexGrow   = 0
+      s.flexShrink = 0
+    }
 
-if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
-if (typeof style.height    === 'number') s.height    = style.height
+    if (typeof style.maxWidth === 'number') {
+      s.maxWidth = style.maxWidth
+    } else if (style.maxWidth === 'full') {
+      s.maxWidth = '100%'
+    } else if (typeof style.width === 'number' && style.widthUnit !== '%') {
+      s.maxWidth = '100%'
+    }
+  }
+
+  if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
+  if (typeof style.height    === 'number') s.height    = style.height
   if (style.opacity !== undefined)         s.opacity   = style.opacity / 100
 
   if (style.aspectRatio && style.aspectRatio !== 'auto') {
     s.aspectRatio = style.aspectRatio
   }
 
-  // Colors — resolved to real CSS values, applied inline (see resolveColor).
   if (style.bgColor)     s.backgroundColor = resolveColor(style.bgColor)
   if (style.textColor)   s.color           = resolveColor(style.textColor)
   if (style.borderColor) s.borderColor     = resolveColor(style.borderColor)
 
-  // Background image / gradient
   if (style.bgImage) {
     s.backgroundImage    = `url(${style.bgImage})`
     s.backgroundSize     = style.bgSize ?? 'cover'
@@ -255,21 +263,15 @@ if (typeof style.height    === 'number') s.height    = style.height
 
 export type BoxAlign = 'left' | 'center' | 'right'
 
-// Single source of truth for "where does this box sit when it's narrower
-// than its container" — used by both the node's own rendered style and by
-// SelectableShell's wrapper, so they can never drift apart the way
-// centerContent-as-a-class did.
 export function getBoxAlign(style: StyleProps = {}): BoxAlign {
   if (style.ml === 'auto' && style.mr === 'auto') return 'center'
   if (style.ml === 'auto') return 'right'
   if (style.mr === 'auto') return 'left'
-  if (style.centerContent) return 'center' // legacy pages/templates
+  if (style.centerContent) return 'center'
   return 'left'
 }
 
 export function setBoxAlign(align: BoxAlign): Partial<StyleProps> {
-  // Clearing centerContent means ml/mr become the only source of truth
-  // going forward — no risk of the old flag and new margins disagreeing.
   if (align === 'center') return { ml: 'auto', mr: 'auto', centerContent: undefined }
   if (align === 'right')  return { ml: 'auto', mr: 0,      centerContent: undefined }
   return                       { ml: 0,      mr: 'auto', centerContent: undefined }
@@ -281,25 +283,19 @@ export function buildAlignMargin(style: StyleProps = {}): React.CSSProperties {
   const hasMR = style.mr !== undefined
   if (hasML) s.marginLeft  = style.ml === 'auto' ? 'auto' : (style.ml as number) * 4
   if (hasMR) s.marginRight = style.mr === 'auto' ? 'auto' : (style.mr as number) * 4
-  // Legacy fallback for anything saved before ml/mr existed.
   if (style.centerContent && !hasML && !hasMR) {
     s.marginLeft  = 'auto'
     s.marginRight = 'auto'
   }
   return s
 }
+
 // ─── Box sizing for the SelectableShell wrapper ────────────────────────────
-// buildInlineStyle() applies width/height to whichever element the node's
-// own Editor component happens to render at its root. But in a flex parent
-// (Columns, or a Section with flexDir row), the thing actually participating
-// in that flex layout is the SelectableShell wrapper *around* the node, not
-// the node's own inner element one level down. If the wrapper doesn't carry
-// the same width/height, the outline and resize handles drift away from
-// what you're actually seeing resize.
-//
-// This intentionally mirrors only box-affecting properties (never padding,
-// margin, or colors) so nothing gets doubled up visually — it just makes
-// sure the *box* the wrapper occupies matches the box the content renders.
+// Mirrors the sizing subset of buildInlineStyle onto the SelectableShell
+// wrapper — the wrapper is the real flex/layout item in a flex parent, so it
+// needs to carry the same width/height or the outline/handles visually
+// detach from what's actually rendering.
+
 export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties {
   const s: React.CSSProperties = {
     minWidth:  0,
@@ -307,10 +303,9 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
   }
 
   if (typeof style.width === 'number') {
-    s.width      = style.width
+    s.width      = style.widthUnit === '%' ? `${style.width}%` : style.width
     s.flexGrow   = 0
     s.flexShrink = 0
-    // (see buildInlineStyle above — no flexBasis, same reasoning)
   } else if (style.width === 'full')  s.width = '100%'
   else if (style.width === '1/2')     s.width = '50%'
   else if (style.width === '1/3')     s.width = '33.3333%'
@@ -320,11 +315,7 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
 
   if (typeof style.maxWidth === 'number') s.maxWidth = style.maxWidth
   else if (style.maxWidth === 'full')     s.maxWidth = '100%'
-  else if (typeof style.width === 'number') {
-    // Mirror the inner element's clamp exactly (see buildInlineStyle) —
-    // this was missing here before, which is why the wrapper (the box
-    // that actually shows the outline/handles) could still overflow even
-    // though the content inside it was correctly capped.
+  else if (typeof style.width === 'number' && style.widthUnit !== '%') {
     s.maxWidth = '100%'
   }
 
@@ -332,8 +323,6 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
   if (typeof style.minHeight === 'number') s.minHeight = style.minHeight
 
   if (style.aspectRatio && style.aspectRatio !== 'auto') s.aspectRatio = style.aspectRatio
-  if (typeof style.mx === 'number') { s.marginLeft = style.mx * 4; s.marginRight = style.mx * 4 }
-  if (typeof style.my === 'number') { s.marginTop  = style.my * 4; s.marginBottom = style.my * 4 }
 
   if (typeof style.mx === 'number') { s.marginLeft = style.mx * 4; s.marginRight  = style.mx * 4 }
   if (typeof style.my === 'number') { s.marginTop  = style.my * 4; s.marginBottom = style.my * 4 }
@@ -345,15 +334,7 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
   return s
 }
 
-
 // ─── Flex layout mirror (fixes Section's inner wrapper div) ───────────────
-// SectionEditor/SectionPreview render an inner <div> between <section> and
-// the actual child nodes (needed for the background-overlay z-index stack).
-// Without this, display/flexDir/justify/align/gap set on the Section only
-// ever apply to <section> itself — which has exactly one child (this div)
-// — so they never reach the real content, and Justify/Align/gap all
-// silently no-op. This mirrors ONLY the layout-relevant subset onto that
-// wrapper (not padding/color/border, which would visibly double up).
 
 export function buildFlexLayoutClassName(style: StyleProps = {}): string {
   const c: string[] = []
@@ -370,6 +351,110 @@ export function buildFlexLayoutStyle(style: StyleProps = {}): React.CSSPropertie
   if (style.gap !== undefined) s.gap = style.gap * 4
   return s
 }
+
+// ─── Section-specific split (full-bleed background fix) ───────────────────
+// Section is the only node type that needs BOTH a background spanning the
+// full page width AND a centered max-width content column. One element
+// can't do both — max-width + mx:auto necessarily clips the background to
+// that same narrow box (this was the bug: max-width, centering, padding,
+// AND background were all being applied to a single <section> element, so
+// the background could never reach past the centered column's own edges).
+//
+// These two helpers split a Section's StyleProps into:
+//   - an OUTER "band": background + vertical padding only, full width,
+//     no max-width — this is what SectionEditor/SectionPreview's root
+//     <section> should use.
+//   - an INNER "column": max-width + horizontal padding + centering +
+//     flex layout — this is what the nested content <div> should use.
+//
+// Only Section uses these; every other node type keeps using
+// buildClassName/buildInlineStyle as before, since only Section combines
+// maxWidth with a background in its panel.
+
+export function buildSectionOuterStyle(
+  style: StyleProps = {},
+  opts: { skipSizing?: boolean } = {},
+): React.CSSProperties {
+  const s: React.CSSProperties = {}
+
+  if (style.pt !== undefined) s.paddingTop = style.pt * 4
+  else if (style.py !== undefined) s.paddingTop = style.py * 4
+  if (style.pb !== undefined) s.paddingBottom = style.pb * 4
+  else if (style.py !== undefined) s.paddingBottom = style.py * 4
+
+  if (style.bgColor) s.backgroundColor = resolveColor(style.bgColor)
+  if (style.bgImage) {
+    s.backgroundImage    = `url(${style.bgImage})`
+    s.backgroundSize     = style.bgSize ?? 'cover'
+    s.backgroundPosition = style.bgPos ?? 'center'
+    s.backgroundRepeat   = 'no-repeat'
+  } else if (style.bgGradient) {
+    s.backgroundImage = style.bgGradient
+  }
+
+  if (style.opacity !== undefined) s.opacity = style.opacity / 100
+
+  // Vertical margin (mt/mb/my) — this is the piece that got dropped when
+  // the outer/inner split was first introduced. buildAlignMargin (ml/mr
+  // horizontal centering) correctly moved to buildSectionInnerStyle, but
+  // mt/mb/my were never carried over to EITHER function, so a Section's
+  // own Margin Top/Bottom panel controls silently did nothing — the value
+  // changed in state but no render path ever read it. Same my-then-mt/mb
+  // override order buildInlineStyle always used.
+  if (style.my !== undefined) { s.marginTop = style.my * 4; s.marginBottom = style.my * 4 }
+  if (style.mt !== undefined)   s.marginTop    = style.mt * 4
+  if (style.mb !== undefined)   s.marginBottom = style.mb * 4
+
+  // Same skipSizing gate buildInlineStyle has always had: in the EDITOR,
+  // the SelectableShell wrapper already applies width/maxWidth via
+  // buildBoxSizingStyle, so the section itself skips it. In PREVIEW there
+  // is no such wrapper, so this outer band must apply the real dragged
+  // width itself — this is what makes a resize-handle drag actually show
+  // up in Preview. (This got dropped when the outer/inner split was first
+  // introduced, which is why drag-resized widths stopped appearing in
+  // Preview — this restores that exact original behavior.)
+  if (!opts.skipSizing) {
+    if (typeof style.width === 'number') {
+      s.width      = style.widthUnit === '%' ? `${style.width}%` : style.width
+      s.flexGrow   = 0
+      s.flexShrink = 0
+    }
+
+    if (typeof style.maxWidth === 'number') {
+      s.maxWidth = style.maxWidth
+    } else if (typeof style.width === 'number' && style.widthUnit !== '%') {
+      s.maxWidth = '100%'
+    }
+  }
+
+  return s
+}
+
+export function buildSectionInnerClassName(style: StyleProps = {}): string {
+  const c: string[] = ['w-full']
+  if (style.maxWidth === 'full') c.push('max-w-full')
+  else if (typeof style.maxWidth === 'string') c.push(`max-w-${style.maxWidth}`)
+  const flex = buildFlexLayoutClassName(style)
+  if (flex) c.push(flex)
+  return c.filter(Boolean).join(' ')
+}
+
+export function buildSectionInnerStyle(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {}
+
+  if (typeof style.maxWidth === 'number') s.maxWidth = style.maxWidth
+
+  if (style.pl !== undefined) s.paddingLeft = style.pl * 4
+  else if (style.px !== undefined) s.paddingLeft = style.px * 4
+  if (style.pr !== undefined) s.paddingRight = style.pr * 4
+  else if (style.px !== undefined) s.paddingRight = style.px * 4
+
+  Object.assign(s, buildAlignMargin(style))   // centering (ml/mr auto) lives HERE now
+  Object.assign(s, buildFlexLayoutStyle(style)) // gap
+
+  return s
+}
+
 // ─── Color presets (used in panel UI) ────────────────────────────────────────
 
 export const COLOR_PRESETS = [
