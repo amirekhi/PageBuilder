@@ -7,9 +7,10 @@ import {
   buildFlexLayoutClassName, buildFlexLayoutStyle,
   buildSectionOuterStyle, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
-import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField } from './panelComponents'
+import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField, AnimationPanel } from './panelComponents'
 import { useBuilderStore } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
+import { AnimationProps } from './animations'
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 // getStyle() is gone — every component below now calls useNodeStyle(node)
@@ -30,6 +31,24 @@ import { useNodeStyle, patchNodeStyle } from './responsive'
 // such wrapper (RenderPreviewNode renders them directly) and must keep
 // applying sizing themselves — they call buildInlineStyle(s) with no
 // options, unchanged.
+//
+// ANIMATION NOTE (props): node.props.animation (see animations.ts /
+// AnimationPanel) is read/written directly, same as every other non-style
+// prop (label, content, items, etc) — it is NOT part of StyleProps and does
+// not go through patchStyle/patchNodeStyle, since it isn't per-breakpoint.
+// Every panel below ends with one <AnimationPanel .../> call.
+//
+// ANIMATION NOTE (rendering): every *Preview component below now accepts
+// `animationRef` and `animationStyle` (see NodeComponentProps in types.ts)
+// and applies them directly to its OWN root element's `ref`/`style`. This
+// is required — RenderPreviewNode (Renderer.tsx) computes these via the
+// useAnimationProps() hook and passes them down as plain props; there is no
+// way to attach a ref/style to "the DOM node a function component renders"
+// from outside the component itself, short of adding a wrapper <div> (which
+// this codebase deliberately avoids elsewhere to not break flex sizing —
+// see the SIZING NOTE above). *Editor components deliberately do NOT
+// receive or apply these — RenderEditorNode never passes them — so
+// animations never play while editing.
 
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
   patchNodeStyle(node, onChange, partial)
@@ -98,6 +117,10 @@ function useInlineEdit(node: PageNode, prop: string = 'content') {
 // and between top-level blocks, which makes the drop-target/drag-handle
 // areas easier to grab. It never renders in Preview, so it's free real
 // estate for editing ergonomics with zero visual cost in the final page.
+//
+// ANIMATION TARGET: the OUTER <section> is the animated root (not the inner
+// column div) — it's the element that actually owns the node's background/
+// padding/margin, so it's the one that should fade/slide/zoom as a unit.
 
 function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
   const rootId = useBuilderStore(st => st.rootId)
@@ -136,7 +159,7 @@ export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) 
   )
 }
 
-export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children }) => {
+export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
   const rawStyle = useNodeStyle(node)
   const s        = useRootAdjustedStyle(node, rawStyle)   // ← only change
   const overlayStyle  = buildOverlayStyle(s.bgOverlay)
@@ -144,8 +167,9 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children })
 
   return (
     <section
+      ref={animationRef}
       className={buildClassName(s, 'w-full relative')}
-      style={{ ...buildInlineStyle(s), minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64 }}
+      style={{ ...buildInlineStyle(s), minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64, ...animationStyle }}
     >
       {overlayStyle && <div style={overlayStyle} aria-hidden />}
       <div
@@ -278,6 +302,11 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           </>
         )}
       </FieldGroup>
+
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -286,24 +315,42 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // AVATAR
 // ═══════════════════════════════════════════════════════════════════════════════
 // Unaffected by the sizing split — sizes itself off node.props.size (a
-// diameter), not via buildInlineStyle at all.
+// diameter), not via buildInlineStyle at all. AvatarRender is shared between
+// Editor+Preview; animationRef/animationStyle are optional params that
+// AvatarEditor simply never passes (so they're always undefined there).
 
-function AvatarRender({ node }: { node: PageNode }) {
+function AvatarRender({
+  node, animationRef, animationStyle,
+}: {
+  node: PageNode
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const src      = node.props.src as string
   const size     = (node.props.size as number) ?? 56
   const initials = (node.props.initials as string) || ''
   return src ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={(node.props.alt as string) || ''} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />
+    <img
+      ref={animationRef}
+      src={src} alt={(node.props.alt as string) || ''}
+      className="rounded-full object-cover shrink-0"
+      style={{ width: size, height: size, ...animationStyle }}
+    />
   ) : (
-    <div className="rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none" style={{ width: size, height: size, fontSize: size * 0.36 }}>
+    <div
+      ref={animationRef}
+      className="rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none"
+      style={{ width: size, height: size, fontSize: size * 0.36, ...animationStyle }}
+    >
       {initials || '?'}
     </div>
   )
 }
 
 export const AvatarEditor:  React.FC<NodeComponentProps> = ({ node }) => <AvatarRender node={node} />
-export const AvatarPreview: React.FC<NodeComponentProps> = ({ node }) => <AvatarRender node={node} />
+export const AvatarPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <AvatarRender node={node} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
@@ -325,6 +372,10 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         </div>
         <p className="text-[10px] text-neutral-400">Tip: drag the corner handle on the canvas to resize instead</p>
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -335,12 +386,22 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // Was one shared render function for Editor+Preview — split so Editor can
 // skip sizing (wrapper owns it) while Preview still applies it (no wrapper).
 
-function QuoteRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+function QuoteRender({
+  node, skipSizing, animationRef, animationStyle,
+}: {
+  node: PageNode; skipSizing: boolean
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const s         = useNodeStyle(node)
   const avatarSrc = node.props.avatarSrc as string
   const initials  = (node.props.initials as string) || (node.props.name as string)?.[0] || '?'
   return (
-    <div className={buildClassName(s, 'flex flex-col gap-4')} style={buildInlineStyle(s, { skipSizing })}>
+    <div
+      ref={animationRef}
+      className={buildClassName(s, 'flex flex-col gap-4')}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
+    >
       <p className="text-lg leading-relaxed text-neutral-700">"{(node.props.quote as string) || 'A short, glowing quote from a happy customer.'}"</p>
       <div className="flex items-center gap-3">
         {avatarSrc
@@ -356,7 +417,8 @@ function QuoteRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean
 }
 
 export const QuoteEditor:  React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} skipSizing={true} />
-export const QuotePreview: React.FC<NodeComponentProps> = ({ node }) => <QuoteRender node={node} skipSizing={false} />
+export const QuotePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <QuoteRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
@@ -379,6 +441,10 @@ export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
         </button>
       </FieldGroup>
       <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -397,26 +463,41 @@ function toEmbedUrl(url: string): string | null {
   return url
 }
 
-function VideoRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+function VideoRender({
+  node, skipSizing, animationRef, animationStyle,
+}: {
+  node: PageNode; skipSizing: boolean
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const s     = useNodeStyle(node)
   const raw   = (node.props.url as string) || ''
   const embed = toEmbedUrl(raw)
   const ratio = (s.aspectRatio && s.aspectRatio !== 'auto') ? s.aspectRatio : '16/9'
   if (!embed) return (
-    <div className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm')} style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, minHeight: 160 }}>
+    <div
+      ref={animationRef}
+      className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm')}
+      style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, minHeight: 160, ...animationStyle }}
+    >
       <span className="text-xl">▶</span>
       <span className="text-xs font-medium">Paste a YouTube or Vimeo link</span>
     </div>
   )
   return (
-    <div className={buildClassName(s, 'overflow-hidden')} style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio }}>
+    <div
+      ref={animationRef}
+      className={buildClassName(s, 'overflow-hidden')}
+      style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, ...animationStyle }}
+    >
       <iframe src={embed} className="w-full h-full" style={{ border: 0 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
     </div>
   )
 }
 
 export const VideoEditor:  React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} skipSizing={true} />
-export const VideoPreview: React.FC<NodeComponentProps> = ({ node }) => <VideoRender node={node} skipSizing={false} />
+export const VideoPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <VideoRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
@@ -436,6 +517,10 @@ export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
         <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -455,12 +540,22 @@ function accordionItems(node: PageNode): AccordionItem[] {
   ]
 }
 
-function AccordionRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+function AccordionRender({
+  node, skipSizing, animationRef, animationStyle,
+}: {
+  node: PageNode; skipSizing: boolean
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const s     = useNodeStyle(node)
   const items = accordionItems(node)
   const [openIdx, setOpenIdx] = useState<number | null>(0)
   return (
-    <div className={buildClassName(s, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200')} style={buildInlineStyle(s, { skipSizing })}>
+    <div
+      ref={animationRef}
+      className={buildClassName(s, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200')}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
+    >
       {items.map((item, i) => {
         const isOpen = openIdx === i
         return (
@@ -480,7 +575,8 @@ function AccordionRender({ node, skipSizing }: { node: PageNode; skipSizing: boo
 }
 
 export const AccordionEditor:  React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} skipSizing={true} />
-export const AccordionPreview: React.FC<NodeComponentProps> = ({ node }) => <AccordionRender node={node} skipSizing={false} />
+export const AccordionPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <AccordionRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s     = useNodeStyle(node)
@@ -507,6 +603,10 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">+ Add question</button>
       </FieldGroup>
       <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -523,12 +623,22 @@ function listItems(node: PageNode): string[] {
 
 const LIST_MARKERS: Record<string, string> = { bullet: '•', check: '✓', arrow: '→', number: '' }
 
-function ListRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+function ListRender({
+  node, skipSizing, animationRef, animationStyle,
+}: {
+  node: PageNode; skipSizing: boolean
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const s          = useNodeStyle(node)
   const items      = listItems(node)
   const markerType = (node.props.markerType as string) || 'bullet'
   return (
-    <ul className={buildClassName(s, 'space-y-2 list-none')} style={buildInlineStyle(s, { skipSizing })}>
+    <ul
+      ref={animationRef}
+      className={buildClassName(s, 'space-y-2 list-none')}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
+    >
       {items.map((text, i) => (
         <li key={i} className="flex items-start gap-2.5">
           <span className="shrink-0 text-violet-600 font-medium leading-6">{markerType === 'number' ? `${i + 1}.` : LIST_MARKERS[markerType] ?? '•'}</span>
@@ -540,7 +650,8 @@ function ListRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean 
 }
 
 export const ListEditor:  React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} skipSizing={true} />
-export const ListPreview: React.FC<NodeComponentProps> = ({ node }) => <ListRender node={node} skipSizing={false} />
+export const ListPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <ListRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s     = useNodeStyle(node)
@@ -563,6 +674,10 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Marker" value={(node.props.markerType as string) ?? 'bullet'} options={[{ label:'Bullet',value:'bullet' },{ label:'Check',value:'check' },{ label:'Arrow',value:'arrow' },{ label:'Number',value:'number' }]} onChange={v => onChange({ markerType: v })} />
       </FieldGroup>
       <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -578,14 +693,21 @@ const BADGE_VARIANTS: Record<string, string> = {
   outline: 'border border-violet-300 text-violet-700',
 }
 
-function BadgeRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+function BadgeRender({
+  node, skipSizing, animationRef, animationStyle,
+}: {
+  node: PageNode; skipSizing: boolean
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const s        = useNodeStyle(node)
   const variant  = (node.props.variant as string) || 'soft'
   const varClass = BADGE_VARIANTS[variant] ?? BADGE_VARIANTS.soft
   return (
     <span
+      ref={animationRef}
       className={buildClassName(s, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`)}
-      style={buildInlineStyle(s, { skipSizing })}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       {(node.props.label as string) || 'Badge'}
     </span>
@@ -593,7 +715,8 @@ function BadgeRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean
 }
 
 export const BadgeEditor:  React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} skipSizing={true} />
-export const BadgePreview: React.FC<NodeComponentProps> = ({ node }) => <BadgeRender node={node} skipSizing={false} />
+export const BadgePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <BadgeRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
@@ -609,6 +732,10 @@ export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -622,9 +749,17 @@ export const ColumnsEditor: React.FC<NodeComponentProps> = ({ node, children }) 
   return <div className={buildClassName(s, 'w-full flex flex-row')} style={{ ...buildInlineStyle(s, { skipSizing: true }), minHeight: 48 }}>{children}</div>
 }
 
-export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children }) => {
+export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
-  return <div className={buildClassName(s, 'w-full flex flex-row')} style={buildInlineStyle(s)}>{children}</div>
+  return (
+    <div
+      ref={animationRef}
+      className={buildClassName(s, 'w-full flex flex-row')}
+      style={{ ...buildInlineStyle(s), ...animationStyle }}
+    >
+      {children}
+    </div>
+  )
 }
 
 export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
@@ -637,6 +772,10 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField  label="Justify"      value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
         <p className="text-[10px] text-neutral-400 -mt-1">Controls how the Columns inside line up — each Column's own position is set on the Column itself via Justify above, not on the Column</p>
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -655,9 +794,17 @@ export const ColumnEditor: React.FC<NodeComponentProps> = ({ node, children }) =
   return <div className={buildClassName(s, 'flex-1 min-w-0 min-h-12')} style={buildInlineStyle(s, { skipSizing: true })}>{children}</div>
 }
 
-export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children }) => {
+export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
-  return <div className={buildClassName(s, 'flex-1 min-w-0')} style={buildInlineStyle(s)}>{children}</div>
+  return (
+    <div
+      ref={animationRef}
+      className={buildClassName(s, 'flex-1 min-w-0')}
+      style={{ ...buildInlineStyle(s), ...animationStyle }}
+    >
+      {children}
+    </div>
+  )
 }
 
 export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
@@ -687,6 +834,10 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       <FieldGroup label="Background">
         <ColorField label="Color" value={s.bgColor} onChange={v => patchStyle(node, onChange, { bgColor: v || undefined })} />
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -711,9 +862,17 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   )
 }
 
-export const TextPreview: React.FC<NodeComponentProps> = ({ node }) => {
+export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
-  return <p className={buildClassName(s)} style={buildInlineStyle(s)}>{node.props.content as string}</p>
+  return (
+    <p
+      ref={animationRef}
+      className={buildClassName(s)}
+      style={{ ...buildInlineStyle(s), ...animationStyle }}
+    >
+      {node.props.content as string}
+    </p>
+  )
 }
 
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
@@ -726,6 +885,10 @@ export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 mt-1">Tip: click text on the canvas to edit inline</p>
       </FieldGroup>
       <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -752,10 +915,18 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
   )
 }
 
-export const HeadingPreview: React.FC<NodeComponentProps> = ({ node }) => {
+export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s   = useNodeStyle(node)
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
-  return <Tag className={buildClassName(s)} style={buildInlineStyle(s)}>{node.props.content as string}</Tag>
+  return (
+    <Tag
+      ref={animationRef}
+      className={buildClassName(s)}
+      style={{ ...buildInlineStyle(s), ...animationStyle }}
+    >
+      {node.props.content as string}
+    </Tag>
+  )
 }
 
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
@@ -769,6 +940,10 @@ export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 mt-1">Tip: click the heading on the canvas to edit inline</p>
       </FieldGroup>
       <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -805,11 +980,19 @@ export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
   return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, 'block w-full')} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
 }
 
-export const ImagePreview: React.FC<NodeComponentProps> = ({ node }) => {
+export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s             = useNodeStyle(node)
   const hasFixedWidth = typeof s.width === 'number'
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={node.props.src as string} alt={(node.props.alt as string) || ''} className={buildClassName(s, hasFixedWidth ? 'block' : 'max-w-full block')} style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s) }} />
+  return (
+    <img
+      ref={animationRef}
+      src={node.props.src as string}
+      alt={(node.props.alt as string) || ''}
+      className={buildClassName(s, hasFixedWidth ? 'block' : 'max-w-full block')}
+      style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s), ...animationStyle }}
+    />
+  )
 }
 
 export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
@@ -856,6 +1039,10 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -871,14 +1058,21 @@ const VARIANTS: Record<string, string> = {
   ghost:   'text-violet-600 hover:bg-violet-50',
 }
 
-function ButtonRender({ node, skipSizing }: { node: PageNode; skipSizing: boolean }) {
+function ButtonRender({
+  node, skipSizing, animationRef, animationStyle,
+}: {
+  node: PageNode; skipSizing: boolean
+  animationRef?: React.Ref<any>
+  animationStyle?: React.CSSProperties
+}) {
   const s        = useNodeStyle(node)
   const variant  = (node.props.variant as string) || 'solid'
   const varClass = VARIANTS[variant] ?? VARIANTS.solid
   return (
     <button
+      ref={animationRef}
       className={buildClassName(s, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`)}
-      style={buildInlineStyle(s, { skipSizing })}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       {(node.props.label as string) || 'Button'}
     </button>
@@ -886,7 +1080,8 @@ function ButtonRender({ node, skipSizing }: { node: PageNode; skipSizing: boolea
 }
 
 export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} skipSizing={true} />
-export const ButtonPreview: React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} skipSizing={false} />
+export const ButtonPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
+  <ButtonRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
@@ -905,6 +1100,10 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
         <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider than the button itself</p>
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }
@@ -913,7 +1112,8 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // SPACER
 // ═══════════════════════════════════════════════════════════════════════════════
 // Unaffected — sizes itself off node.props.height directly, never through
-// buildInlineStyle at all.
+// buildInlineStyle at all. Included for completeness (a spacer CAN still
+// "fade in" as a block, even though it has no visible content of its own).
 
 export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
   <div style={{ height: (node.props.height as number) ?? 40 }} className="w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none">
@@ -921,8 +1121,12 @@ export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
   </div>
 )
 
-export const SpacerPreview: React.FC<NodeComponentProps> = ({ node }) => (
-  <div style={{ height: (node.props.height as number) ?? 40 }} className="w-full" />
+export const SpacerPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => (
+  <div
+    ref={animationRef}
+    style={{ height: (node.props.height as number) ?? 40, ...animationStyle }}
+    className="w-full"
+  />
 )
 
 export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
@@ -932,6 +1136,10 @@ export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
       <input type="number" min={4} max={400} step={4} className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.height as number) ?? 40} onChange={e => onChange({ height: +e.target.value })} />
       <p className="text-[10px] text-neutral-400">Tip: drag the bottom handle on the canvas to resize instead</p>
     </FieldGroup>
+    <AnimationPanel
+      value={node.props.animation as AnimationProps}
+      onChange={anim => onChange({ animation: anim })}
+    />
   </div>
 )
 
@@ -943,9 +1151,15 @@ export const DividerEditor:  React.FC<NodeComponentProps> = ({ node }) => {
   const s = useNodeStyle(node)
   return <hr className={buildClassName(s, 'w-full border-neutral-200')} style={buildInlineStyle(s, { skipSizing: true })} />
 }
-export const DividerPreview: React.FC<NodeComponentProps> = ({ node }) => {
+export const DividerPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
-  return <hr className={buildClassName(s, 'w-full')} style={buildInlineStyle(s)} />
+  return (
+    <hr
+      ref={animationRef}
+      className={buildClassName(s, 'w-full')}
+      style={{ ...buildInlineStyle(s), ...animationStyle }}
+    />
+  )
 }
 export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
@@ -969,6 +1183,10 @@ export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
         <p className="text-[10px] text-neutral-400 -mt-1">Only has a visible effect if this Divider's width has been resized narrower than its container</p>
       </FieldGroup>
+      <AnimationPanel
+        value={node.props.animation as AnimationProps}
+        onChange={anim => onChange({ animation: anim })}
+      />
     </div>
   )
 }

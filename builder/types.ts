@@ -23,6 +23,25 @@ export type NodeMap = Record<string, PageNode>
 export interface NodeComponentProps {
   node:      PageNode
   children?: React.ReactNode
+
+  // ── Animation (Preview-only) ──────────────────────────────────────────
+  // Supplied by RenderPreviewNode (see Renderer.tsx), which calls the
+  // useAnimationProps() hook (see animations.ts) and passes the result down
+  // as plain props. EditorComponents are never given these — RenderEditorNode
+  // doesn't pass them — so the editor canvas is completely unaffected.
+  //
+  // WHY THIS HAS TO BE A PROP, NOT SOMETHING APPLIED FROM OUTSIDE:
+  // every *Preview component here returns a single root DOM element
+  // (<section>, <p>, <img>, etc), but the ELEMENT RenderPreviewNode actually
+  // holds a reference to is `<def.PreviewComponent node={node}>`  — i.e. the
+  // component invocation, not the DOM node it eventually renders. There is
+  // no way to reach "the root DOM element two function calls down" from
+  // outside; cloning/mutating the outer element only adds props that a
+  // component ignores unless it's explicitly written to read them. So every
+  // *Preview component below must accept these two props itself and apply
+  // them to its own root element's `ref` and `style`.
+  animationRef?:   React.Ref<any>
+  animationStyle?: React.CSSProperties
 }
 
 // ─── Props passed into every sidebar panel ────────────────────────────────────

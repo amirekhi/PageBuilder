@@ -18,6 +18,7 @@ import { NodeMap } from './types'
 import { SelectableShell } from './SelectableShell'
 import { DropSlot, parseSlotId } from './DropSlot'
 import { EmptyCanvasPrompt } from './TemplatePicker'
+import { AnimationStyleSheet, AnimationProps, useAnimationProps } from './animations'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
@@ -33,6 +34,13 @@ import { EmptyCanvasPrompt } from './TemplatePicker'
 // widths (768px / 390px from PREVIEW_WIDTHS), so those stay simulated at
 // their true size, scaled down only if the panel is narrower than the
 // device width itself (rare, but keeps things usable on small screens).
+//
+// NOTE ON ANIMATIONS: the editor canvas deliberately never plays
+// animations — RenderEditorNode below never passes animationRef/
+// animationStyle to EditorComponent. Blocks always render in their final
+// static (post-animation) state while editing, so drag handles, inline text
+// editing, and the resize UI never have to fight a moving/fading target.
+// Animations only play in PreviewRenderer, further down this file.
 
 export function EditorRenderer() {
   const nodes             = useBuilderStore(s => s.nodes)
@@ -233,10 +241,18 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
 // Tablet/Mobile preview: still simulated as actual device widths (with the
 // phone/tablet chrome), since that's genuinely representing a different
 // physical screen, not just "a page that happens to be narrower."
+//
+// ANIMATIONS: this is the ONLY renderer that plays them. <AnimationStyleSheet />
+// injects the @keyframes once per Preview mount. The tree is keyed off
+// previewReplayNonce (bumped by TopBar's Replay button / handleSetMode via
+// the replayAnimations() store action) — changing that key forces a full
+// unmount/remount of every node below, which resets every
+// IntersectionObserver and re-triggers every CSS animation from scratch.
 
 export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: string }) {
   const previewWidth = useBuilderStore(s => s.previewWidth)
-  const cfg          = PREVIEW_WIDTHS[previewWidth]
+  const cfg           = PREVIEW_WIDTHS[previewWidth]
+  const replayNonce   = useBuilderStore(s => s.previewReplayNonce)
 
   return (
     <div
@@ -250,6 +266,7 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
         paddingBottom:  previewWidth !== 'desktop' ? '4rem' : '0',
       }}
     >
+      <AnimationStyleSheet />
       {previewWidth !== 'desktop' ? (
         <div
           style={{
@@ -270,11 +287,11 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
           {previewWidth === 'tablet' && (
             <div style={{ height: 12, background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }} />
           )}
-          <RenderPreviewNode nodeId={rootId} nodes={nodes} />
+          <RenderPreviewNode key={replayNonce} nodeId={rootId} nodes={nodes} />
         </div>
       ) : (
         <div style={{ width: '100%', background: 'white', minHeight: '100vh' }}>
-          <RenderPreviewNode nodeId={rootId} nodes={nodes} />
+          <RenderPreviewNode key={replayNonce} nodeId={rootId} nodes={nodes} />
         </div>
       )}
     </div>
@@ -282,7 +299,15 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
 }
 
 function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }) {
-  const node = nodes[nodeId]
+  const node      = nodes[nodeId]
+  const animation = node?.props.animation as AnimationProps | undefined
+
+  // Hook is called unconditionally, BEFORE the `if (!node) return null` below
+  // — required by the rules of hooks (hook order must never depend on a
+  // conditional). Harmless when node/animation is missing: the hook just
+  // returns an empty style and an unattached ref in that case.
+  const { ref: animationRef, style: animationStyle } = useAnimationProps(animation)
+
   if (!node) return null
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
@@ -292,7 +317,7 @@ function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }
   ))
 
   return (
-    <def.PreviewComponent node={node}>
+    <def.PreviewComponent node={node} animationRef={animationRef} animationStyle={animationStyle}>
       {children.length > 0 ? children : undefined}
     </def.PreviewComponent>
   )

@@ -31,6 +31,8 @@ export function TopBar() {
   const [hasSave, setHasSave]     = useState(false)
   const menuRef                   = useRef<HTMLDivElement>(null)
   const importRef                 = useRef<HTMLInputElement>(null)
+  const replayAnimations = useBuilderStore(s => s.replayAnimations) 
+
 
   useEffect(() => {
     setHasSave(hasLocalStorageSave())
@@ -195,6 +197,18 @@ export function TopBar() {
             ))}
           </div>
         )}
+
+
+
+{mode === 'preview' && (
+  <button
+    onClick={replayAnimations}
+    title="Replay animations"
+    className="w-8 h-7 flex items-center justify-center rounded-md text-sm text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition-colors"
+  >
+    ↻
+  </button>
+)}
 
         {mode === 'edit' && editingBreakpoint !== 'desktop' && (
           <span className="text-xs text-violet-500 font-medium hidden md:block">

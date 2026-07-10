@@ -1,7 +1,8 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useState ,useEffect } from 'react'
 
 import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, getBoxAlign, setBoxAlign } from './styleMapper'
+import { AnimationProps, ANIMATION_EFFECTS, DEFAULT_ANIMATION, AnimationStyleSheet, EFFECT_KEYFRAME } from './animations'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -506,5 +507,151 @@ export function StylePanel({
         />
       </FieldGroup>
     </div>
+  )
+}
+
+// ─── Animation demo swatch ──────────────────────────────────────────────────
+// Gives instant feedback for animation settings WITHOUT touching the real
+// canvas — the actual editing canvas deliberately never animates (see the
+// ANIMATION NOTE at the top of nodeComponents.tsx: a block mid-transform/
+// opacity would fight the drag handles, resize handles, and contentEditable
+// text editing that all read the block's live box). This is a self-contained
+// placeholder square that plays the exact effect/duration/delay/easing you
+// just picked, replaying automatically on every change — so you get instant
+// feedback right in the sidebar without ever leaving Edit mode or touching
+// anything that could break editing interactions.
+//
+// It renders its own <AnimationStyleSheet/> (the @keyframes) because the
+// panel can be open while in Edit mode, where PreviewRenderer — the only
+// other place that mounts the stylesheet — isn't on screen at all.
+
+function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
+  const [playKey, setPlayKey] = useState(0)
+  const effect   = animation.effect ?? 'none'
+  const duration = animation.duration ?? 600
+  const delay    = animation.delay ?? 0
+  const easing   = animation.easing ?? 'ease-out'
+
+  // Replaying on every settings change is what makes this "instant
+  // feedback" — move the duration slider, see it replay right here.
+  useEffect(() => { setPlayKey(k => k + 1) }, [effect, duration, delay, easing])
+
+  if (effect === 'none') {
+    return (
+      <div className="h-16 rounded-md border border-dashed border-neutral-200 flex items-center justify-center text-xs text-neutral-300">
+        Pick an effect to preview it here
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-16 rounded-md border border-neutral-200 bg-neutral-50 flex items-center justify-center gap-3 relative overflow-hidden">
+      <AnimationStyleSheet />
+      <div
+        key={playKey}
+        className="w-10 h-10 rounded-md bg-violet-600 shrink-0"
+        style={{
+          animationName:           EFFECT_KEYFRAME[effect] ?? undefined,
+          animationDuration:       `${duration}ms`,
+          animationDelay:          `${delay}ms`,
+          animationTimingFunction: easing,
+          animationFillMode:       'both',
+        }}
+      />
+      <button
+        onClick={() => setPlayKey(k => k + 1)}
+        className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-100 transition-colors shrink-0"
+      >
+        ↻ Replay
+      </button>
+    </div>
+  )
+}
+
+// ─── Animation panel ────────────────────────────────────────────────────────
+// Dropped into every per-type panel (see nodeComponents.tsx — every *Panel
+// ends with one <AnimationPanel .../> call). Reads/writes node.props.animation
+// directly — NOT through patchStyle/patchNodeStyle, since animation isn't a
+// per-breakpoint style value (see AnimationProps in animations.ts).
+
+export function AnimationPanel({
+  value, onChange,
+}: {
+  value?: AnimationProps
+  onChange: (next: AnimationProps) => void
+}) {
+  const a = { ...DEFAULT_ANIMATION, ...value }
+  const isNone = (a.effect ?? 'none') === 'none'
+
+  function patch(partial: Partial<AnimationProps>) {
+    onChange({ ...a, ...partial })
+  }
+
+  return (
+    <FieldGroup label="Animation">
+      <SelectField
+        label="Effect"
+        value={a.effect ?? 'none'}
+        options={ANIMATION_EFFECTS}
+        onChange={v => patch({ effect: v as AnimationProps['effect'] })}
+      />
+
+      <AnimationDemoBox animation={a} />
+
+      {!isNone && (
+        <>
+          <SelectField
+            label="Trigger"
+            value={a.trigger ?? 'onScroll'}
+            options={[
+              { label: 'On scroll into view', value: 'onScroll' },
+              { label: 'On page load',        value: 'onLoad' },
+            ]}
+            onChange={v => patch({ trigger: v as AnimationProps['trigger'] })}
+          />
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">Duration</span>
+            <input
+              type="range" min={100} max={2000} step={50}
+              className="flex-1 accent-violet-600"
+              value={a.duration ?? 600}
+              onChange={e => patch({ duration: +e.target.value })}
+            />
+            <span className="text-xs text-neutral-400 w-12 text-right">{a.duration ?? 600}ms</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">Delay</span>
+            <input
+              type="range" min={0} max={2000} step={50}
+              className="flex-1 accent-violet-600"
+              value={a.delay ?? 0}
+              onChange={e => patch({ delay: +e.target.value })}
+            />
+            <span className="text-xs text-neutral-400 w-12 text-right">{a.delay ?? 0}ms</span>
+          </div>
+
+          <SelectField
+            label="Easing"
+            value={a.easing ?? 'ease-out'}
+            options={['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out']}
+            onChange={v => patch({ easing: v as AnimationProps['easing'] })}
+          />
+
+          {a.trigger !== 'onLoad' && (
+            <CheckField
+              label="Play only once"
+              value={a.once ?? true}
+              onChange={v => patch({ once: v })}
+            />
+          )}
+
+          <p className="text-[10px] text-neutral-400 -mt-1">
+            The swatch above previews this exact effect instantly. The editor canvas itself never animates (it always shows blocks in their final static state, so drag/resize/text-editing stay predictable) — see the real thing in Preview, and use the Replay button in the top bar to re-trigger it there.
+          </p>
+        </>
+      )}
+    </FieldGroup>
   )
 }

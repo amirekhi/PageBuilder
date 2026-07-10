@@ -110,6 +110,14 @@ interface BuilderStore {
   // canvas pixels so dragging still feels 1:1 regardless of zoom.
   canvasScale: number
 
+  // Bumped by replayAnimations() below. PreviewRenderer keys its rendered
+  // tree off this value (see Renderer.tsx) — changing a React key forces a
+  // full unmount/remount of every node, which is what actually resets each
+  // AnimatedNode's IntersectionObserver and re-triggers its CSS animation.
+  // Lives here (not as local useState in PreviewRenderer) specifically so
+  // TopBar — a totally separate component — can trigger it via a button.
+  previewReplayNonce: number
+
   past:         NodeMap[]
   future:       NodeMap[]
 
@@ -126,6 +134,7 @@ interface BuilderStore {
   setPreviewWidth:      (w: PreviewWidth) => void
   setEditingBreakpoint: (bp: PreviewWidth) => void
   setCanvasScale:       (scale: number) => void
+  replayAnimations:     () => void
   selectNode:      (id: string | null) => void
   setDragging:     (id: string | null) => void
   setResizing:     (id: string | null) => void
@@ -155,6 +164,7 @@ export const useBuilderStore = create<BuilderStore>()(
       previewWidth: 'desktop',
       editingBreakpoint: 'desktop',
       canvasScale: 1,
+      previewReplayNonce: 0,
       past:         [],
       future:       [],
 
@@ -173,6 +183,7 @@ export const useBuilderStore = create<BuilderStore>()(
       setPreviewWidth:      (w)    => set(s => { s.previewWidth = w }),
       setEditingBreakpoint: (bp)   => set(s => { s.editingBreakpoint = bp }),
       setCanvasScale:       (scale) => set(s => { s.canvasScale = scale }),
+      replayAnimations:     () => set(s => { s.previewReplayNonce += 1 }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
       setResizing:     (id)   => set(s => { s.resizingId = id }),
