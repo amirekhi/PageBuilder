@@ -5,56 +5,16 @@ import { NodeComponentProps, PanelProps, PageNode } from './types'
 import {
   StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle,
   buildFlexLayoutClassName, buildFlexLayoutStyle,
-  buildSectionOuterStyle, buildSectionInnerClassName, buildSectionInnerStyle,
+  buildSectionOuterStyle, buildSectionOuterClassName, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
 import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField, AnimationPanel } from './panelComponents'
 import { useBuilderStore } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
 import { AnimationProps } from './animations'
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
-// getStyle() is gone — every component below now calls useNodeStyle(node)
-// instead, which resolves style for whichever breakpoint (desktop/tablet/
-// mobile) is currently being edited (see responsive.ts). patchStyle() now
-// routes through patchNodeStyle so writes land in the correct breakpoint's
-// style bucket instead of always overwriting desktop.
-//
-// SIZING NOTE: every *Editor component is rendered inside SelectableShell,
-// whose wrapper already applies width/maxWidth via buildBoxSizingStyle (see
-// styleMapper.ts). If the Editor's own root element ALSO applies width via
-// buildInlineStyle, that's harmless for a plain pixel width (623px means
-// 623px regardless of nesting) but actively wrong for a percentage width:
-// 45% of an element whose own parent is already 45% of the real container
-// resolves to ~20%, not 45% — invisible until something has a background
-// color to reveal the compounding. So every *Editor component below calls
-// buildInlineStyle(s, { skipSizing: true }). *Preview components have NO
-// such wrapper (RenderPreviewNode renders them directly) and must keep
-// applying sizing themselves — they call buildInlineStyle(s) with no
-// options, unchanged.
-//
-// ANIMATION NOTE (props): node.props.animation (see animations.ts /
-// AnimationPanel) is read/written directly, same as every other non-style
-// prop (label, content, items, etc) — it is NOT part of StyleProps and does
-// not go through patchStyle/patchNodeStyle, since it isn't per-breakpoint.
-// Every panel below ends with one <AnimationPanel .../> call.
-//
-// ANIMATION NOTE (rendering): every *Preview component below now accepts
-// `animationRef` and `animationStyle` (see NodeComponentProps in types.ts)
-// and applies them directly to its OWN root element's `ref`/`style`. This
-// is required — RenderPreviewNode (Renderer.tsx) computes these via the
-// useAnimationProps() hook and passes them down as plain props; there is no
-// way to attach a ref/style to "the DOM node a function component renders"
-// from outside the component itself, short of adding a wrapper <div> (which
-// this codebase deliberately avoids elsewhere to not break flex sizing —
-// see the SIZING NOTE above). *Editor components deliberately do NOT
-// receive or apply these — RenderEditorNode never passes them — so
-// animations never play while editing.
-
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
   patchNodeStyle(node, onChange, partial)
 }
-
-// ─── Inline editable hook ─────────────────────────────────────────────────────
 
 function useInlineEdit(node: PageNode, prop: string = 'content') {
   const updateProps = useBuilderStore(s => s.updateProps)
@@ -94,34 +54,6 @@ function useInlineEdit(node: PageNode, prop: string = 'content') {
   return { ref, isSelected, onFocus, onBlur, onKeyDown, onInput }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION
-// ═══════════════════════════════════════════════════════════════════════════════
-// Split into an OUTER full-bleed "band" (background + vertical padding, no
-// max-width) and an INNER centered "column" (max-width + horizontal padding
-// + centering + flex layout) — see styleMapper.ts's buildSectionOuterStyle/
-// buildSectionInnerStyle/buildSectionInnerClassName for why this split
-// exists: one element can't both paint a full-width background AND be a
-// centered max-width box at the same time.
-//
-// ROOT OVERRIDE (PREVIEW ONLY): the root node is rendered through this same
-// Section component, but it's not a real visual "block" the way nested
-// sections are — it's just the invisible page-level stack that those real
-// sections live inside. In PREVIEW, if the root also applies its own
-// py/px/gap on top of every nested section's own py/px/gap, you get
-// doubled-up spacing (padding inside padding, gap sitting on top of gap).
-// So SectionPreview zeros out root padding/gap before building its styles.
-//
-// In the EDITOR, though, that same root padding/gap is left alone on
-// purpose — it gives you a bit of breathing room around the canvas edges
-// and between top-level blocks, which makes the drop-target/drag-handle
-// areas easier to grab. It never renders in Preview, so it's free real
-// estate for editing ergonomics with zero visual cost in the final page.
-//
-// ANIMATION TARGET: the OUTER <section> is the animated root (not the inner
-// column div) — it's the element that actually owns the node's background/
-// padding/margin, so it's the one that should fade/slide/zoom as a unit.
-
 function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
   const rootId = useBuilderStore(st => st.rootId)
   const isRoot = node.id === rootId
@@ -134,15 +66,37 @@ function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// BUG FIXED HERE: SectionEditor's outer <section> previously hardcoded
+// className="w-full relative" as a plain string, completely bypassing
+// buildClassName/buildSectionOuterClassName. buildSectionOuterStyle (inline
+// `style` object) already carried bgColor/textColor/borderColor/opacity/
+// margin — so those looked right in the Editor. But rounded/borderWidth/
+// borderStyle/shadow are TAILWIND CLASSES, not inline styles — they only
+// ever come from buildClassName-family functions. Since the className was a
+// hardcoded string, those four properties never reached the DOM in the
+// Editor at all, even though state was updating correctly (confirmed by
+// Preview, whose <section> already called buildClassName(s, 'w-full
+// relative') and therefore always showed them). Same root cause as the
+// earlier text-color bug — just the class-based half of the styling system
+// instead of the inline-style half. Fix: route through
+// buildSectionOuterClassName(s, 'w-full relative') here too, which strips
+// out only the classes that belong on the INNER column (layout/sizing) and
+// keeps everything else (rounded, border, shadow, typography) — see
+// styleMapper.ts for the exact filtering logic.
+
 export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const rawStyle       = useNodeStyle(node)
-  const s              = useRootAdjustedStyle(node, rawStyle)   // ← was: no adjustment
+  const s              = useRootAdjustedStyle(node, rawStyle)
   const overlayStyle   = buildOverlayStyle(s.bgOverlay)
   const hasBackground  = !!(s.bgImage || s.bgGradient)
 
   return (
     <section
-      className="w-full relative"
+      className={buildSectionOuterClassName(s, 'w-full relative')}
       style={{
         ...buildSectionOuterStyle(s, { skipSizing: true }),
         minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64,
@@ -161,7 +115,7 @@ export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) 
 
 export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
   const rawStyle = useNodeStyle(node)
-  const s        = useRootAdjustedStyle(node, rawStyle)   // ← only change
+  const s        = useRootAdjustedStyle(node, rawStyle)
   const overlayStyle  = buildOverlayStyle(s.bgOverlay)
   const hasBackground = !!(s.bgImage || s.bgGradient)
 
@@ -314,10 +268,6 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // AVATAR
 // ═══════════════════════════════════════════════════════════════════════════════
-// Unaffected by the sizing split — sizes itself off node.props.size (a
-// diameter), not via buildInlineStyle at all. AvatarRender is shared between
-// Editor+Preview; animationRef/animationStyle are optional params that
-// AvatarEditor simply never passes (so they're always undefined there).
 
 function AvatarRender({
   node, animationRef, animationStyle,
@@ -383,8 +333,6 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // QUOTE
 // ═══════════════════════════════════════════════════════════════════════════════
-// Was one shared render function for Editor+Preview — split so Editor can
-// skip sizing (wrapper owns it) while Preview still applies it (no wrapper).
 
 function QuoteRender({
   node, skipSizing, animationRef, animationStyle,
@@ -452,7 +400,6 @@ export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // VIDEO
 // ═══════════════════════════════════════════════════════════════════════════════
-// Same split pattern as Quote above.
 
 function toEmbedUrl(url: string): string | null {
   if (!url) return null
@@ -528,7 +475,6 @@ export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACCORDION
 // ═══════════════════════════════════════════════════════════════════════════════
-// Same split pattern.
 
 interface AccordionItem { q: string; a: string }
 
@@ -614,7 +560,6 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIST
 // ═══════════════════════════════════════════════════════════════════════════════
-// Same split pattern.
 
 function listItems(node: PageNode): string[] {
   const raw = node.props.items as string[] | undefined
@@ -685,7 +630,6 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BADGE
 // ═══════════════════════════════════════════════════════════════════════════════
-// Same split pattern.
 
 const BADGE_VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white',
@@ -783,11 +727,6 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLUMN
 // ═══════════════════════════════════════════════════════════════════════════════
-// Deliberately NO AlignField here. A Column's position within its parent
-// Columns row is already controlled by ColumnsPanel's own Justify setting —
-// adding a second, competing left/center/right control on the Column itself
-// would be a real duplicate (two mechanisms fighting for the same visual
-// result), not a missing feature.
 
 export const ColumnEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const s = useNodeStyle(node)
@@ -972,10 +911,6 @@ export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
     </div>
   )
 
-  // Editor: no explicit width/height override here either — the wrapper
-  // already sizes this element via buildBoxSizingStyle, so this element
-  // itself should simply fill the wrapper (100%) rather than recompute its
-  // own width from s.width.
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, 'block w-full')} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
 }
@@ -1050,7 +985,6 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUTTON
 // ═══════════════════════════════════════════════════════════════════════════════
-// Same split pattern.
 
 const VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white hover:bg-violet-700',
@@ -1111,9 +1045,6 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SPACER
 // ═══════════════════════════════════════════════════════════════════════════════
-// Unaffected — sizes itself off node.props.height directly, never through
-// buildInlineStyle at all. Included for completeness (a spacer CAN still
-// "fade in" as a block, even though it has no visible content of its own).
 
 export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
   <div style={{ height: (node.props.height as number) ?? 40 }} className="w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none">

@@ -202,16 +202,28 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
   let content: React.ReactNode = null
 
   if (def.isContainer) {
+    // FIX (Pricing template columns rendering uneven/out-of-order): a
+    // between-block DropSlot used to always render as a full-width
+    // horizontal divider regardless of the parent's layout direction. Fine
+    // for a vertically-stacked container (Section, Column), but WRONG
+    // inside a Columns row — ColumnsEditor hardcodes flex-row, so a
+    // full-width sibling there forces every real column to shrink around
+    // it via normal flex math, distorting their widths. 'columns' is the
+    // only node type whose Editor component hardcodes flex-row regardless
+    // of style, so checking node.type here (rather than resolving style) is
+    // both sufficient and exactly matches what ColumnsEditor itself does.
+    const axis = node.type === 'columns' ? 'row' : 'col'
+
     const ids = node.children
     if (ids.length === 0) {
       content = <DropSlot parentId={node.id} index={0} isOnly />
     } else {
       const items: React.ReactNode[] = [
-        <DropSlot key="slot-pre" parentId={node.id} index={0} />,
+        <DropSlot key="slot-pre" parentId={node.id} index={0} axis={axis} />,
       ]
       ids.forEach((childId, i) => {
         items.push(<RenderEditorNode key={childId} nodeId={childId} nodes={nodes} />)
-        items.push(<DropSlot key={`slot-${i}`} parentId={node.id} index={i + 1} />)
+        items.push(<DropSlot key={`slot-${i}`} parentId={node.id} index={i + 1} axis={axis} />)
       })
       content = <>{items}</>
     }

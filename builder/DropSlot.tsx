@@ -23,9 +23,19 @@ interface DropSlotProps {
   isOnly?:  boolean
   // When true this slot is the persistent "Add block" button shown on selected containers
   isPersistent?: boolean
+  // NEW — which axis this slot's parent container lays its children out on.
+  // Defaults to 'col' (the original, only previously-supported behavior).
+  // A between-block slot in a 'row' parent (Columns) must NOT carry a
+  // w-full-style class: setting flex-basis:100% on a sibling inside a
+  // row-direction flex forces the browser's flex-shrink math to squeeze
+  // every REAL column around that oversized phantom sibling, distorting
+  // their widths — this was the second (independent) cause of the Pricing
+  // template's columns rendering uneven/out-of-order in the editor only
+  // (Preview never renders DropSlot at all, so it never hit this).
+  axis?: 'row' | 'col'
 }
 
-export function DropSlot({ parentId, index, isOnly, isPersistent }: DropSlotProps) {
+export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }: DropSlotProps) {
   const [open, setOpen] = useState(false)
   const anchorRef       = useRef<HTMLDivElement>(null)
   const addNode         = useBuilderStore(s => s.addNode)
@@ -126,24 +136,56 @@ export function DropSlot({ parentId, index, isOnly, isPersistent }: DropSlotProp
   }
 
   // ── Between-block slot — invisible until parent is hovered (via CSS group) ──
+  // axis === 'row' (e.g. inside a Columns row): this slot must be a narrow,
+  // non-growing, self-stretching sliver — never full-width — so it can't
+  // distort the real columns' widths via flex-shrink math. axis === 'col'
+  // (everything else, unchanged): original full-width horizontal divider.
+  const outerClassName = axis === 'row'
+    ? 'relative group/slot self-stretch shrink-0'
+    : 'relative group/slot'
+
+  const innerClassName = axis === 'row'
+    ? [
+        'h-full flex items-center justify-center cursor-pointer select-none transition-all duration-150 overflow-hidden',
+        isDragging
+          ? isOver
+            ? 'px-5 border-2 border-dashed border-violet-400 bg-violet-50 rounded-lg'
+            : 'px-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
+          // Invisible sliver by default, widens on hover of the row's
+          // nearest group-hover container instead of the col-axis version's
+          // height-based reveal.
+          : 'w-0 opacity-0 group-hover/container:w-6 group-hover/container:opacity-100 hover:!w-6 hover:!opacity-100',
+      ].join(' ')
+    : [
+        'w-full flex items-center justify-center cursor-pointer select-none transition-all duration-150 overflow-hidden',
+        isDragging
+          ? isOver
+            ? 'py-5 border-2 border-dashed border-violet-400 bg-violet-50 rounded-lg'
+            : 'py-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
+          // Invisible by default, revealed when the nearest group-hover parent is hovered
+          // The 'group-hover/container' class is set on SelectableShell for containers
+          : 'h-0 opacity-0 group-hover/container:h-6 group-hover/container:opacity-100 hover:!h-6 hover:!opacity-100',
+      ].join(' ')
+
   return (
-    <div ref={anchorRef} className="relative group/slot">
+    <div ref={anchorRef} className={outerClassName}>
       <div
         ref={setNodeRef}
         onClick={e => { e.stopPropagation(); if (!isDragging) setOpen(v => !v) }}
-        className={[
-          'w-full flex items-center justify-center cursor-pointer select-none transition-all duration-150 overflow-hidden',
-          isDragging
-            ? isOver
-              ? 'py-5 border-2 border-dashed border-violet-400 bg-violet-50 rounded-lg'
-              : 'py-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
-            // Invisible by default, revealed when the nearest group-hover parent is hovered
-            // The 'group-hover/container' class is set on SelectableShell for containers
-            : 'h-0 opacity-0 group-hover/container:h-6 group-hover/container:opacity-100 hover:!h-6 hover:!opacity-100',
-        ].join(' ')}
+        className={innerClassName}
       >
         {isDragging ? (
-          <div className={['h-0.5 rounded-full transition-all', isOver ? 'bg-violet-500 w-16' : 'bg-violet-200 w-8'].join(' ')} />
+          axis === 'row' ? (
+            <div className={['w-0.5 rounded-full transition-all', isOver ? 'bg-violet-500 h-16' : 'bg-violet-200 h-8'].join(' ')} />
+          ) : (
+            <div className={['h-0.5 rounded-full transition-all', isOver ? 'bg-violet-500 w-16' : 'bg-violet-200 w-8'].join(' ')} />
+          )
+        ) : axis === 'row' ? (
+          <div className="h-full flex flex-col items-center gap-2 py-2">
+            <div className="flex-1 w-px bg-violet-300 rounded" />
+            <span className="text-[10px] text-violet-400 font-medium leading-none">+</span>
+            <div className="flex-1 w-px bg-violet-300 rounded" />
+          </div>
         ) : (
           <div className="w-full flex items-center gap-2 px-2">
             <div className="flex-1 h-px bg-violet-300 rounded" />

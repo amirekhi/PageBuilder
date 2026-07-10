@@ -1,4 +1,4 @@
-// ─── Tailwind 4 approach ──────────────────────────────────────────────────────
+
 // Tailwind 4 scans source files and generates classes on demand — no safelist needed.
 // BUT: dynamically assembled strings like `px-${n}` are NOT scanned.
 //
@@ -392,6 +392,20 @@ export function buildSectionOuterStyle(
     s.backgroundImage = style.bgGradient
   }
 
+  // Text color — CSS `color` is inheritable, so a Section-level textColor is
+  // meant to cascade down to any child that doesn't set its own explicit
+  // color. buildInlineStyle (what SectionPreview's outer <section> uses)
+  // always applied `color` here; this function — used by SectionEditor's
+  // outer <section> — never did, so a Section text-color change was saved
+  // correctly but had nowhere to land in the DOM in the Editor.
+  if (style.textColor) s.color = resolveColor(style.textColor)
+
+  // Border color — same gap as textColor above. Without this, a Section
+  // with borderWidth/borderStyle set (via buildSectionOuterClassName below)
+  // would render a border in the browser's default color instead of the
+  // one actually configured.
+  if (style.borderColor) s.borderColor = resolveColor(style.borderColor)
+
   if (style.opacity !== undefined) s.opacity = style.opacity / 100
 
   // Vertical margin (mt/mb/my) — this is the piece that got dropped when
@@ -428,6 +442,45 @@ export function buildSectionOuterStyle(
   }
 
   return s
+}
+
+// CONFIRMED bug fix: SectionEditor's outer <section> was hardcoded to
+// className="w-full relative" and never merged in ANY dynamic class at
+// all — so anything expressed purely as a Tailwind class (rounded, border,
+// border-style, shadow, and incidentally any typography class, since CSS
+// properties like `color`/`text-align` are inheritable and correctly
+// cascade to children regardless of which ancestor element carries them)
+// rendered fine in Preview (whose outer <section> DOES call
+// buildClassName) but never appeared in the Editor. Concrete example: the
+// Newsletter Signup template sets `rounded: 'xl'` directly on its Section —
+// rounded corners in Preview, square corners in the Editor.
+//
+// This takes the FULL className buildClassName would produce and strips out
+// only the layout classes (display/flexDir/flexWrap/justify/align) and
+// sizing classes (width/maxWidth/minHeight/height enums) that
+// buildSectionInnerClassName/buildFlexLayoutClassName already own by design
+// in the split model — those belong on the INNER column, not the outer
+// band. Everything else (rounded, border, shadow, typography) passes
+// through untouched, so the outer element ends up with exactly the classes
+// it's actually supposed to have — no more, no less.
+export function buildSectionOuterClassName(style: StyleProps = {}, extra?: string): string {
+  const DISPLAY_VALUES = new Set(['block', 'flex', 'grid', 'inline', 'inline-block', 'inline-flex', 'hidden'])
+  const full = buildClassName(style)
+  const filtered = full
+    .split(' ')
+    .filter(Boolean)
+    .filter(cls =>
+      !DISPLAY_VALUES.has(cls) &&
+      !cls.startsWith('flex-') &&
+      !cls.startsWith('justify-') &&
+      !cls.startsWith('items-') &&
+      !cls.startsWith('w-') &&
+      !cls.startsWith('max-w-') &&
+      !cls.startsWith('min-h-') &&
+      !cls.startsWith('h-')
+    )
+    .join(' ')
+  return [filtered, extra].filter(Boolean).join(' ')
 }
 
 export function buildSectionInnerClassName(style: StyleProps = {}): string {

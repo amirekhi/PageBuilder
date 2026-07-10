@@ -73,4 +73,17 @@ export interface NodeDefinition {
   // level deeper inside it — invisible until the wrapper is the thing
   // constraining the box.
   defaultFullWidth?: boolean
+  // True for node types whose own render function hardcodes `flex-1` (or
+  // equivalent flex-fill behavior) regardless of style.width (currently
+  // just Column). SelectableShell's wrapper is the actual flex item inside
+  // a row/column of flex children — the node's own rendered element is one
+  // level further in and never itself a flex child — so without this flag
+  // the wrapper has no flex-grow/shrink/basis at all when width is unset,
+  // and shrink-wraps to its own content instead of sharing space evenly
+  // with its siblings the way the inner element's own flex-1 class visually
+  // implies it should. Only applied when style.width is genuinely unset —
+  // a manually resized column already gets flexGrow:0/flexShrink:0 from
+  // buildBoxSizingStyle's own numeric-width branch, so this never conflicts
+  // with that. See SelectableShell.tsx and registry.ts's `column` entry.
+  defaultFlexFill?: boolean
 }

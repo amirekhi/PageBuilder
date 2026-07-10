@@ -54,7 +54,30 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
     ? { ...nodeStyle, width: 'full' as const }
     : nodeStyle
 
-  const boxSizingStyle = isRoot ? {} : buildBoxSizingStyle(styleForSizing)
+  const boxSizingStyle: React.CSSProperties = isRoot ? {} : buildBoxSizingStyle(styleForSizing)
+
+  // CONFIRMED bug fix (Pricing template's uneven/out-of-order columns in
+  // the editor): ColumnEditor/ColumnPreview hardcode 'flex-1' in their own
+  // className regardless of style.width — but that div is nested INSIDE
+  // this wrapper, not a flex child of anything itself. THIS wrapper is the
+  // actual flex item inside a Columns row, and buildBoxSizingStyle gives it
+  // no flex-grow/shrink/basis at all when width is unset, so it shrink-wraps
+  // to its own content instead of splitting the row evenly like
+  // ColumnPreview's flex-1 does (Preview has no such wrapper, so its own
+  // flex-1 reaches the real flex item directly — this is why the bug only
+  // ever showed up in the editor).
+  //
+  // Only applies when style.width is genuinely unset — a manually
+  // drag-resized column already gets flexGrow:0/flexShrink:0 from
+  // buildBoxSizingStyle's own `typeof style.width === 'number'` branch, so
+  // this never fights with that; it only fills the gap for the untouched
+  // default case.
+  const defaultsFlexFill = NODE_REGISTRY[node.type]?.defaultFlexFill ?? false
+  if (defaultsFlexFill && nodeStyle.width === undefined) {
+    boxSizingStyle.flexGrow   = 1
+    boxSizingStyle.flexShrink = 1
+    boxSizingStyle.flexBasis  = '0%'
+  }
 
   const { attributes, listeners, setNodeRef, setActivatorNodeRef } = useDraggable({
     id:       node.id,

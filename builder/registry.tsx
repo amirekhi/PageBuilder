@@ -143,13 +143,26 @@ export const NODE_REGISTRY: Record<NodeType, NodeDefinition> = {
     EditorComponent:  ColumnEditor,
     PreviewComponent: ColumnPreview,
     EditorPanel:      ColumnPanel,
-    // NOTE: ColumnEditor hardcodes 'flex-1' (not w-full) in its className —
-    // a related but DIFFERENT default (share available space with sibling
-    // Columns, rather than "be 100% wide"). This isn't covered by
-    // defaultFullWidth/buildBoxSizingStyle's width handling, and hasn't
-    // been confirmed as an active bug yet — flagged here deliberately
-    // rather than guessed at. Revisit if Columns rows are ever seen
-    // collapsing/misbehaving the same way in editor vs preview.
+    // CONFIRMED (was previously only flagged as suspected, see the old
+    // comment this replaces): ColumnEditor/ColumnPreview hardcode 'flex-1'
+    // in their className regardless of style.width, exactly like the
+    // w-full pattern above — but SelectableShell's wrapper (the actual
+    // flex item inside a Columns row in the EDITOR tree; ColumnEditor's own
+    // div is one level further in and isn't a flex child of anything) never
+    // knew to mirror it. Result: an untouched Column shrink-wraps to its own
+    // content's width in the editor instead of splitting the row evenly —
+    // this is what made the Pricing template's three tiers render uneven
+    // and "out of order" in the editor while looking correct in Preview
+    // (PreviewRenderer has no such wrapper in between, so ColumnPreview's
+    // own flex-1 reaches the real flex item directly).
+    //
+    // defaultFlexFill tells SelectableShell to apply the equivalent of
+    // flex:1 1 0% to ITSELF whenever no explicit width has been set on this
+    // node — see SelectableShell.tsx. A manually resized column (which sets
+    // an explicit style.width) is unaffected: buildBoxSizingStyle already
+    // gives that case flexGrow:0/flexShrink:0, so this flag only fills the
+    // gap for the default, unresized case.
+    defaultFlexFill: true,
     defaultProps: { style: { px: 4, py: 4 } },
   },
 
