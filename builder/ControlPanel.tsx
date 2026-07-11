@@ -113,6 +113,16 @@ function LayerNode({
 // land in the correct style/styleTablet/styleMobile bucket depending on
 // which breakpoint the toolbar is currently set to (see responsive.ts).
 //
+// SECTION IS A SPECIAL CASE: SectionPanel (the Content tab's panel for this
+// type) already has its own full Position/Padding/Margin/Width group, and a
+// strictly more capable Background section (flat color + gradient + image +
+// overlay, vs. this generic panel's plain-color-only version). Without
+// hideBoxModel/hideBackground, a Section showed every one of those fields
+// TWICE — once with full power in Content, once again here with less power.
+// No other node type has its own copies of these fields in its Content
+// panel, so every other type still gets the full generic StylePanel as
+// before — this is Section-specific, not a general behavior change.
+//
 // When editing a non-desktop breakpoint, shows a small badge naming which
 // breakpoint is active, plus a "Reset to Desktop" button that only appears
 // once this specific node actually has an override at that breakpoint —
@@ -126,6 +136,7 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 
   const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
   const hasOverride           = isOverrideBreakpoint && hasOverrideAt(node, editingBreakpoint)
+  const isSection             = node.type === 'section'
 
   return (
     <div>
@@ -145,9 +156,16 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
           )}
         </div>
       )}
+      {isSection && (
+        <p className="text-[10px] text-neutral-400 px-4 pt-3 -mb-1">
+          Position, spacing, and background for Sections are set in the Content tab, where the fuller controls live.
+        </p>
+      )}
       <StylePanel
         style={style}
         onChange={partial => patchNodeStyle(node, p => onUpdate(node.id, p), partial)}
+        hideBoxModel={isSection}
+        hideBackground={isSection}
       />
     </div>
   )
@@ -156,7 +174,10 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 // ─── Content tab ──────────────────────────────────────────────────────────────
 // Unchanged — each block's own EditorPanel already calls useNodeStyle /
 // patchNodeStyle internally (see NodeComponents.tsx) wherever it deals with
-// style, so nothing extra is needed here.
+// style, so nothing extra is needed here. Text/Heading/Quote/Accordion/List
+// used to also embed a <StylePanel/> call of their own — removed, since it
+// duplicated this same Style tab exactly. Those five now rely entirely on
+// the Style tab for appearance, same as Button/Badge/Avatar/etc. already did.
 
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   if (!node) return <Empty text="Select a block to edit its content" />

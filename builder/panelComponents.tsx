@@ -1,5 +1,5 @@
 'use client'
-import React, { useState ,useEffect } from 'react'
+import React, { useState , useEffect } from 'react'
 
 import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, getBoxAlign, setBoxAlign } from './styleMapper'
 import { AnimationProps, ANIMATION_EFFECTS, DEFAULT_ANIMATION, AnimationStyleSheet, EFFECT_KEYFRAME } from './animations'
@@ -393,53 +393,73 @@ export function GradientField({
 // Style tab works for Image blocks too.
 
 export function StylePanel({
-  style, onChange,
+  style, onChange, hideBoxModel = false, hideBackground = false,
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
+  // Skips Position/Padding/Margin — used only for node types whose own
+  // Content-tab panel already has a full, equally-capable version of these
+  // same controls (currently just Section, which has its own Padding/
+  // Margin/Position/Width group). Without this, Section showed every one
+  // of these fields twice: once in Content, once again here in Style.
+  hideBoxModel?: boolean
+  // Skips the Background section here — used only for Section, whose own
+  // Content-tab panel already has the fuller version (flat color + gradient
+  // + image + overlay) vs. this component's plain-color-only version. Every
+  // other node type still gets Background from here, since nothing else
+  // has its own copy.
+  hideBackground?: boolean
 }) {
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Position">
-        <AlignField style={style} onChange={onChange} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
-      </FieldGroup>
+      {!hideBoxModel && (
+        <FieldGroup label="Position">
+          <AlignField style={style} onChange={onChange} />
+          <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
+        </FieldGroup>
+      )}
 
-      <FieldGroup label="Padding">
-        <BoxSpacingField
-          label="Padding"
-          values={{
-            top: style.pt ?? style.py, right: style.pr ?? style.px,
-            bottom: style.pb ?? style.py, left: style.pl ?? style.px,
-          }}
-          onChange={next => onChange({
-            pt: next.top as number | undefined, pr: next.right as number | undefined,
-            pb: next.bottom as number | undefined, pl: next.left as number | undefined,
-          })}
-        />
-        <SpacingField label="Gap" value={style.gap} onChange={v => onChange({ gap: v })} />
-      </FieldGroup>
+      {!hideBoxModel && (
+        <FieldGroup label="Padding">
+          <BoxSpacingField
+            label="Padding"
+            values={{
+              top: style.pt ?? style.py, right: style.pr ?? style.px,
+              bottom: style.pb ?? style.py, left: style.pl ?? style.px,
+            }}
+            onChange={next => onChange({
+              pt: next.top as number | undefined, pr: next.right as number | undefined,
+              pb: next.bottom as number | undefined, pl: next.left as number | undefined,
+            })}
+          />
+          <SpacingField label="Gap" value={style.gap} onChange={v => onChange({ gap: v })} />
+        </FieldGroup>
+      )}
 
-      <FieldGroup label="Margin">
-        <BoxSpacingField
-          label="Margin"
-          values={{
-            top: style.mt ?? style.my, right: style.mr ?? style.mx,
-            bottom: style.mb ?? style.my, left: style.ml ?? style.mx,
-          }}
-          onChange={next => onChange({
-            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
-            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
-          })}
-        />
-        <p className="text-[10px] text-neutral-400 -mt-1">
-          Left/Right margin is overridden by the Position control above whenever it's set to Center or Right
-        </p>
-      </FieldGroup>
+      {!hideBoxModel && (
+        <FieldGroup label="Margin">
+          <BoxSpacingField
+            label="Margin"
+            values={{
+              top: style.mt ?? style.my, right: style.mr ?? style.mx,
+              bottom: style.mb ?? style.my, left: style.ml ?? style.mx,
+            }}
+            onChange={next => onChange({
+              mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
+              mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+            })}
+          />
+          <p className="text-[10px] text-neutral-400 -mt-1">
+            Left/Right margin is overridden by the Position control above whenever it's set to Center or Right
+          </p>
+        </FieldGroup>
+      )}
 
-      <FieldGroup label="Background">
-        <ColorField label="Color" value={style.bgColor} onChange={v => onChange({ bgColor: v || undefined })} />
-      </FieldGroup>
+      {!hideBackground && (
+        <FieldGroup label="Background">
+          <ColorField label="Color" value={style.bgColor} onChange={v => onChange({ bgColor: v || undefined })} />
+        </FieldGroup>
+      )}
 
       <FieldGroup label="Typography">
         <SelectField
@@ -458,37 +478,6 @@ export function StylePanel({
           onChange={v => onChange({ textAlign: v as StyleProps['textAlign'] || undefined })}
         />
         <ColorField label="Text color" value={style.textColor} onChange={v => onChange({ textColor: v || undefined })} />
-      </FieldGroup>
-
-      <FieldGroup label="Image fit">
-        <SelectField
-          label="Aspect ratio" value={style.aspectRatio ?? 'auto'}
-          options={[
-            { label: 'Original',     value: 'auto' },
-            { label: 'Square 1:1',   value: '1/1' },
-            { label: 'Standard 4:3', value: '4/3' },
-            { label: 'Wide 16:9',    value: '16/9' },
-            { label: 'Classic 3:2',  value: '3/2' },
-            { label: 'Ultra 21:9',   value: '21/9' },
-          ]}
-          onChange={v => onChange({ aspectRatio: v as StyleProps['aspectRatio'] })}
-        />
-        <SelectField
-          label="Fit" value={style.objectFit ?? 'cover'}
-          options={[
-            { label: 'Cover (fill & crop)',  value: 'cover' },
-            { label: 'Contain (fit inside)', value: 'contain' },
-            { label: 'Fill (stretch)',       value: 'fill' },
-            { label: 'None (original)',      value: 'none' },
-          ]}
-          onChange={v => onChange({ objectFit: v as StyleProps['objectFit'] })}
-        />
-        <SelectField
-          label="Focal point" value={style.objectPosition ?? 'center'}
-          options={['center','top','bottom','left','right','top left','top right','bottom left','bottom right']}
-          onChange={v => onChange({ objectPosition: v as StyleProps['objectPosition'] })}
-        />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only applies to Image blocks</p>
       </FieldGroup>
 
       <FieldGroup label="Border">

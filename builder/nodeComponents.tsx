@@ -7,7 +7,7 @@ import {
   buildFlexLayoutClassName, buildFlexLayoutStyle,
   buildSectionOuterStyle, buildSectionOuterClassName, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
-import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, StylePanel, BoxSpacingField, AnimationPanel } from './panelComponents'
+import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel } from './panelComponents'
 import { useBuilderStore } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
 import { AnimationProps } from './animations'
@@ -368,8 +368,8 @@ export const QuoteEditor:  React.FC<NodeComponentProps> = ({ node }) => <QuoteRe
 export const QuotePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <QuoteRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
+// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   return (
     <div className="space-y-5 p-4">
@@ -388,7 +388,6 @@ export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
             : <div className="w-full h-full flex items-center justify-center text-neutral-400 text-sm">+</div>}
         </button>
       </FieldGroup>
-      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}
@@ -524,8 +523,8 @@ export const AccordionEditor:  React.FC<NodeComponentProps> = ({ node }) => <Acc
 export const AccordionPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <AccordionRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
+// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s     = useNodeStyle(node)
   const items = accordionItems(node)
   function updateItem(i: number, partial: Partial<AccordionItem>) {
     onChange({ items: items.map((it, idx) => idx === i ? { ...it, ...partial } : it) })
@@ -548,7 +547,6 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         </div>
         <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">+ Add question</button>
       </FieldGroup>
-      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}
@@ -598,8 +596,8 @@ export const ListEditor:  React.FC<NodeComponentProps> = ({ node }) => <ListRend
 export const ListPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <ListRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
+// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s     = useNodeStyle(node)
   const items = listItems(node)
   function updateItem(i: number, value: string) { const next = [...items]; next[i] = value; onChange({ items: next }) }
   function addItem()    { onChange({ items: [...items, 'New item'] }) }
@@ -618,7 +616,6 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">+ Add item</button>
         <SelectField label="Marker" value={(node.props.markerType as string) ?? 'bullet'} options={[{ label:'Bullet',value:'bullet' },{ label:'Check',value:'check' },{ label:'Arrow',value:'arrow' },{ label:'Number',value:'number' }]} onChange={v => onChange({ markerType: v })} />
       </FieldGroup>
-      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}
@@ -814,8 +811,12 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
   )
 }
 
+// NOTE: this panel used to also embed a <StylePanel/> call — removed
+// because ControlPanel's separate "Style" tab already renders the exact
+// same component for whatever's selected, so having it here too meant
+// Content and Style tabs showed 100% identical fields. This panel now only
+// holds what's actually unique to Text (its content) plus Animation.
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
@@ -823,7 +824,6 @@ export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
         <p className="text-[10px] text-neutral-400 mt-1">Tip: click text on the canvas to edit inline</p>
       </FieldGroup>
-      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}
@@ -868,8 +868,8 @@ export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRe
   )
 }
 
+// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
-  const s = useNodeStyle(node)
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
@@ -878,7 +878,6 @@ export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Tag" value={(node.props.tag as string) ?? 'h2'} options={['h1','h2','h3','h4','h5','h6']} onChange={v => onChange({ tag: v })} />
         <p className="text-[10px] text-neutral-400 mt-1">Tip: click the heading on the canvas to edit inline</p>
       </FieldGroup>
-      <StylePanel style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}
