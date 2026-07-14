@@ -11,11 +11,20 @@ import { patchNodeStyle } from './responsive'
 type Edge = 'right' | 'bottom' | 'corner'
 type SizeMode = 'full' | 'heightOnly' | 'diameter' | 'widthOnly'
 
+// text/heading used to be pinned to 'widthOnly' here — that was the
+// deliberate-but-mistaken restriction that made their height unresizable
+// (only the right-edge width handle rendered; no bottom edge, no corner).
+// Removing them lets `mode = SIZE_MODE[node.type] ?? 'full'` below fall
+// through to 'full' for both, same as most other leaf node types — which
+// renders all three handles (right/width, bottom/height, corner/both).
+// Text/Heading aren't containers (isContainer is false for both in
+// registry.ts), so the bottom/corner branch in onUp below sets
+// `patch.height` directly (a literal pixel height), not `minHeight` — same
+// as any other non-container leaf node (Button, Badge, etc would behave
+// identically if they ever needed a fixed height).
 const SIZE_MODE: Partial<Record<NodeType, SizeMode>> = {
   spacer: 'heightOnly',
   avatar: 'diameter',
-  text:    'widthOnly',
-  heading: 'widthOnly',
 }
 
 const GENERAL_MIN   = 40

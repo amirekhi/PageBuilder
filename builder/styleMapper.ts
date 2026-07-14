@@ -1,13 +1,27 @@
-
 // Tailwind 4 scans source files and generates classes on demand — no safelist needed.
-// BUT: dynamically assembled strings like `px-${n}` are NOT scanned.
+// BUT: dynamically assembled strings like `px-${n}` are NOT scanned. Tailwind's scanner
+// reads raw source TEXT looking for a class name that appears complete and unbroken
+// somewhere in the file — it never executes this code. A template literal like
+// `justify-${style.justify}` never puts the completed text "justify-end" anywhere in
+// the file; only the fragments "justify-" and "style.justify" appear, which don't
+// match. Some values used to APPEAR to work purely by coincidence, because that exact
+// full class name happened to be hardcoded LITERALLY somewhere else in the app (e.g.
+// Button's own literal "justify-center", Avatar's own literal "rounded-full") — but
+// that's incidental, not a real fix. This is also why DevTools can show a class NAME
+// present on an element but nothing in the Computed tab for it: the class text exists
+// in the DOM (React renders whatever string you hand className, regardless of whether
+// Tailwind generated a rule for it), but if Tailwind never generated the matching CSS
+// rule, there's simply nothing for the browser to compute.
 //
 // Strategy: store structured style props, then map them to:
-//   1. Tailwind utility classes for enum-like values (display, flex direction…)
-//   2. CSS custom properties via `style` prop for numeric/dynamic values (spacing, sizes)
-//   3. Inline CSS for anything color/background related (bgColor, textColor,
-//      borderColor, bgImage, bgGradient) — resolved to real hex/CSS values and
-//      applied via the `style` attribute, sidestepping Tailwind's static scanner.
+//   1. Tailwind utility classes ONLY for values that are pushed as complete, literal
+//      strings (not template-interpolated) — e.g. width enums like 'w-full', 'w-1/2'.
+//      These are genuinely safe because the full class text exists verbatim in this file.
+//   2. Real inline CSS (via the `style` prop) for everything else: colors, spacing,
+//      layout (display/flex/grid/justify/align), typography, borders, shadows, and
+//      self-positioning margins. This sidesteps Tailwind's static scanner entirely, and
+//      inline styles always compute (highest specificity, always present in the DOM),
+//      so every value works identically in every view.
 
 export interface StyleProps {
   // Spacing — stored as px numbers, applied as CSS vars
@@ -15,9 +29,16 @@ export interface StyleProps {
   pt?: number; pb?: number
   pl?: number; pr?: number
   mx?: number; my?: number
-  mt?: number; mb?: number
   gap?: number
 
+  // mt/mb/ml/mr all additionally accept 'auto'. This is deliberately dual-purpose:
+  //   - BoxSpacingField's "Margin" group writes plain numbers here for ordinary spacing.
+  //   - AlignField's "Position" control writes 'auto' here for self-positioning (the
+  //     classic CSS auto-margin trick — see getBoxAlign/setBoxAlign and
+  //     getBoxAlignY/setBoxAlignY below). Both controls share the same underlying
+  //     keys, same as ml/mr always did; whichever control was used most recently wins.
+  mt?: number | 'auto'
+  mb?: number | 'auto'
   ml?: number | 'auto'
   mr?: number | 'auto'
 
@@ -41,6 +62,8 @@ export interface StyleProps {
   justify?:   'start'|'end'|'center'|'between'|'around'|'evenly'
   align?:     'start'|'end'|'center'|'stretch'|'baseline'
   flex?:      '1'|'auto'|'none'
+  // Number of columns when display === 'grid'. Ignored otherwise.
+  gridCols?:  1|2|3|4|5|6
 
   // Sizing — stored as numbers, unit depends on widthUnit
   width?:     number | 'full' | 'auto' | 'screen' | '1/2' | '1/3' | '2/3' | '1/4' | '3/4'
@@ -132,25 +155,107 @@ export function resolveColor(value?: string): string | undefined {
   return COLOR_HEX[value] ?? value
 }
 
-// ─── Build className (enum/keyword values only) ───────────────────────────────
+// ─── Enum → real CSS value maps ────────────────────────────────────────────
+// Every one of these used to be assembled as a Tailwind class name via
+// template-literal interpolation — see the file header comment for why that's
+// unreliable. These maps drive real inline `style` values instead.
+
+const JUSTIFY_MAP: Record<string, string> = {
+  start: 'flex-start', end: 'flex-end', center: 'center',
+  between: 'space-between', around: 'space-around', evenly: 'space-evenly',
+}
+
+const ALIGN_MAP: Record<string, string> = {
+  start: 'flex-start', end: 'flex-end', center: 'center',
+  stretch: 'stretch', baseline: 'baseline',
+}
+
+const GRID_TEMPLATE: Record<number, string> = {
+  1: 'repeat(1, minmax(0, 1fr))',
+  2: 'repeat(2, minmax(0, 1fr))',
+  3: 'repeat(3, minmax(0, 1fr))',
+  4: 'repeat(4, minmax(0, 1fr))',
+  5: 'repeat(5, minmax(0, 1fr))',
+  6: 'repeat(6, minmax(0, 1fr))',
+}
+
+const MAX_WIDTH_REM: Record<string, string> = {
+  xs: '20rem', sm: '24rem', md: '28rem', lg: '32rem', xl: '36rem',
+  '2xl': '42rem', '3xl': '48rem', '4xl': '56rem', '5xl': '64rem',
+  '6xl': '72rem', '7xl': '80rem', full: '100%',
+}
+
+const WIDTH_PCT: Record<string, string> = {
+  full: '100%', auto: 'auto', screen: '100vw',
+  '1/2': '50%', '1/3': '33.3333%', '2/3': '66.6667%', '1/4': '25%', '3/4': '75%',
+}
+
+const FONT_SIZE_PX: Record<string, number> = {
+  xs: 12, sm: 14, base: 16, lg: 18, xl: 20,
+  '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48, '6xl': 60,
+}
+
+const FONT_WEIGHT_NUM: Record<string, number> = {
+  light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800,
+}
+
+const LEADING_NUM: Record<string, number> = {
+  none: 1, tight: 1.25, snug: 1.375, normal: 1.5, relaxed: 1.625, loose: 2,
+}
+
+const ROUNDED_PX: Record<string, number> = {
+  sm: 2, md: 6, lg: 8, xl: 12, '2xl': 16, '3xl': 24, full: 9999,
+}
+
+const SHADOW_CSS: Record<string, string> = {
+  sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+  md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+  lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+  xl: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+  '2xl': '0 25px 50px -12px rgb(0 0 0 / 0.25)',
+}
+
+// Real display/flex/grid/justify/align CSS. Used by buildInlineStyle for
+// non-Section components, AND — deliberately — by BOTH buildSectionOuterStyle
+// and buildSectionInnerStyle for Section, so a Section's Justify/Align genuinely
+// positions two independent things: the outer band positions the inner content
+// block within the section's own box (visible whenever minHeight gives it extra
+// room — e.g. a hero section taller than its content), and the inner div
+// positions its children within that content block. Both apply the SAME
+// justify/align value from the single Justify/Align control in SectionPanel.
+export function buildFlexInlineProps(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {}
+  if (style.display) s.display = style.display
+
+  if (style.display === 'grid') {
+    s.gridTemplateColumns = GRID_TEMPLATE[style.gridCols ?? 2] ?? GRID_TEMPLATE[2]
+  } else if (style.display === 'flex' || style.display === 'inline-flex') {
+    if (style.flexDir) {
+      s.flexDirection =
+        style.flexDir === 'col' ? 'column' :
+        style.flexDir === 'col-reverse' ? 'column-reverse' :
+        style.flexDir
+    }
+    if (style.flexWrap) s.flexWrap = style.flexWrap
+  }
+
+  if (style.justify) s.justifyContent = JUSTIFY_MAP[style.justify] ?? style.justify
+  if (style.align)   s.alignItems     = ALIGN_MAP[style.align] ?? style.align
+
+  return s
+}
+
+// ─── Build className (ONLY values that are safe, literal, complete strings) ───
 
 export function buildClassName(style: StyleProps = {}, extra?: string): string {
   const c: string[] = []
 
-  if (style.fontSize)    c.push(`text-${style.fontSize}`)
-  if (style.fontWeight)  c.push(`font-${style.fontWeight}`)
-  if (style.textAlign)   c.push(`text-${style.textAlign}`)
-  if (style.leading)     c.push(`leading-${style.leading}`)
-  if (style.italic)      c.push('italic')
-  if (style.uppercase)   c.push('uppercase')
+  if (style.italic)    c.push('italic')
+  if (style.uppercase) c.push('uppercase')
 
-  if (style.display)    c.push(style.display)
-  if (style.flexDir)    c.push(`flex-${style.flexDir}`)
-  if (style.flexWrap)   c.push(`flex-${style.flexWrap}`)
-  if (style.justify)    c.push(`justify-${style.justify}`)
-  if (style.align)      c.push(`items-${style.align}`)
-  if (style.flex)       c.push(`flex-${style.flex}`)
-
+  // Width enum classes are safe: each is pushed as a complete literal string
+  // (not template-interpolated), so Tailwind's scanner sees the full class
+  // name intact right here in this file.
   if (style.width === 'full')   c.push('w-full')
   else if (style.width === 'auto')   c.push('w-auto')
   else if (style.width === 'screen') c.push('w-screen')
@@ -160,9 +265,6 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   else if (style.width === '1/4')    c.push('w-1/4')
   else if (style.width === '3/4')    c.push('w-3/4')
 
-  if (style.maxWidth === 'full')  c.push('max-w-full')
-  else if (typeof style.maxWidth === 'string') c.push(`max-w-${style.maxWidth}`)
-
   if (style.minHeight === 'screen') c.push('min-h-screen')
   else if (style.minHeight === 'full') c.push('min-h-full')
 
@@ -170,19 +272,10 @@ export function buildClassName(style: StyleProps = {}, extra?: string): string {
   else if (style.height === 'full')   c.push('h-full')
   else if (style.height === 'screen') c.push('h-screen')
 
-  if (style.rounded && style.rounded !== 'none') c.push(`rounded-${style.rounded}`)
-  if (style.borderWidth !== undefined && style.borderWidth > 0)
-    c.push(style.borderWidth === 1 ? 'border' : `border-${style.borderWidth}`)
-  if (style.borderStyle)  c.push(`border-${style.borderStyle}`)
-
-  if (style.shadow && style.shadow !== 'none') c.push(`shadow-${style.shadow}`)
-
   if (style.objectFit === 'cover')     c.push('object-cover')
   else if (style.objectFit === 'contain') c.push('object-contain')
   else if (style.objectFit === 'fill')    c.push('object-fill')
   else if (style.objectFit === 'none')    c.push('object-none')
-
-  if (style.objectPosition) c.push(`object-${style.objectPosition.replace(' ', '-')}`)
 
   if (extra) c.push(extra)
   return c.filter(Boolean).join(' ')
@@ -204,11 +297,22 @@ export function buildInlineStyle(
   if (style.pr  !== undefined)   s.paddingRight  = style.pr * 4
   if (style.mx  !== undefined) { s.marginLeft   = style.mx * 4;  s.marginRight   = style.mx * 4 }
   if (style.my  !== undefined) { s.marginTop    = style.my * 4;  s.marginBottom  = style.my * 4 }
-  if (style.mt  !== undefined)   s.marginTop    = style.mt * 4
-  if (style.mb  !== undefined)   s.marginBottom = style.mb * 4
   if (style.gap !== undefined)   s.gap          = style.gap * 4
 
+  // mt/mb/ml/mr (numeric OR 'auto') are handled exclusively by buildAlignMargin
+  // below, which runs AFTER the mx/my shorthand above — so a more specific
+  // mt/mb/ml/mr always overrides the mx/my shorthand, same precedence as before,
+  // but now also correctly supports 'auto' (needed for vertical/horizontal
+  // self-positioning) without trying to multiply the string 'auto' by 4.
   Object.assign(s, buildAlignMargin(style))
+  Object.assign(s, buildFlexInlineProps(style))
+
+  // Typography — real inline CSS now (see buildFlexInlineProps comment above
+  // for why the old `text-${style.fontSize}`-style classes were unreliable).
+  if (style.fontSize)   s.fontSize   = `${FONT_SIZE_PX[style.fontSize]}px`
+  if (style.fontWeight) s.fontWeight = FONT_WEIGHT_NUM[style.fontWeight]
+  if (style.textAlign)  s.textAlign  = style.textAlign
+  if (style.leading)    s.lineHeight = LEADING_NUM[style.leading]
 
   // skipSizing is used by every *Editor* component (rendered inside
   // SelectableShell) — the wrapper already applies width/maxWidth via
@@ -216,16 +320,21 @@ export function buildInlineStyle(
   // second time, nested one level deeper, is harmless for an absolute px
   // value (623px means 623px regardless of nesting) but actively WRONG
   // for a percentage: 45% of an element whose own parent is already 45%
-  // of the real container resolves to ~20%, not 45%. That compounding —
-  // invisible until something has a background color to reveal it — was
-  // the actual cause of "background only fills part of the box."
-  // *Preview* components have no such wrapper (RenderPreviewNode renders
-  // them directly), so they must keep calling this without skipSizing.
+  // of the real container resolves to ~20%, not 45%. *Preview* components
+  // have no such wrapper, so they must keep calling this without skipSizing.
   if (!opts.skipSizing) {
     if (typeof style.width === 'number') {
       s.width      = style.widthUnit === '%' ? `${style.width}%` : style.width
       s.flexGrow   = 0
       s.flexShrink = 0
+      // flex-basis must also be pinned to 'auto': Column hardcodes a
+      // `flex-1` class (flex: 1 1 0%) in its own render regardless of
+      // style.width. Setting width/grow/shrink inline overrides that
+      // class's grow/shrink longhands, but NOT its flex-basis:0% — and in
+      // flexbox, flex-basis (not width) governs main-axis size when it
+      // isn't auto. Without this, a resized column's flex-basis:0% from
+      // the class still wins over its own width and it collapses to ~0px.
+      s.flexBasis  = 'auto'
     }
 
     if (typeof style.maxWidth === 'number') {
@@ -249,6 +358,23 @@ export function buildInlineStyle(
   if (style.textColor)   s.color           = resolveColor(style.textColor)
   if (style.borderColor) s.borderColor     = resolveColor(style.borderColor)
 
+  // Border radius/width/style — same template-literal problem as justify/
+  // align, fixed the same way (real inline CSS instead of a Tailwind class
+  // that was never actually being generated for most values).
+  if (style.rounded && style.rounded !== 'none') s.borderRadius = `${ROUNDED_PX[style.rounded]}px`
+  if (style.borderWidth !== undefined && style.borderWidth > 0) {
+    s.borderWidth = `${style.borderWidth}px`
+    s.borderStyle = style.borderStyle ?? 'solid'
+  } else if (style.borderStyle) {
+    s.borderStyle = style.borderStyle
+  }
+
+  if (style.shadow && style.shadow !== 'none') s.boxShadow = SHADOW_CSS[style.shadow]
+
+  // object-position accepts space-separated keywords ('top left') directly
+  // as valid CSS — no class-name mangling needed.
+  if (style.objectPosition) s.objectPosition = style.objectPosition
+
   if (style.bgImage) {
     s.backgroundImage    = `url(${style.bgImage})`
     s.backgroundSize     = style.bgSize ?? 'cover'
@@ -261,28 +387,67 @@ export function buildInlineStyle(
   return s
 }
 
-export type BoxAlign = 'left' | 'center' | 'right'
+// ─── Self-positioning (auto-margin trick) ──────────────────────────────────
+// 'none' is a genuine 4th state — distinct from 'left' — meaning NO margin
+// override is written at all, so the parent's own Justify/Align fully governs
+// this item. This matters because clicking any of the OTHER three options
+// writes an explicit auto-margin, and per the CSS flex spec, an item with an
+// auto margin on an axis absorbs all free space on that axis BEFORE
+// justify-content/align-items gets a say — i.e. it deliberately overrides the
+// parent's Justify/Align for this one item, the same way align-self would.
+// That's a legitimate, useful per-item override — but only if there's also a
+// real way to opt OUT of it. Before 'none' existed, even clicking "Left"
+// (which looks like a no-op) permanently wrote mr:'auto', silently fighting
+// the parent's Justify forever after with no way back.
+
+export type BoxAlign  = 'none' | 'left' | 'center' | 'right'
+export type BoxAlignY = 'none' | 'top'  | 'middle' | 'bottom'
 
 export function getBoxAlign(style: StyleProps = {}): BoxAlign {
   if (style.ml === 'auto' && style.mr === 'auto') return 'center'
   if (style.ml === 'auto') return 'right'
   if (style.mr === 'auto') return 'left'
   if (style.centerContent) return 'center'
-  return 'left'
+  return 'none'
 }
 
 export function setBoxAlign(align: BoxAlign): Partial<StyleProps> {
+  if (align === 'none')   return { ml: undefined, mr: undefined, centerContent: undefined }
   if (align === 'center') return { ml: 'auto', mr: 'auto', centerContent: undefined }
   if (align === 'right')  return { ml: 'auto', mr: 0,      centerContent: undefined }
-  return                       { ml: 0,      mr: 'auto', centerContent: undefined }
+  return                       { ml: 0,      mr: 'auto', centerContent: undefined } // 'left'
+}
+
+// Vertical counterpart — same auto-margin mechanism on mt/mb instead of ml/mr.
+// Meaningful whenever the parent is a flex/grid container with room to spare
+// on the cross/main axis (e.g. a Section taller than its content via minHeight).
+
+export function getBoxAlignY(style: StyleProps = {}): BoxAlignY {
+  if (style.mt === 'auto' && style.mb === 'auto') return 'middle'
+  if (style.mt === 'auto') return 'bottom'
+  if (style.mb === 'auto') return 'top'
+  return 'none'
+}
+
+export function setBoxAlignY(align: BoxAlignY): Partial<StyleProps> {
+  if (align === 'none')   return { mt: undefined, mb: undefined }
+  if (align === 'middle') return { mt: 'auto', mb: 'auto' }
+  if (align === 'bottom') return { mt: 'auto', mb: 0 }
+  return                       { mt: 0, mb: 'auto' } // 'top'
 }
 
 export function buildAlignMargin(style: StyleProps = {}): React.CSSProperties {
   const s: React.CSSProperties = {}
   const hasML = style.ml !== undefined
   const hasMR = style.mr !== undefined
-  if (hasML) s.marginLeft  = style.ml === 'auto' ? 'auto' : (style.ml as number) * 4
-  if (hasMR) s.marginRight = style.mr === 'auto' ? 'auto' : (style.mr as number) * 4
+  const hasMT = style.mt !== undefined
+  const hasMB = style.mb !== undefined
+  if (hasML) s.marginLeft   = style.ml === 'auto' ? 'auto' : (style.ml as number) * 4
+  if (hasMR) s.marginRight  = style.mr === 'auto' ? 'auto' : (style.mr as number) * 4
+  if (hasMT) s.marginTop    = style.mt === 'auto' ? 'auto' : (style.mt as number) * 4
+  if (hasMB) s.marginBottom = style.mb === 'auto' ? 'auto' : (style.mb as number) * 4
+
+  // Legacy centerContent — only applies if nothing more specific is set.
   if (style.centerContent && !hasML && !hasMR) {
     s.marginLeft  = 'auto'
     s.marginRight = 'auto'
@@ -306,12 +471,26 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
     s.width      = style.widthUnit === '%' ? `${style.width}%` : style.width
     s.flexGrow   = 0
     s.flexShrink = 0
+    s.flexBasis  = 'auto'
   } else if (style.width === 'full')  s.width = '100%'
   else if (style.width === '1/2')     s.width = '50%'
   else if (style.width === '1/3')     s.width = '33.3333%'
   else if (style.width === '2/3')     s.width = '66.6667%'
   else if (style.width === '1/4')     s.width = '25%'
   else if (style.width === '3/4')     s.width = '75%'
+
+  // Explicit fractional width (1/2, 1/3, etc.) needs to opt out of Column's
+  // hardcoded flex-1 the same way a numeric px width does — otherwise that
+  // class's flex-basis:0% overrides the width above and the column
+  // collapses to ~0px instead of actually taking up its fraction.
+  if (
+    style.width === '1/2' || style.width === '1/3' || style.width === '2/3' ||
+    style.width === '1/4' || style.width === '3/4'
+  ) {
+    s.flexGrow   = 0
+    s.flexShrink = 0
+    s.flexBasis  = 'auto'
+  }
 
   if (typeof style.maxWidth === 'number') s.maxWidth = style.maxWidth
   else if (style.maxWidth === 'full')     s.maxWidth = '100%'
@@ -326,28 +505,28 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
 
   if (typeof style.mx === 'number') { s.marginLeft = style.mx * 4; s.marginRight  = style.mx * 4 }
   if (typeof style.my === 'number') { s.marginTop  = style.my * 4; s.marginBottom = style.my * 4 }
-  if (typeof style.mt === 'number')   s.marginTop    = style.mt * 4
-  if (typeof style.mb === 'number')   s.marginBottom = style.mb * 4
 
+  // mt/mb/ml/mr (numeric or 'auto') handled exclusively by buildAlignMargin,
+  // called last so it correctly overrides the mx/my shorthand above when
+  // present — same precedence buildInlineStyle uses.
   Object.assign(s, buildAlignMargin(style))
 
   return s
 }
 
-// ─── Flex layout mirror (fixes Section's inner wrapper div) ───────────────
+// ─── Flex/grid layout mirror (Section's inner wrapper div) ────────────────
+// buildFlexLayoutClassName is kept only so existing call sites don't need to
+// change — it intentionally returns nothing now, since display/flexDir/
+// flexWrap/justify/align are all real inline CSS via buildFlexLayoutStyle
+// below (see buildFlexInlineProps and the file header comment for why the
+// Tailwind-class version of this was unreliable).
 
-export function buildFlexLayoutClassName(style: StyleProps = {}): string {
-  const c: string[] = []
-  if (style.display)  c.push(style.display)
-  if (style.flexDir)  c.push(`flex-${style.flexDir}`)
-  if (style.flexWrap) c.push(`flex-${style.flexWrap}`)
-  if (style.justify)  c.push(`justify-${style.justify}`)
-  if (style.align)    c.push(`items-${style.align}`)
-  return c.join(' ')
+export function buildFlexLayoutClassName(_style: StyleProps = {}): string {
+  return ''
 }
 
 export function buildFlexLayoutStyle(style: StyleProps = {}): React.CSSProperties {
-  const s: React.CSSProperties = {}
+  const s: React.CSSProperties = buildFlexInlineProps(style)
   if (style.gap !== undefined) s.gap = style.gap * 4
   return s
 }
@@ -356,20 +535,22 @@ export function buildFlexLayoutStyle(style: StyleProps = {}): React.CSSPropertie
 // Section is the only node type that needs BOTH a background spanning the
 // full page width AND a centered max-width content column. One element
 // can't do both — max-width + mx:auto necessarily clips the background to
-// that same narrow box (this was the bug: max-width, centering, padding,
-// AND background were all being applied to a single <section> element, so
-// the background could never reach past the centered column's own edges).
+// that same narrow box.
 //
 // These two helpers split a Section's StyleProps into:
-//   - an OUTER "band": background + vertical padding only, full width,
-//     no max-width — this is what SectionEditor/SectionPreview's root
-//     <section> should use.
-//   - an INNER "column": max-width + horizontal padding + centering +
-//     flex layout — this is what the nested content <div> should use.
-//
-// Only Section uses these; every other node type keeps using
-// buildClassName/buildInlineStyle as before, since only Section combines
-// maxWidth with a background in its panel.
+//   - an OUTER "band": background + border/rounded/shadow + vertical padding,
+//     full width, no max-width — this is what SectionEditor/SectionPreview's
+//     root <section> should use. It is ALSO a real flex/grid container using
+//     the SAME display/justify/align as the inner div — this is what makes
+//     Justify="end"/Align="end" push the entire inner content block to the
+//     bottom-right of the section's box whenever minHeight gives it extra
+//     room (e.g. a hero section taller than its content). Both Editor and
+//     Preview must build this identically or the two views will disagree.
+//   - an INNER "column": max-width + horizontal padding + centering (via
+//     buildAlignMargin's ml/mr:auto) + its OWN flex/grid layout — this
+//     positions the Section's actual CHILDREN within that content block.
+// Only Section uses this split; every other node type keeps using
+// buildClassName/buildInlineStyle directly.
 
 export function buildSectionOuterStyle(
   style: StyleProps = {},
@@ -392,46 +573,36 @@ export function buildSectionOuterStyle(
     s.backgroundImage = style.bgGradient
   }
 
-  // Text color — CSS `color` is inheritable, so a Section-level textColor is
-  // meant to cascade down to any child that doesn't set its own explicit
-  // color. buildInlineStyle (what SectionPreview's outer <section> uses)
-  // always applied `color` here; this function — used by SectionEditor's
-  // outer <section> — never did, so a Section text-color change was saved
-  // correctly but had nowhere to land in the DOM in the Editor.
-  if (style.textColor) s.color = resolveColor(style.textColor)
-
-  // Border color — same gap as textColor above. Without this, a Section
-  // with borderWidth/borderStyle set (via buildSectionOuterClassName below)
-  // would render a border in the browser's default color instead of the
-  // one actually configured.
+  if (style.textColor)   s.color       = resolveColor(style.textColor)
   if (style.borderColor) s.borderColor = resolveColor(style.borderColor)
+  if (style.rounded && style.rounded !== 'none') s.borderRadius = `${ROUNDED_PX[style.rounded]}px`
+  if (style.borderWidth !== undefined && style.borderWidth > 0) {
+    s.borderWidth = `${style.borderWidth}px`
+    s.borderStyle = style.borderStyle ?? 'solid'
+  } else if (style.borderStyle) {
+    s.borderStyle = style.borderStyle
+  }
+  if (style.shadow && style.shadow !== 'none') s.boxShadow = SHADOW_CSS[style.shadow]
 
   if (style.opacity !== undefined) s.opacity = style.opacity / 100
 
-  // Vertical margin (mt/mb/my) — this is the piece that got dropped when
-  // the outer/inner split was first introduced. buildAlignMargin (ml/mr
-  // horizontal centering) correctly moved to buildSectionInnerStyle, but
-  // mt/mb/my were never carried over to EITHER function, so a Section's
-  // own Margin Top/Bottom panel controls silently did nothing — the value
-  // changed in state but no render path ever read it. Same my-then-mt/mb
-  // override order buildInlineStyle always used.
   if (style.my !== undefined) { s.marginTop = style.my * 4; s.marginBottom = style.my * 4 }
-  if (style.mt !== undefined)   s.marginTop    = style.mt * 4
-  if (style.mb !== undefined)   s.marginBottom = style.mb * 4
+  if (style.mt !== undefined) s.marginTop    = style.mt === 'auto' ? 'auto' : style.mt * 4
+  if (style.mb !== undefined) s.marginBottom = style.mb === 'auto' ? 'auto' : style.mb * 4
 
-  // Same skipSizing gate buildInlineStyle has always had: in the EDITOR,
-  // the SelectableShell wrapper already applies width/maxWidth via
-  // buildBoxSizingStyle, so the section itself skips it. In PREVIEW there
-  // is no such wrapper, so this outer band must apply the real dragged
-  // width itself — this is what makes a resize-handle drag actually show
-  // up in Preview. (This got dropped when the outer/inner split was first
-  // introduced, which is why drag-resized widths stopped appearing in
-  // Preview — this restores that exact original behavior.)
+  // The outer band is a real flex/grid container too, using the SAME
+  // display/justify/align/gridCols as the inner div — see the function
+  // header comment above for why this matters (issue: outer needed to push
+  // the whole inner content block to bottom-right, not just position
+  // children within it).
+  Object.assign(s, buildFlexInlineProps(style))
+
   if (!opts.skipSizing) {
     if (typeof style.width === 'number') {
       s.width      = style.widthUnit === '%' ? `${style.width}%` : style.width
       s.flexGrow   = 0
       s.flexShrink = 0
+      s.flexBasis  = 'auto'
     }
 
     if (typeof style.maxWidth === 'number') {
@@ -444,66 +615,44 @@ export function buildSectionOuterStyle(
   return s
 }
 
-// CONFIRMED bug fix: SectionEditor's outer <section> was hardcoded to
-// className="w-full relative" and never merged in ANY dynamic class at
-// all — so anything expressed purely as a Tailwind class (rounded, border,
-// border-style, shadow, and incidentally any typography class, since CSS
-// properties like `color`/`text-align` are inheritable and correctly
-// cascade to children regardless of which ancestor element carries them)
-// rendered fine in Preview (whose outer <section> DOES call
-// buildClassName) but never appeared in the Editor. Concrete example: the
-// Newsletter Signup template sets `rounded: 'xl'` directly on its Section —
-// rounded corners in Preview, square corners in the Editor.
-//
-// This takes the FULL className buildClassName would produce and strips out
-// only the layout classes (display/flexDir/flexWrap/justify/align) and
-// sizing classes (width/maxWidth/minHeight/height enums) that
-// buildSectionInnerClassName/buildFlexLayoutClassName already own by design
-// in the split model — those belong on the INNER column, not the outer
-// band. Everything else (rounded, border, shadow, typography) passes
-// through untouched, so the outer element ends up with exactly the classes
-// it's actually supposed to have — no more, no less.
-export function buildSectionOuterClassName(style: StyleProps = {}, extra?: string): string {
-  const DISPLAY_VALUES = new Set(['block', 'flex', 'grid', 'inline', 'inline-block', 'inline-flex', 'hidden'])
-  const full = buildClassName(style)
-  const filtered = full
-    .split(' ')
-    .filter(Boolean)
-    .filter(cls =>
-      !DISPLAY_VALUES.has(cls) &&
-      !cls.startsWith('flex-') &&
-      !cls.startsWith('justify-') &&
-      !cls.startsWith('items-') &&
-      !cls.startsWith('w-') &&
-      !cls.startsWith('max-w-') &&
-      !cls.startsWith('min-h-') &&
-      !cls.startsWith('h-')
-    )
-    .join(' ')
-  return [filtered, extra].filter(Boolean).join(' ')
+// The outer band no longer carries rounded/border/shadow/typography/layout as
+// Tailwind classes (see buildSectionOuterStyle above, which applies all of
+// that as real inline CSS) — so there's nothing style-driven left to filter
+// out of a className here. Kept only so call sites don't need to change; it
+// now just passes through whatever literal `extra` classes the caller supplies.
+export function buildSectionOuterClassName(_style: StyleProps = {}, extra?: string): string {
+  return extra ?? ''
 }
 
-export function buildSectionInnerClassName(style: StyleProps = {}): string {
-  const c: string[] = ['w-full']
-  if (style.maxWidth === 'full') c.push('max-w-full')
-  else if (typeof style.maxWidth === 'string') c.push(`max-w-${style.maxWidth}`)
-  const flex = buildFlexLayoutClassName(style)
-  if (flex) c.push(flex)
-  return c.filter(Boolean).join(' ')
+export function buildSectionInnerClassName(_style: StyleProps = {}): string {
+  // maxWidth is applied inline in buildSectionInnerStyle below (see
+  // MAX_WIDTH_REM). 'w-full' alone is safe: it's pushed as a complete literal
+  // string, and is also hardcoded literally elsewhere in the app (e.g.
+  // SectionEditor's own 'w-full relative'), so it's guaranteed to exist as
+  // real CSS either way.
+  return 'w-full'
 }
 
 export function buildSectionInnerStyle(style: StyleProps = {}): React.CSSProperties {
   const s: React.CSSProperties = {}
 
   if (typeof style.maxWidth === 'number') s.maxWidth = style.maxWidth
+  else if (typeof style.maxWidth === 'string') s.maxWidth = MAX_WIDTH_REM[style.maxWidth] ?? undefined
 
   if (style.pl !== undefined) s.paddingLeft = style.pl * 4
   else if (style.px !== undefined) s.paddingLeft = style.px * 4
   if (style.pr !== undefined) s.paddingRight = style.pr * 4
   else if (style.px !== undefined) s.paddingRight = style.px * 4
 
-  Object.assign(s, buildAlignMargin(style))   // centering (ml/mr auto) lives HERE now
-  Object.assign(s, buildFlexLayoutStyle(style)) // gap
+  // buildAlignMargin here covers BOTH the inner column's default horizontal
+  // centering (ml/mr:auto from Section's centerContent default) AND any
+  // explicit self-positioning (including the new vertical mt/mb:auto) a user
+  // sets via the Position control in SectionPanel — this lets the inner
+  // content block override the outer band's own Justify/Align for itself,
+  // the same per-item-override relationship every other node type has with
+  // ITS parent.
+  Object.assign(s, buildAlignMargin(style))
+  Object.assign(s, buildFlexLayoutStyle(style)) // this Section's OWN children's layout
 
   return s
 }

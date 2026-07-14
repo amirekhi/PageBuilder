@@ -10,19 +10,20 @@ import {
 } from '../builder/styleMapper'
 
 describe('buildClassName', () => {
-  it('includes rounded/border/shadow classes', () => {
-    const cls = buildClassName({ rounded: 'xl', borderWidth: 2, borderStyle: 'solid', shadow: 'lg' })
-    expect(cls).toContain('rounded-xl')
-    expect(cls).toContain('border-2')
-    expect(cls).toContain('border-solid')
-    expect(cls).toContain('shadow-lg')
-  })
+it('does NOT include rounded/border/shadow as classes (they are real inline CSS now)', () => {
+  const cls = buildClassName({ rounded: 'xl', borderWidth: 2, borderStyle: 'solid', shadow: 'lg' })
+  expect(cls).not.toContain('rounded')
+  expect(cls).not.toContain('border')
+  expect(cls).not.toContain('shadow')
+})
 
-  it('omits w-full/max-w when width/maxWidth are unset', () => {
-    const cls = buildClassName({})
-    expect(cls).not.toContain('w-full')
-    expect(cls).not.toContain('max-w-')
-  })
+it('applies rounded/border/shadow as real inline CSS via buildInlineStyle', () => {
+  const style = buildInlineStyle({ rounded: 'xl', borderWidth: 2, borderStyle: 'solid', shadow: 'lg' })
+  expect(style.borderRadius).toBe('12px') // ROUNDED_PX['xl']
+  expect(style.borderWidth).toBe('2px')
+  expect(style.borderStyle).toBe('solid')
+  expect(style.boxShadow).toBeTruthy()
+})
 })
 
 // REGRESSION TEST: SectionEditor used to hardcode className="w-full relative"
@@ -36,24 +37,18 @@ describe('buildClassName', () => {
 // See SectionEditor.test.tsx below for the component-level version that
 // would have caught the actual regression.
 describe('buildSectionOuterClassName', () => {
-  it('keeps rounded/border/shadow classes (the outer band owns these)', () => {
-    const cls = buildSectionOuterClassName({ rounded: 'xl', shadow: 'md', borderWidth: 1 }, 'w-full relative')
-    expect(cls).toContain('rounded-xl')
-    expect(cls).toContain('shadow-md')
-    expect(cls).toContain('border')
-    expect(cls).toContain('w-full')
-    expect(cls).toContain('relative')
-  })
+it('passes through only the literal extra classes (rounded/border/shadow are inline CSS now, applied via buildSectionOuterStyle instead)', () => {
+  const cls = buildSectionOuterClassName({ rounded: 'xl', shadow: 'md', borderWidth: 1 }, 'w-full relative')
+  expect(cls).toBe('w-full relative')
+})
 
-  it('strips layout/sizing classes (those belong on the INNER column instead)', () => {
-    const cls = buildSectionOuterClassName({ display: 'flex', flexDir: 'row', justify: 'center', align: 'center', width: 'full', maxWidth: 'lg' })
-    expect(cls).not.toContain('flex')
-    expect(cls).not.toContain('flex-row')
-    expect(cls).not.toContain('justify-center')
-    expect(cls).not.toContain('items-center')
-    expect(cls).not.toContain('w-full')
-    expect(cls).not.toContain('max-w-lg')
-  })
+it('applies rounded/border/shadow as real inline CSS on the outer band', () => {
+  const style = buildSectionOuterStyle({ rounded: 'xl', shadow: 'md', borderWidth: 1 })
+  expect(style.borderRadius).toBe('12px')
+  expect(style.boxShadow).toBeTruthy()
+  expect(style.borderWidth).toBe('1px')
+  expect(style.borderStyle).toBe('solid') // defaults to solid when borderWidth is set but borderStyle isn't
+})
 })
 
 // REGRESSION TEST: buildSectionOuterStyle originally had no textColor/
