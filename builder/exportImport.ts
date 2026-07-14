@@ -114,14 +114,21 @@ function inlineStyleStr(style: StyleProps | undefined): string {
   if (style.pr  !== undefined) s.push(`padding-right:${style.pr*4}px`)
   if (style.mx  !== undefined) { s.push(`margin-left:${style.mx*4}px`);  s.push(`margin-right:${style.mx*4}px`) }
   if (style.my  !== undefined) { s.push(`margin-top:${style.my*4}px`);   s.push(`margin-bottom:${style.my*4}px`) }
-  if (style.mt  !== undefined) s.push(`margin-top:${style.mt*4}px`)
-  if (style.mb  !== undefined) s.push(`margin-bottom:${style.mb*4}px`)
-  // ml/mr (and the legacy centerContent fallback) are what actually drive
-  // the Align control (Left/Center/Right) — reusing buildAlignMargin here
-  // instead of re-deriving it means this can never drift out of sync with
-  // what the live editor shows, the way it just did (this function simply
-  // never read ml/mr before, so exported pages silently lost alignment).
+  // mt/mb (and ml/mr) can now be 'auto' as well as a plain number — used by
+  // the Position control's vertical self-positioning (Top/Middle/Bottom),
+  // the same auto-margin mechanism ml/mr already used for Left/Center/Right.
+  // Multiplying `style.mt * 4` directly no longer type-checks once 'auto'
+  // is a valid value (TS correctly refuses to multiply a possible string).
+  // Rather than hand-rolling an `if (typeof === 'number')` guard here AND
+  // duplicating the auto-margin logic that already exists, this reuses
+  // buildAlignMargin — the single source of truth for all four of
+  // mt/mb/ml/mr, number-or-auto — the same way this function already did
+  // for ml/mr just below. That also means a vertical Position setting now
+  // actually survives into exported HTML instead of being silently dropped
+  // the way ml/mr briefly were before that fix.
   const align = buildAlignMargin(style)
+  if (align.marginTop   !== undefined) s.push(`margin-top:${typeof align.marginTop    === 'number' ? align.marginTop    + 'px' : align.marginTop}`)
+  if (align.marginBottom !== undefined) s.push(`margin-bottom:${typeof align.marginBottom === 'number' ? align.marginBottom + 'px' : align.marginBottom}`)
   if (align.marginLeft  !== undefined) s.push(`margin-left:${typeof align.marginLeft  === 'number' ? align.marginLeft  + 'px' : align.marginLeft}`)
   if (align.marginRight !== undefined) s.push(`margin-right:${typeof align.marginRight === 'number' ? align.marginRight + 'px' : align.marginRight}`)
   if (style.gap !== undefined) s.push(`gap:${style.gap*4}px`)
