@@ -100,41 +100,23 @@ interface BuilderStore {
   previewWidth: PreviewWidth
   editingBreakpoint: PreviewWidth
 
-  // The current zoom factor the EditorRenderer canvas is being displayed
-  // at (1 = full size, <1 = shrunk to fit available panel width). The
-  // canvas is always rendered internally at its true logical pixel width
-  // (e.g. 1440px for desktop) so layout math (maxWidth, fixed widths,
-  // percentages) resolves exactly as it would on a real page — this value
-  // is purely the visual scale-down applied on top, and ResizeHandles
-  // reads it to convert raw pointer-movement pixels back into logical
-  // canvas pixels so dragging still feels 1:1 regardless of zoom.
   canvasScale: number
-
-  // Bumped by replayAnimations() below. PreviewRenderer keys its rendered
-  // tree off this value (see Renderer.tsx) — changing a React key forces a
-  // full unmount/remount of every node, which is what actually resets each
-  // AnimatedNode's IntersectionObserver and re-triggers its CSS animation.
-  // Lives here (not as local useState in PreviewRenderer) specifically so
-  // TopBar — a totally separate component — can trigger it via a button.
   previewReplayNonce: number
-
-  // Which node (if any) currently has a live Tiptap editor mounted in
-  // rich-editing mode (see useRichTextEdit in richText.ts — set true on
-  // startEditing, cleared on commitAndClose). SelectableShell reads this to
-  // suppress its own floating toolbar and disable dragging for that one
-  // node while it's active: dragging/duplicating/deleting mid-edit doesn't
-  // make sense, and showing SelectableShell's toolbar AND RichTextToolbar
-  // at the same time was producing two overlapping floating toolbars
-  // crowded right on top of the text. Only one node can hold this at a
-  // time (starting a new rich edit anywhere always replaces it — there's
-  // never two active simultaneously since a double-click first triggers a
-  // single-click select elsewhere, which already runs any pending commit).
   richEditingId: string | null
+
+  // Raw CSS text (with {{WRAPPER}} tokens for per-node scoping — per-node
+  // custom CSS itself lives in each node's own props.customCss, written
+  // through the ordinary updateProps action so it's automatically
+  // undoable) applied page-wide, with no per-node scoping at all. Kept as
+  // plain page-level config rather than undoable content — same treatment
+  // `mode`/`previewWidth` already get — so typing here doesn't spam the
+  // undo stack on every keystroke. See customCss.ts for how this and each
+  // node's props.customCss get compiled into a real <style> tag.
+  globalCustomCss: string
 
   past:         NodeMap[]
   future:       NodeMap[]
 
-  // Media library
   mediaLibrary:      MediaItem[]
   isMediaPickerOpen: boolean
   mediaPickCallback: MediaPickCallback | null
@@ -149,6 +131,7 @@ interface BuilderStore {
   setCanvasScale:       (scale: number) => void
   replayAnimations:     () => void
   setRichEditing:       (id: string | null) => void
+  setGlobalCustomCss:   (css: string) => void
   selectNode:      (id: string | null) => void
   setDragging:     (id: string | null) => void
   setResizing:     (id: string | null) => void
@@ -160,7 +143,6 @@ interface BuilderStore {
   undo:            () => void
   redo:            () => void
 
-  // Media actions
   openMediaPicker:  (onPick: MediaPickCallback) => void
   closeMediaPicker: () => void
   addUploadedMedia: (item: MediaItem) => void
@@ -180,6 +162,7 @@ export const useBuilderStore = create<BuilderStore>()(
       canvasScale: 1,
       previewReplayNonce: 0,
       richEditingId: null,
+      globalCustomCss: '',
       past:         [],
       future:       [],
 
@@ -200,6 +183,7 @@ export const useBuilderStore = create<BuilderStore>()(
       setCanvasScale:       (scale) => set(s => { s.canvasScale = scale }),
       replayAnimations:     () => set(s => { s.previewReplayNonce += 1 }),
       setRichEditing:       (id) => set(s => { s.richEditingId = id }),
+      setGlobalCustomCss:   (css) => set(s => { s.globalCustomCss = css }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
       setResizing:     (id)   => set(s => { s.resizingId = id }),
@@ -286,7 +270,6 @@ export const useBuilderStore = create<BuilderStore>()(
         s.selectedId = null
       }),
 
-      // ── Media ──
       openMediaPicker: (onPick) => set(s => {
         s.isMediaPickerOpen = true
         s.mediaPickCallback = onPick
