@@ -19,6 +19,7 @@ import { SelectableShell } from './SelectableShell'
 import { DropSlot, parseSlotId } from './DropSlot'
 import { EmptyCanvasPrompt } from './TemplatePicker'
 import { AnimationStyleSheet, AnimationProps, useAnimationProps } from './animations'
+import { CustomCssStyleSheet } from './CustomCssStyleSheet'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
@@ -135,6 +136,7 @@ export function EditorRenderer() {
         }}
         onClick={() => selectNode(null)}
       >
+        <CustomCssStyleSheet />
         <div ref={outerRef} className="w-full flex justify-center">
           <div
             style={{
@@ -279,6 +281,7 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
       }}
     >
       <AnimationStyleSheet />
+      <CustomCssStyleSheet />
       {previewWidth !== 'desktop' ? (
         <div
           style={{

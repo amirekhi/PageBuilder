@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap, PageNode } from './types'
-import { StylePanel } from './panelComponents'
+import { StylePanel, CustomCssField } from './panelComponents'
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 
 type Tab = 'layers' | 'style' | 'content'
@@ -108,31 +108,24 @@ function LayerNode({
 }
 
 // ─── Style tab ────────────────────────────────────────────────────────────────
-// Resolves style through useNodeStyle (breakpoint-aware) instead of reading
-// node.props.style directly, and writes through patchNodeStyle so edits
-// land in the correct style/styleTablet/styleMobile bucket depending on
-// which breakpoint the toolbar is currently set to (see responsive.ts).
-//
-// SECTION IS A SPECIAL CASE: SectionPanel (the Content tab's panel for this
-// type) already has its own full Position/Padding/Margin/Width group, and a
-// strictly more capable Background section (flat color + gradient + image +
-// overlay, vs. this generic panel's plain-color-only version). Without
-// hideBoxModel/hideBackground, a Section showed every one of those fields
-// TWICE — once with full power in Content, once again here with less power.
-// No other node type has its own copies of these fields in its Content
-// panel, so every other type still gets the full generic StylePanel as
-// before — this is Section-specific, not a general behavior change.
-//
-// When editing a non-desktop breakpoint, shows a small badge naming which
-// breakpoint is active, plus a "Reset to Desktop" button that only appears
-// once this specific node actually has an override at that breakpoint —
-// so it's not showing a reset option that would do nothing.
+// When NOTHING is selected, this now shows the page-level global Custom CSS
+// field instead of just an empty placeholder — a sensible home for
+// page-wide fine-tuning that doesn't belong to any one block.
 
 function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
   const style             = useNodeStyle(node)
+  const globalCustomCss    = useBuilderStore(s => s.globalCustomCss)
+  const setGlobalCustomCss = useBuilderStore(s => s.setGlobalCustomCss)
 
-  if (!node) return <Empty text="Select a block to edit its style" />
+  if (!node) {
+    return (
+      <div className="p-4 space-y-4">
+        <p className="text-neutral-400 text-sm">Select a block to edit its style — or set page-wide CSS below, applied everywhere regardless of what's selected.</p>
+        <CustomCssField value={globalCustomCss} onChange={setGlobalCustomCss} />
+      </div>
+    )
+  }
 
   const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
   const hasOverride           = isOverrideBreakpoint && hasOverrideAt(node, editingBreakpoint)
@@ -172,19 +165,24 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 }
 
 // ─── Content tab ──────────────────────────────────────────────────────────────
-// Unchanged — each block's own EditorPanel already calls useNodeStyle /
-// patchNodeStyle internally (see NodeComponents.tsx) wherever it deals with
-// style, so nothing extra is needed here. Text/Heading/Quote/Accordion/List
-// used to also embed a <StylePanel/> call of their own — removed, since it
-// duplicated this same Style tab exactly. Those five now rely entirely on
-// the Style tab for appearance, same as Button/Badge/Avatar/etc. already did.
+// Every node type's own EditorPanel now gets a shared Custom CSS field
+// appended after it — one addition here covers all 15 node types, so no
+// individual *Panel component in nodeComponents.tsx needed to change.
 
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   if (!node) return <Empty text="Select a block to edit its content" />
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
   const Panel = def.EditorPanel
-  return <Panel node={node} onChange={props => onUpdate(node.id, props)} />
+  return (
+    <>
+      <Panel node={node} onChange={props => onUpdate(node.id, props)} />
+      <CustomCssField
+        value={node.props.customCss as string}
+        onChange={css => onUpdate(node.id, { customCss: css })}
+      />
+    </>
+  )
 }
 
 function Empty({ text }: { text: string }) {

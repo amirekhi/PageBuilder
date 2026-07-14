@@ -3,6 +3,7 @@
 import { NodeMap, PageNode, NodeType } from './types'
 import { NODE_REGISTRY } from './registry'
 import { StyleProps, buildClassName, resolveColor, buildAlignMargin } from './styleMapper'
+import { compileCustomCss, wrapperClassFor } from './customCss'
 
 // ─── LocalStorage ─────────────────────────────────────────────────────────────
 
@@ -94,6 +95,12 @@ export function readFileAsText(file: File): Promise<string> {
 // Colors, gradients, and background images are written as real inline CSS
 // (via resolveColor / raw gradient strings from styleMapper) rather than
 // dynamic Tailwind classes, so they render identically to the live editor.
+//
+// Custom CSS: each node's own props.customCss (compiled via compileCustomCss
+// from customCss.ts) plus the page-level global CSS are collected into one
+// <style> block in the exported document's <head>, and every rendered
+// element with custom CSS gets its wrapperClassFor(node.id) class added —
+// same mechanism the live editor uses, so exported pages match exactly.
 
 function esc(str: string): string {
   return String(str)
@@ -114,23 +121,15 @@ function inlineStyleStr(style: StyleProps | undefined): string {
   if (style.pr  !== undefined) s.push(`padding-right:${style.pr*4}px`)
   if (style.mx  !== undefined) { s.push(`margin-left:${style.mx*4}px`);  s.push(`margin-right:${style.mx*4}px`) }
   if (style.my  !== undefined) { s.push(`margin-top:${style.my*4}px`);   s.push(`margin-bottom:${style.my*4}px`) }
-  // mt/mb (and ml/mr) can now be 'auto' as well as a plain number — used by
-  // the Position control's vertical self-positioning (Top/Middle/Bottom),
-  // the same auto-margin mechanism ml/mr already used for Left/Center/Right.
-  // Multiplying `style.mt * 4` directly no longer type-checks once 'auto'
-  // is a valid value (TS correctly refuses to multiply a possible string).
-  // Rather than hand-rolling an `if (typeof === 'number')` guard here AND
-  // duplicating the auto-margin logic that already exists, this reuses
-  // buildAlignMargin — the single source of truth for all four of
-  // mt/mb/ml/mr, number-or-auto — the same way this function already did
-  // for ml/mr just below. That also means a vertical Position setting now
-  // actually survives into exported HTML instead of being silently dropped
-  // the way ml/mr briefly were before that fix.
+  // mt/mb/ml/mr are all number | 'auto' now (vertical + horizontal
+  // self-positioning) — routed through buildAlignMargin, the single source
+  // of truth for all four, rather than multiplying a value that might be
+  // the string 'auto' directly.
   const align = buildAlignMargin(style)
-  if (align.marginTop   !== undefined) s.push(`margin-top:${typeof align.marginTop    === 'number' ? align.marginTop    + 'px' : align.marginTop}`)
+  if (align.marginTop    !== undefined) s.push(`margin-top:${typeof align.marginTop    === 'number' ? align.marginTop    + 'px' : align.marginTop}`)
   if (align.marginBottom !== undefined) s.push(`margin-bottom:${typeof align.marginBottom === 'number' ? align.marginBottom + 'px' : align.marginBottom}`)
-  if (align.marginLeft  !== undefined) s.push(`margin-left:${typeof align.marginLeft  === 'number' ? align.marginLeft  + 'px' : align.marginLeft}`)
-  if (align.marginRight !== undefined) s.push(`margin-right:${typeof align.marginRight === 'number' ? align.marginRight + 'px' : align.marginRight}`)
+  if (align.marginLeft   !== undefined) s.push(`margin-left:${typeof align.marginLeft  === 'number' ? align.marginLeft  + 'px' : align.marginLeft}`)
+  if (align.marginRight  !== undefined) s.push(`margin-right:${typeof align.marginRight === 'number' ? align.marginRight + 'px' : align.marginRight}`)
   if (style.gap !== undefined) s.push(`gap:${style.gap*4}px`)
   if (typeof style.width     === 'number') s.push(`width:${style.width}px`)
   if (typeof style.maxWidth  === 'number') s.push(`max-width:${style.maxWidth}px`)
@@ -139,9 +138,6 @@ function inlineStyleStr(style: StyleProps | undefined): string {
   if (style.opacity !== undefined) s.push(`opacity:${style.opacity/100}`)
   if (style.aspectRatio && style.aspectRatio !== 'auto') s.push(`aspect-ratio:${style.aspectRatio}`)
 
-  // Colors — resolved to real CSS values (see styleMapper.resolveColor) instead
-  // of relying on a dynamically-built Tailwind class existing in the CDN's
-  // runtime scan. Fixes colors being missing/inconsistent in exported HTML.
   const bg = resolveColor(style.bgColor)
   if (bg) s.push(`background-color:${bg}`)
   const fg = resolveColor(style.textColor)
@@ -158,6 +154,14 @@ function attrs(style: StyleProps | undefined, extra = ''): string {
   return `${cls ? ` class="${cls}"` : ''}${inl ? ` style="${inl}"` : ''}`
 }
 
+// Appends this node's Custom CSS wrapper class (if it has one) to whatever
+// class string a case is already about to render — same rule
+// withCustomCss() applies in nodeComponents.tsx for the live editor, kept
+// as a small local helper here so every case below can reuse it inline.
+function withCustomCss(node: PageNode, cls: string): string {
+  return node.props.customCss ? `${cls} ${wrapperClassFor(node.id)}`.trim() : cls
+}
+
 function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
   const node = nodes[nodeId]
   if (!node) return ''
@@ -168,7 +172,6 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
   switch (node.type as NodeType) {
 
     case 'section': {
-      // Build inline background styles that can't be expressed via Tailwind classes
       const extraInline: string[] = []
       if (s?.bgImage) {
         extraInline.push(`background-image:url(${s.bgImage})`)
@@ -176,12 +179,11 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
         extraInline.push(`background-position:${s.bgPos ?? 'center'}`)
         extraInline.push('background-repeat:no-repeat')
       } else if (s?.bgGradient) {
-        // bgGradient is stored as a ready-to-use CSS linear-gradient(...) string
         extraInline.push(`background-image:${s.bgGradient}`)
       }
       const baseInline = inlineStyleStr(s)
       const combined   = [baseInline, ...extraInline].filter(Boolean).join(';')
-      const baseClass  = buildClassName(s ?? {}, 'w-full relative')
+      const baseClass  = buildClassName(s ?? {}, withCustomCss(node, 'w-full relative'))
       const overlay    = s?.bgOverlay && s.bgOverlay > 0
         ? `\n${pad}  <div style="position:absolute;inset:0;background:rgba(0,0,0,${s.bgOverlay/100});pointer-events:none;z-index:0" aria-hidden="true"></div>`
         : ''
@@ -192,17 +194,17 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
     }
 
     case 'columns':
-      return `${pad}<div${attrs(s, 'w-full flex flex-row')}>\n${kids}\n${pad}</div>`
+      return `${pad}<div${attrs(s, withCustomCss(node, 'w-full flex flex-row'))}>\n${kids}\n${pad}</div>`
 
     case 'column':
-      return `${pad}<div${attrs(s, 'flex-1 min-w-0')}>\n${kids}\n${pad}</div>`
+      return `${pad}<div${attrs(s, withCustomCss(node, 'flex-1 min-w-0'))}>\n${kids}\n${pad}</div>`
 
     case 'text':
-      return `${pad}<p${attrs(s)}>${esc((node.props.content as string) ?? '')}</p>`
+      return `${pad}<p${attrs(s, withCustomCss(node, ''))}>${(node.props.content as string) ?? ''}</p>`
 
     case 'heading': {
       const tag = (node.props.tag as string) || 'h2'
-      return `${pad}<${tag}${attrs(s)}>${esc((node.props.content as string) ?? '')}</${tag}>`
+      return `${pad}<${tag}${attrs(s, withCustomCss(node, ''))}>${(node.props.content as string) ?? ''}</${tag}>`
     }
 
     case 'image': {
@@ -213,7 +215,7 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
       const fitStyle = s?.objectFit ? `object-fit:${s.objectFit};` : 'object-fit:cover;'
       const base = inlineStyleStr(s)
       const combined = [wStyle, fitStyle, base].filter(Boolean).join('')
-      const cls = buildClassName(s ?? {}, hasFixed ? 'block' : 'max-w-full block')
+      const cls = buildClassName(s ?? {}, withCustomCss(node, hasFixed ? 'block' : 'max-w-full block'))
       return `${pad}<img src="${esc(src)}" alt="${esc(alt)}" class="${cls}" style="${combined}" />`
     }
 
@@ -225,14 +227,15 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
         variant === 'outline' ? 'border-2 border-violet-600 text-violet-600 hover:bg-violet-50' :
         variant === 'ghost'   ? 'text-violet-600 hover:bg-violet-50' :
         'bg-violet-600 text-white hover:bg-violet-700'
-      return `${pad}<a href="${esc(href)}" class="inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${vc}">${esc(label)}</a>`
+      const cls = withCustomCss(node, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${vc}`)
+      return `${pad}<a href="${esc(href)}" class="${cls}">${esc(label)}</a>`
     }
 
     case 'spacer':
-      return `${pad}<div style="height:${(node.props.height as number) ?? 40}px"></div>`
+      return `${pad}<div class="${withCustomCss(node, '')}".trim() style="height:${(node.props.height as number) ?? 40}px"></div>`
 
     case 'divider':
-      return `${pad}<hr${attrs(s, 'w-full')} />`
+      return `${pad}<hr${attrs(s, withCustomCss(node, 'w-full'))} />`
 
     case 'badge': {
       const label   = (node.props.label as string) ?? 'Badge'
@@ -241,7 +244,8 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
         variant === 'solid'   ? 'bg-violet-600 text-white' :
         variant === 'outline' ? 'border border-violet-300 text-violet-700' :
         'bg-violet-100 text-violet-700'
-      return `${pad}<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${vc}">${esc(label)}</span>`
+      const cls = withCustomCss(node, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${vc}`)
+      return `${pad}<span class="${cls}">${esc(label)}</span>`
     }
 
     case 'list': {
@@ -252,17 +256,19 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
         const marker = markerType === 'number' ? `${i+1}.` : (markers[markerType] ?? '•')
         return `${pad}  <li class="flex items-start gap-2.5"><span class="shrink-0 text-violet-600 font-medium leading-6">${marker}</span><span class="leading-6">${esc(text)}</span></li>`
       }).join('\n')
-      return `${pad}<ul${attrs(s, 'space-y-2 list-none')}>\n${lis}\n${pad}</ul>`
+      return `${pad}<ul${attrs(s, withCustomCss(node, 'space-y-2 list-none'))}>\n${lis}\n${pad}</ul>`
     }
 
     case 'avatar': {
       const src      = (node.props.src as string) ?? ''
       const initials = (node.props.initials as string) ?? '?'
       const size     = (node.props.size as number) ?? 56
+      const cls = withCustomCss(node, 'rounded-full object-cover shrink-0')
       if (src) {
-        return `${pad}<img src="${esc(src)}" alt="" class="rounded-full object-cover shrink-0" style="width:${size}px;height:${size}px" />`
+        return `${pad}<img src="${esc(src)}" alt="" class="${cls}" style="width:${size}px;height:${size}px" />`
       }
-      return `${pad}<div class="rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.36)}px">${esc(initials)}</div>`
+      const clsFallback = withCustomCss(node, 'rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none')
+      return `${pad}<div class="${clsFallback}" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.36)}px">${esc(initials)}</div>`
     }
 
     case 'quote': {
@@ -274,7 +280,7 @@ function renderNode(nodeId: string, nodes: NodeMap, depth = 0): string {
       const avatar = avSrc
         ? `<img src="${esc(avSrc)}" alt="" class="w-10 h-10 rounded-full object-cover shrink-0" />`
         : `<div class="w-10 h-10 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-semibold shrink-0">${esc(init)}</div>`
-      return `${pad}<div${attrs(s, 'flex flex-col gap-4')}>
+      return `${pad}<div${attrs(s, withCustomCss(node, 'flex flex-col gap-4'))}>
 ${pad}  <p class="text-lg leading-relaxed text-neutral-700">"${esc(quote)}"</p>
 ${pad}  <div class="flex items-center gap-3">
 ${pad}    ${avatar}
@@ -286,7 +292,6 @@ ${pad}</div>`
     case 'video': {
       const raw   = (node.props.url as string) ?? ''
       const ratio = (s?.aspectRatio && s.aspectRatio !== 'auto') ? s.aspectRatio : '16/9'
-      // Convert YouTube/Vimeo to embed
       const ytMatch    = raw.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/)
       const vimeoMatch = raw.match(/vimeo\.com\/(\d+)/)
       const embed      = ytMatch
@@ -295,7 +300,7 @@ ${pad}</div>`
           ? `https://player.vimeo.com/video/${vimeoMatch[1]}`
           : raw
       if (!embed) return `${pad}<div style="aspect-ratio:${ratio};background:#f3f4f6;display:flex;align-items:center;justify-content:center"><span style="color:#9ca3af;font-size:0.75rem">No video URL set</span></div>`
-      return `${pad}<div${attrs(s)} style="${inlineStyleStr(s)};aspect-ratio:${ratio};overflow:hidden"><iframe src="${esc(embed)}" style="width:100%;height:100%;border:0" allowfullscreen></iframe></div>`
+      return `${pad}<div${attrs(s, withCustomCss(node, ''))} style="${inlineStyleStr(s)};aspect-ratio:${ratio};overflow:hidden"><iframe src="${esc(embed)}" style="width:100%;height:100%;border:0" allowfullscreen></iframe></div>`
     }
 
     case 'accordion': {
@@ -304,7 +309,7 @@ ${pad}</div>`
 ${pad}    <summary class="cursor-pointer text-sm font-medium text-neutral-800 list-none flex justify-between items-center">${esc(item.q)}<span>+</span></summary>
 ${pad}    <p class="pt-2 text-sm text-neutral-500 leading-relaxed">${esc(item.a)}</p>
 ${pad}  </details>`).join('\n')
-      return `${pad}<div${attrs(s, 'w-full border-t border-neutral-200')}>\n${rows}\n${pad}</div>`
+      return `${pad}<div${attrs(s, withCustomCss(node, 'w-full border-t border-neutral-200'))}>\n${rows}\n${pad}</div>`
     }
 
     default:
@@ -312,8 +317,23 @@ ${pad}  </details>`).join('\n')
   }
 }
 
-export function exportToHtml(nodes: NodeMap, rootId: string, title = 'Exported Page'): string {
+// Collects every node's compiled custom CSS plus the page-level global CSS
+// into one string, ready to drop into a <style> tag.
+function collectCustomCss(nodes: NodeMap, globalCustomCss: string): string {
+  const parts: string[] = []
+  if (globalCustomCss?.trim()) parts.push(globalCustomCss)
+  for (const id in nodes) {
+    const compiled = compileCustomCss(id, nodes[id].props.customCss as string | undefined)
+    if (compiled) parts.push(compiled)
+  }
+  return parts.join('\n\n')
+}
+
+export function exportToHtml(nodes: NodeMap, rootId: string, title = 'Exported Page', globalCustomCss = ''): string {
   const body = renderNode(rootId, nodes, 1)
+  const customCss = collectCustomCss(nodes, globalCustomCss)
+  const customCssBlock = customCss ? `\n  <style>\n${customCss}\n  </style>` : ''
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -325,7 +345,7 @@ export function exportToHtml(nodes: NodeMap, rootId: string, title = 'Exported P
     No build step needed — just open this file in any browser.
     For production use, replace with a compiled Tailwind stylesheet.
   -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com"></script>${customCssBlock}
 </head>
 <body>
 ${body}
@@ -333,8 +353,8 @@ ${body}
 </html>`
 }
 
-export function downloadHtml(nodes: NodeMap, rootId: string, filename = 'page.html', title?: string): void {
-  const blob = new Blob([exportToHtml(nodes, rootId, title)], { type: 'text/html' })
+export function downloadHtml(nodes: NodeMap, rootId: string, filename = 'page.html', title?: string, globalCustomCss = ''): void {
+  const blob = new Blob([exportToHtml(nodes, rootId, title, globalCustomCss)], { type: 'text/html' })
   triggerDownload(blob, filename)
 }
 

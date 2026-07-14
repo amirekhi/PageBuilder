@@ -43,19 +43,6 @@ export function SelectField({
 }
 
 // ─── Box spacing (Elementor-style linked 4-side padding/margin) ───────────
-// Four independent px inputs (top/right/bottom/left) with a link toggle:
-// locked (default when all sides already match) means editing any one side
-// sets all four together; unlocked lets each side vary independently.
-// Values are stored in the same "unit × 4 = px" scale as px/py/mx/my (see
-// buildInlineStyle) — this component just shows/accepts real pixels and
-// converts, so the UI feels direct while staying compatible with the
-// existing shorthand properties. This is the ONE spacing control used by
-// every panel now — SpacingField (below) is only for non-4-sided values
-// like Gap, which has no "sides" to speak of.
-//
-// NOTE: this writes plain numbers into mt/mb/ml/mr. Those same keys can also
-// hold 'auto' when written by AlignField's Position control below — whichever
-// control was used most recently wins, same duality ml/mr always had.
 
 type SideValue = number | 'auto' | undefined
 export interface BoxSides { top?: SideValue; right?: SideValue; bottom?: SideValue; left?: SideValue }
@@ -122,8 +109,6 @@ export function BoxSpacingField({
 }
 
 // ─── Spacing slider ───────────────────────────────────────────────────────────
-// Values map to multiples of 4px. Only used for Gap now (no "sides" exist for
-// a gap value) — every padding/margin control uses BoxSpacingField instead.
 
 const SCALE = [0,1,2,3,4,5,6,8,10,12,16,20,24,32,40,48,64]
 
@@ -150,40 +135,12 @@ export function SpacingField({
 }
 
 // ─── Box position (horizontal AND vertical self-positioning) ──────────────
-// Backed by ml/mr (horizontal) and mt/mb (vertical) margins — see
-// getBoxAlign/setBoxAlign and getBoxAlignY/setBoxAlignY in styleMapper.ts.
-//
-// 'none' is a real, distinct 4th state (for each axis) meaning NO override is
-// written — the parent's own Justify/Align fully controls this item. Picking
-// Left/Center/Right (or Top/Middle/Bottom) writes an explicit auto-margin,
-// which — per the CSS flex spec — absorbs free space on that axis BEFORE
-// justify-content/align-items gets a say. That's a legitimate per-item
-// override (like align-self), but it only works predictably now that there's
-// a real way to opt back OUT of it via 'none' — previously even clicking
-// "Left" (visually a no-op most of the time) silently wrote an auto-margin
-// that fought the parent's layout forever after, with no way back.
-//
-// NOTE ON NAMING: there are three unrelated things in this app that all
-// involve the word "align" —
-//   1. This control (AlignField): where THIS block sits within its parent
-//      when it's narrower/shorter than the parent — self-positioning via
-//      margin, overriding the parent's Justify/Align for this one item.
-//   2. Flex "align items" (SectionPanel/ColumnsPanel "Align children" or
-//      "Align items"): how a container lines up ALL its children by default
-//      on the cross-axis. Different mechanism (CSS align-items on the
-//      PARENT, not margin on the child) — and this control's 'none' state is
-//      exactly what lets #2 actually take effect for a given child.
-//   3. Text align (StylePanel "Text align"): how text sits INSIDE this
-//      block. Different mechanism again (CSS text-align).
-// Always labeled distinctly in the panels below.
 
 export function AlignField({
   style, onChange, axis = 'both',
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
-  // 'both' (default) shows Horizontal + Vertical. Pass 'x' or 'y' to show
-  // only one axis for a panel where the other doesn't make sense.
   axis?: 'x' | 'y' | 'both'
 }) {
   const currentX = getBoxAlign(style)
@@ -443,26 +400,13 @@ export function GradientField({
 }
 
 // ─── Shared StylePanel (spacing + color + typography) ─────────────────────────
-// Used as the "Style" tab in ControlPanel for all node types that don't need
-// a fully custom panel. Includes image fit/aspect-ratio controls so the
-// Style tab works for Image blocks too.
 
 export function StylePanel({
   style, onChange, hideBoxModel = false, hideBackground = false,
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
-  // Skips Position/Padding/Margin — used only for node types whose own
-  // Content-tab panel already has a full, equally-capable version of these
-  // same controls (currently just Section, which has its own Padding/
-  // Margin/Position/Width group). Without this, Section showed every one
-  // of these fields twice: once in Content, once again here in Style.
   hideBoxModel?: boolean
-  // Skips the Background section here — used only for Section, whose own
-  // Content-tab panel already has the fuller version (flat color + gradient
-  // + image + overlay) vs. this component's plain-color-only version. Every
-  // other node type still gets Background from here, since nothing else
-  // has its own copy.
   hideBackground?: boolean
 }) {
   return (
@@ -555,19 +499,6 @@ export function StylePanel({
 }
 
 // ─── Animation demo swatch ──────────────────────────────────────────────────
-// Gives instant feedback for animation settings WITHOUT touching the real
-// canvas — the actual editing canvas deliberately never animates (see the
-// ANIMATION NOTE at the top of nodeComponents.tsx: a block mid-transform/
-// opacity would fight the drag handles, resize handles, and contentEditable
-// text editing that all read the block's live box). This is a self-contained
-// placeholder square that plays the exact effect/duration/delay/easing you
-// just picked, replaying automatically on every change — so you get instant
-// feedback right in the sidebar without ever leaving Edit mode or touching
-// anything that could break editing interactions.
-//
-// It renders its own <AnimationStyleSheet/> (the @keyframes) because the
-// panel can be open while in Edit mode, where PreviewRenderer — the only
-// other place that mounts the stylesheet — isn't on screen at all.
 
 function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
   const [playKey, setPlayKey] = useState(0)
@@ -576,8 +507,6 @@ function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
   const delay    = animation.delay ?? 0
   const easing   = animation.easing ?? 'ease-out'
 
-  // Replaying on every settings change is what makes this "instant
-  // feedback" — move the duration slider, see it replay right here.
   useEffect(() => { setPlayKey(k => k + 1) }, [effect, duration, delay, easing])
 
   if (effect === 'none') {
@@ -613,10 +542,6 @@ function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
 }
 
 // ─── Animation panel ────────────────────────────────────────────────────────
-// Dropped into every per-type panel (see nodeComponents.tsx — every *Panel
-// ends with one <AnimationPanel .../> call). Reads/writes node.props.animation
-// directly — NOT through patchStyle/patchNodeStyle, since animation isn't a
-// per-breakpoint style value (see AnimationProps in animations.ts).
 
 export function AnimationPanel({
   value, onChange,
@@ -696,6 +621,38 @@ export function AnimationPanel({
           </p>
         </>
       )}
+    </FieldGroup>
+  )
+}
+
+// ─── Custom CSS field ───────────────────────────────────────────────────────
+// Shared by every per-node panel (via ControlPanel's ContentTab, appended
+// after each type's own EditorPanel) AND by the page-level global CSS
+// setting (shown in the Style tab when nothing is selected — see
+// ControlPanel.tsx). {{WRAPPER}} is a plain string token the user types
+// literally; compileCustomCss (customCss.ts) swaps it for a real scoped
+// selector before injection, so raw CSS syntax is all that's ever required
+// here — no special editor, no validation beyond what the browser itself
+// silently tolerates.
+
+export function CustomCssField({
+  value, onChange,
+}: {
+  value?: string
+  onChange: (css: string) => void
+}) {
+  return (
+    <FieldGroup label="Custom CSS">
+      <textarea
+        className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 resize-y min-h-24 focus:outline-none focus:ring-1 focus:ring-violet-400"
+        placeholder={'{{WRAPPER}} {\n  /* your CSS here */\n}'}
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value)}
+        spellCheck={false}
+      />
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        Use <code className="font-mono">{'{{WRAPPER}}'}</code> in place of a selector to target just this block — e.g. <code className="font-mono">{'{{WRAPPER}}:hover { opacity: 0.8; }'}</code>. Supports anything real CSS supports (hover states, animations, media queries) that the panel controls above can't reach.
+      </p>
     </FieldGroup>
   )
 }

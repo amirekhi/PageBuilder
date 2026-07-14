@@ -13,16 +13,14 @@ import { AnimationProps } from './animations'
 import { EditorContent } from '@tiptap/react'
 import { useRichTextEdit, buildTextExtensions, buildHeadingExtensions } from './richText'
 import { RichTextToolbar } from './RichTextToolbar'
+import { customCssClass } from './customCss'
 
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
   patchNodeStyle(node, onChange, partial)
 }
 
-// Built once and shared across every Text/Heading node — these are
-// stateless extension configs (no per-instance state lives on them), so
-// there's no reason to rebuild them per-render or per-node the way the
-// editor instance itself (per-node, via useEditor inside useRichTextEdit)
-// has to be.
+// Lazy, memoized singletons — NOT built eagerly at module-load time. See
+// the comment block below for why.
 let _textExtensions: ReturnType<typeof buildTextExtensions> | null = null
 function getTextExtensions() {
   return _textExtensions ??= buildTextExtensions()
@@ -32,6 +30,17 @@ let _headingExtensions: ReturnType<typeof buildHeadingExtensions> | null = null
 function getHeadingExtensions() {
   return _headingExtensions ??= buildHeadingExtensions()
 }
+// Calling buildTextExtensions()/buildHeadingExtensions() at module
+// EVALUATION time used to put that call in the middle of a real import
+// cycle: richText.ts → store.ts → registry.tsx → nodeComponents.tsx →
+// richText.ts. If something enters that cycle via richText.ts first (e.g.
+// a test importing it directly), richText.ts's own top-level execution
+// pauses mid-file to resolve store.ts → registry.tsx → nodeComponents.tsx —
+// and this file used to immediately call buildTextExtensions() right then,
+// before richText.ts had reached its own later const declarations (like
+// FontWeight) further down. Building lazily on first actual RENDER instead
+// means the whole module graph has already finished loading by the time
+// this ever runs, so the cycle can never be caught mid-evaluation again.
 
 function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
   const rootId = useBuilderStore(st => st.rootId)
@@ -45,29 +54,17 @@ function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
   }
 }
 
+// Small helper used throughout this file: merges the node's Custom CSS
+// wrapper class (see customCss.ts) into whatever literal `extra` classes a
+// component already passes to buildClassName — filters out empties so
+// nodes with no customCss set (the vast majority) pay zero cost.
+function withCustomCss(node: PageNode, extra: string): string {
+  return [extra, customCssClass(node)].filter(Boolean).join(' ')
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
-//
-// SectionEditor and SectionPreview must mirror EACH OTHER structurally — both
-// split into an OUTER band (background/border/rounded/shadow/opacity/margin,
-// full width, never a flex/grid container on its own... except that it IS one:
-// see buildSectionOuterStyle in styleMapper.ts, which deliberately applies the
-// SAME display/justify/align as the inner div. This is what lets Justify="end"/
-// Align="end" push the ENTIRE inner content block to the bottom-right of the
-// section's own box whenever minHeight gives it extra room (e.g. a hero section
-// taller than its content) — while the inner div's OWN justify/align (also
-// applied via buildSectionInnerStyle) independently positions that Section's
-// actual CHILDREN within the content block itself. Both views must build this
-// identically or Editor/Preview will visually disagree.
-//
-// Preview has no SelectableShell wrapper handling width (Editor does), so its
-// outer band applies sizing directly (no skipSizing) while Editor's does
-// (skipSizing: true) to avoid double-applying percentage widths.
-//
-// NOTE ON ANIMATIONS: the editor canvas deliberately never plays animations —
-// EditorComponent is never passed animationRef/animationStyle. Animations only
-// ever play in Preview (see Renderer.tsx).
 
 export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const rawStyle       = useNodeStyle(node)
@@ -77,7 +74,7 @@ export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) 
 
   return (
     <section
-      className={buildSectionOuterClassName(s, 'w-full relative')}
+      className={buildSectionOuterClassName(s, withCustomCss(node, 'w-full relative'))}
       style={{
         ...buildSectionOuterStyle(s, { skipSizing: true }),
         minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64,
@@ -103,7 +100,7 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, a
   return (
     <section
       ref={animationRef}
-      className={buildSectionOuterClassName(s, 'w-full relative')}
+      className={buildSectionOuterClassName(s, withCustomCss(node, 'w-full relative'))}
       style={{
         ...buildSectionOuterStyle(s),
         minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64,
@@ -286,13 +283,13 @@ function AvatarRender({
     <img
       ref={animationRef}
       src={src} alt={(node.props.alt as string) || ''}
-      className="rounded-full object-cover shrink-0"
+      className={withCustomCss(node, 'rounded-full object-cover shrink-0')}
       style={{ width: size, height: size, ...animationStyle }}
     />
   ) : (
     <div
       ref={animationRef}
-      className="rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none"
+      className={withCustomCss(node, 'rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none')}
       style={{ width: size, height: size, fontSize: size * 0.36, ...animationStyle }}
     >
       {initials || '?'}
@@ -349,7 +346,7 @@ function QuoteRender({
   return (
     <div
       ref={animationRef}
-      className={buildClassName(s, 'flex flex-col gap-4')}
+      className={buildClassName(s, withCustomCss(node, 'flex flex-col gap-4'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       <p className="text-lg leading-relaxed text-neutral-700">"{(node.props.quote as string) || 'A short, glowing quote from a happy customer.'}"</p>
@@ -370,7 +367,6 @@ export const QuoteEditor:  React.FC<NodeComponentProps> = ({ node }) => <QuoteRe
 export const QuotePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <QuoteRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
-// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   return (
@@ -425,7 +421,7 @@ function VideoRender({
   if (!embed) return (
     <div
       ref={animationRef}
-      className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm')}
+      className={buildClassName(s, withCustomCss(node, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, minHeight: 160, ...animationStyle }}
     >
       <span className="text-xl">▶</span>
@@ -435,7 +431,7 @@ function VideoRender({
   return (
     <div
       ref={animationRef}
-      className={buildClassName(s, 'overflow-hidden')}
+      className={buildClassName(s, withCustomCss(node, 'overflow-hidden'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, ...animationStyle }}
     >
       <iframe src={embed} className="w-full h-full" style={{ border: 0 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
@@ -500,7 +496,7 @@ function AccordionRender({
   return (
     <div
       ref={animationRef}
-      className={buildClassName(s, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200')}
+      className={buildClassName(s, withCustomCss(node, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       {items.map((item, i) => {
@@ -525,7 +521,6 @@ export const AccordionEditor:  React.FC<NodeComponentProps> = ({ node }) => <Acc
 export const AccordionPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <AccordionRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
-// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const items = accordionItems(node)
   function updateItem(i: number, partial: Partial<AccordionItem>) {
@@ -581,7 +576,7 @@ function ListRender({
   return (
     <ul
       ref={animationRef}
-      className={buildClassName(s, 'space-y-2 list-none')}
+      className={buildClassName(s, withCustomCss(node, 'space-y-2 list-none'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       {items.map((text, i) => (
@@ -598,7 +593,6 @@ export const ListEditor:  React.FC<NodeComponentProps> = ({ node }) => <ListRend
 export const ListPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <ListRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
-// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
 export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const items = listItems(node)
   function updateItem(i: number, value: string) { const next = [...items]; next[i] = value; onChange({ items: next }) }
@@ -649,7 +643,7 @@ function BadgeRender({
   return (
     <span
       ref={animationRef}
-      className={buildClassName(s, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`)}
+      className={buildClassName(s, withCustomCss(node, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       {(node.props.label as string) || 'Badge'}
@@ -689,7 +683,7 @@ export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
 export const ColumnsEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const s = useNodeStyle(node)
-  return <div className={buildClassName(s, 'w-full flex flex-row')} style={{ ...buildInlineStyle(s, { skipSizing: true }), minHeight: 48 }}>{children}</div>
+  return <div className={buildClassName(s, withCustomCss(node, 'w-full flex flex-row'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), minHeight: 48 }}>{children}</div>
 }
 
 export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
@@ -697,7 +691,7 @@ export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children, a
   return (
     <div
       ref={animationRef}
-      className={buildClassName(s, 'w-full flex flex-row')}
+      className={buildClassName(s, withCustomCss(node, 'w-full flex flex-row'))}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
     >
       {children}
@@ -729,7 +723,7 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
 export const ColumnEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const s = useNodeStyle(node)
-  return <div className={buildClassName(s, 'flex-1 min-w-0 min-h-12')} style={buildInlineStyle(s, { skipSizing: true })}>{children}</div>
+  return <div className={buildClassName(s, withCustomCss(node, 'flex-1 min-w-0 min-h-12'))} style={buildInlineStyle(s, { skipSizing: true })}>{children}</div>
 }
 
 export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
@@ -737,7 +731,7 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
   return (
     <div
       ref={animationRef}
-      className={buildClassName(s, 'flex-1 min-w-0')}
+      className={buildClassName(s, withCustomCss(node, 'flex-1 min-w-0'))}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
     >
       {children}
@@ -747,14 +741,6 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
 
 export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
-
-  // "Fill evenly" (no explicit width) is the default and is what makes every
-  // un-sized Column share the row equally via the hardcoded flex-1 on
-  // ColumnEditor/ColumnPreview (see defaultFlexFill in registry.ts). Picking
-  // any other mode here sets an explicit style.width, which opts this Column
-  // out of that fill behavior — buildBoxSizingStyle/buildInlineStyle then
-  // pin flexGrow/flexShrink to 0 and flexBasis to 'auto' so the explicit
-  // width actually sticks instead of being overridden by the flex-1 class.
   const widthMode = typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'fill'
 
   return (
@@ -831,18 +817,6 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TEXT
 // ═══════════════════════════════════════════════════════════════════════════════
-// EDITING MODEL: single click selects (outline, drag handle, toolbar) like
-// any other block — it does NOT enter text editing. DOUBLE click calls
-// startEditing(), which swaps the static <p> out for a live Tiptap
-// <EditorContent>. Finishing happens on blur OR on selecting a different
-// block (see useRichTextEdit in richText.ts) — either way it commits
-// sanitized HTML back into node.props.content and swaps back to static.
-//
-// content is now an HTML STRING (e.g. "<p>Hello <strong>world</strong></p>"),
-// not plain text — TextPreview/the static branch of TextEditor both render
-// it via dangerouslySetInnerHTML rather than as a text node. Old
-// plain-string content still works fine here: Tiptap parses a plain string
-// as a single unformatted paragraph, so nothing needs migrating.
 
 export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const s = useNodeStyle(node)
@@ -850,13 +824,13 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const isSelected = selectedId === node.id
   const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getTextExtensions())
 
-if (isRichEditing) {
+  if (isRichEditing) {
     return (
       <div className="relative" style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
         <RichTextToolbar editor={editor} allowBlocks />
         <EditorContent
           editor={editor}
-          className={buildClassName(s, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none')}
+          className={buildClassName(s, withCustomCss(node, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none'))}
         />
       </div>
     )
@@ -866,7 +840,7 @@ if (isRichEditing) {
   return (
     <p
       onDoubleClick={e => { e.stopPropagation(); startEditing() }}
-      className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' '))}
+      className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
       dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : 'Double-click to edit text…' }}
     />
@@ -878,25 +852,13 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
   return (
     <p
       ref={animationRef}
-      className={buildClassName(s)}
+      className={buildClassName(s, customCssClass(node))}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
       dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
     />
   )
 }
 
-// NOTE: this panel used to also embed a <StylePanel/> call — removed
-// because ControlPanel's separate "Style" tab already renders the exact
-// same component for whatever's selected, so having it here too meant
-// Content and Style tabs showed 100% identical fields. This panel now only
-// holds what's actually unique to Text (its content) plus Animation.
-//
-// The textarea below still works as a plain-text fallback editor for
-// people who'd rather type than double-click the canvas — it reads/writes
-// the same node.props.content HTML string, just without any formatting
-// controls of its own. Typing here bypasses Tiptap entirely, so anything
-// typed is treated as plain text (no HTML parsing) — fine for quick edits,
-// just not where you'd add bold/links/etc.
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   return (
     <div className="space-y-5 p-4">
@@ -916,11 +878,6 @@ export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // HEADING
 // ═══════════════════════════════════════════════════════════════════════════════
-// Same double-click-to-edit model as Text above, but with a narrower
-// extension set (see buildHeadingExtensions in richText.ts — no lists/
-// blockquote, since a Heading is one line by design) and Enter commits
-// instead of inserting a line break (handled inside useRichTextEdit's
-// editorProps.handleKeyDown, checking node.type === 'heading').
 
 type HTag = 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'
 
@@ -931,13 +888,13 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const isSelected = selectedId === node.id
   const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getHeadingExtensions())
 
-if (isRichEditing) {
+  if (isRichEditing) {
     return (
       <div className="relative" style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
         <RichTextToolbar editor={editor} allowBlocks={false} />
         <EditorContent
           editor={editor}
-          className={buildClassName(s, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none')}
+          className={buildClassName(s, withCustomCss(node, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none'))}
         />
       </div>
     )
@@ -947,7 +904,7 @@ if (isRichEditing) {
   return (
     <Tag
       onDoubleClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing() }}
-      className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' '))}
+      className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
       dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : 'Double-click to edit heading…' }}
     />
@@ -960,16 +917,13 @@ export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRe
   return (
     <Tag
       ref={animationRef}
-      className={buildClassName(s)}
+      className={buildClassName(s, customCssClass(node))}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
       dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
     />
   )
 }
 
-// NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
-// The text input below is a plain-text fallback (same caveat as TextPanel's
-// textarea: bypasses Tiptap, no formatting applied to whatever's typed here).
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   return (
     <div className="space-y-5 p-4">
@@ -1005,14 +959,14 @@ export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
   }
 
   if (!src) return (
-    <div onClick={handleEmptyClick} className={buildClassName(s, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors')} style={{ ...buildInlineStyle(s, { skipSizing: true }), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
+    <div onClick={handleEmptyClick} className={buildClassName(s, withCustomCss(node, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
       <span className="text-xl">🖼️</span>
       <span className="text-xs font-medium">Click to choose an image</span>
     </div>
   )
 
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, 'block w-full')} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
+  return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, withCustomCss(node, 'block w-full'))} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
 }
 
 export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
@@ -1024,7 +978,7 @@ export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef,
       ref={animationRef}
       src={node.props.src as string}
       alt={(node.props.alt as string) || ''}
-      className={buildClassName(s, hasFixedWidth ? 'block' : 'max-w-full block')}
+      className={buildClassName(s, withCustomCss(node, hasFixedWidth ? 'block' : 'max-w-full block'))}
       style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s), ...animationStyle }}
     />
   )
@@ -1105,7 +1059,7 @@ function ButtonRender({
   return (
     <button
       ref={animationRef}
-      className={buildClassName(s, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`)}
+      className={buildClassName(s, withCustomCss(node, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
       {(node.props.label as string) || 'Button'}
@@ -1147,7 +1101,7 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
-  <div style={{ height: (node.props.height as number) ?? 40 }} className="w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none">
+  <div style={{ height: (node.props.height as number) ?? 40 }} className={withCustomCss(node, 'w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none')}>
     spacer {(node.props.height as number) ?? 40}px
   </div>
 )
@@ -1156,7 +1110,7 @@ export const SpacerPreview: React.FC<NodeComponentProps> = ({ node, animationRef
   <div
     ref={animationRef}
     style={{ height: (node.props.height as number) ?? 40, ...animationStyle }}
-    className="w-full"
+    className={withCustomCss(node, 'w-full')}
   />
 )
 
@@ -1180,14 +1134,14 @@ export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
 
 export const DividerEditor:  React.FC<NodeComponentProps> = ({ node }) => {
   const s = useNodeStyle(node)
-  return <hr className={buildClassName(s, 'w-full border-neutral-200')} style={buildInlineStyle(s, { skipSizing: true })} />
+  return <hr className={buildClassName(s, withCustomCss(node, 'w-full border-neutral-200'))} style={buildInlineStyle(s, { skipSizing: true })} />
 }
 export const DividerPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
   return (
     <hr
       ref={animationRef}
-      className={buildClassName(s, 'w-full')}
+      className={buildClassName(s, withCustomCss(node, 'w-full'))}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
     />
   )
