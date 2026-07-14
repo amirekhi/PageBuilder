@@ -1,7 +1,7 @@
 'use client'
 import React, { useState , useEffect } from 'react'
 
-import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, getBoxAlign, setBoxAlign } from './styleMapper'
+import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, BoxAlignY, getBoxAlign, setBoxAlign, getBoxAlignY, setBoxAlignY } from './styleMapper'
 import { AnimationProps, ANIMATION_EFFECTS, DEFAULT_ANIMATION, AnimationStyleSheet, EFFECT_KEYFRAME } from './animations'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -52,6 +52,10 @@ export function SelectField({
 // existing shorthand properties. This is the ONE spacing control used by
 // every panel now — SpacingField (below) is only for non-4-sided values
 // like Gap, which has no "sides" to speak of.
+//
+// NOTE: this writes plain numbers into mt/mb/ml/mr. Those same keys can also
+// hold 'auto' when written by AlignField's Position control below — whichever
+// control was used most recently wins, same duality ml/mr always had.
 
 type SideValue = number | 'auto' | undefined
 export interface BoxSides { top?: SideValue; right?: SideValue; bottom?: SideValue; left?: SideValue }
@@ -145,55 +149,106 @@ export function SpacingField({
   )
 }
 
-// ─── Box position (left / center / right) ──────────────────────────────────
-// Backed by ml/mr margins (see styleMapper's getBoxAlign/setBoxAlign), so
-// this is the one place that ever writes alignment — the wrapper in
-// SelectableShell and the node's own rendered element both read it from the
-// same ml/mr values, so they can't fall out of sync the way the old
-// class-only `centerContent` did.
+// ─── Box position (horizontal AND vertical self-positioning) ──────────────
+// Backed by ml/mr (horizontal) and mt/mb (vertical) margins — see
+// getBoxAlign/setBoxAlign and getBoxAlignY/setBoxAlignY in styleMapper.ts.
+//
+// 'none' is a real, distinct 4th state (for each axis) meaning NO override is
+// written — the parent's own Justify/Align fully controls this item. Picking
+// Left/Center/Right (or Top/Middle/Bottom) writes an explicit auto-margin,
+// which — per the CSS flex spec — absorbs free space on that axis BEFORE
+// justify-content/align-items gets a say. That's a legitimate per-item
+// override (like align-self), but it only works predictably now that there's
+// a real way to opt back OUT of it via 'none' — previously even clicking
+// "Left" (visually a no-op most of the time) silently wrote an auto-margin
+// that fought the parent's layout forever after, with no way back.
 //
 // NOTE ON NAMING: there are three unrelated things in this app that all
 // involve the word "align" —
 //   1. This control (AlignField): where THIS block sits within its parent
-//      when it's narrower than the parent (Left/Center/Right via margin).
+//      when it's narrower/shorter than the parent — self-positioning via
+//      margin, overriding the parent's Justify/Align for this one item.
 //   2. Flex "align items" (SectionPanel/ColumnsPanel "Align children" or
-//      "Align items"): how a container lines up its CHILDREN on the
-//      cross-axis. Different mechanism (CSS align-items, not margin).
+//      "Align items"): how a container lines up ALL its children by default
+//      on the cross-axis. Different mechanism (CSS align-items on the
+//      PARENT, not margin on the child) — and this control's 'none' state is
+//      exactly what lets #2 actually take effect for a given child.
 //   3. Text align (StylePanel "Text align"): how text sits INSIDE this
 //      block. Different mechanism again (CSS text-align).
-// Always labeled distinctly in the panels below — if you're renaming
-// labels, keep these three visually distinguishable from each other.
+// Always labeled distinctly in the panels below.
 
 export function AlignField({
-  style, onChange,
+  style, onChange, axis = 'both',
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
+  // 'both' (default) shows Horizontal + Vertical. Pass 'x' or 'y' to show
+  // only one axis for a panel where the other doesn't make sense.
+  axis?: 'x' | 'y' | 'both'
 }) {
-  const current = getBoxAlign(style)
-  const OPTIONS: { v: BoxAlign; icon: string; title: string }[] = [
-    { v: 'left',   icon: '⇤', title: 'Align left' },
-    { v: 'center', icon: '↔', title: 'Center' },
-    { v: 'right',  icon: '⇥', title: 'Align right' },
+  const currentX = getBoxAlign(style)
+  const currentY = getBoxAlignY(style)
+
+  const X_OPTIONS: { v: BoxAlign; icon: string; title: string }[] = [
+    { v: 'none',   icon: '·', title: "No override — follow the parent's Justify/Align" },
+    { v: 'left',   icon: '⇤', title: 'Pin left' },
+    { v: 'center', icon: '↔', title: 'Center horizontally' },
+    { v: 'right',  icon: '⇥', title: 'Pin right' },
   ]
+  const Y_OPTIONS: { v: BoxAlignY; icon: string; title: string }[] = [
+    { v: 'none',   icon: '·', title: "No override — follow the parent's Justify/Align" },
+    { v: 'top',    icon: '⇡', title: 'Pin top' },
+    { v: 'middle', icon: '↕', title: 'Center vertically' },
+    { v: 'bottom', icon: '⇣', title: 'Pin bottom' },
+  ]
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-neutral-500 w-20 shrink-0">Position</span>
-      <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
-        {OPTIONS.map(o => (
-          <button
-            key={o.v}
-            title={o.title}
-            onClick={() => onChange(setBoxAlign(o.v))}
-            className={[
-              'flex-1 py-1 text-xs transition-colors',
-              current === o.v ? 'bg-violet-600 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50',
-            ].join(' ')}
-          >
-            {o.icon}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-2">
+      {(axis === 'both' || axis === 'x') && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">Horizontal</span>
+          <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+            {X_OPTIONS.map(o => (
+              <button
+                key={o.v}
+                title={o.title}
+                onClick={() => onChange(setBoxAlign(o.v))}
+                className={[
+                  'flex-1 py-1 text-xs transition-colors',
+                  currentX === o.v ? 'bg-violet-600 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50',
+                ].join(' ')}
+              >
+                {o.icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {(axis === 'both' || axis === 'y') && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">Vertical</span>
+          <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+            {Y_OPTIONS.map(o => (
+              <button
+                key={o.v}
+                title={o.title}
+                onClick={() => onChange(setBoxAlignY(o.v))}
+                className={[
+                  'flex-1 py-1 text-xs transition-colors',
+                  currentY === o.v ? 'bg-violet-600 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50',
+                ].join(' ')}
+              >
+                {o.icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {axis === 'both' && (
+        <p className="text-[10px] text-neutral-400">
+          Pinning an item here overrides its parent's Justify/Align for THIS item specifically (like CSS align-self). Pick "·" to let the parent's own layout control it instead — useful when you want the container's Justify/Align to actually apply.
+        </p>
+      )}
     </div>
   )
 }
@@ -415,7 +470,7 @@ export function StylePanel({
       {!hideBoxModel && (
         <FieldGroup label="Position">
           <AlignField style={style} onChange={onChange} />
-          <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
+          <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width/height is smaller than its container</p>
         </FieldGroup>
       )}
 
@@ -445,12 +500,12 @@ export function StylePanel({
               bottom: style.mb ?? style.my, left: style.ml ?? style.mx,
             }}
             onChange={next => onChange({
-              mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
-              mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+              mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
+              mb: next.bottom as number | 'auto' | undefined, ml: next.left as number | 'auto' | undefined,
             })}
           />
           <p className="text-[10px] text-neutral-400 -mt-1">
-            Left/Right margin is overridden by the Position control above whenever it's set to Center or Right
+            Margin here is overridden by the Position control above whenever Position is set to anything other than "·" (None) on the matching axis
           </p>
         </FieldGroup>
       )}

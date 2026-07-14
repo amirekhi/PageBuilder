@@ -116,7 +116,7 @@ export const NODE_REGISTRY: Record<NodeType, NodeDefinition> = {
     // this same default).
     defaultFullWidth: true,
     defaultProps: {
-      style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 6, maxWidth: '5xl', centerContent: true },
+      style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 6, maxWidth: 'full', centerContent: true },
     },
   },
 

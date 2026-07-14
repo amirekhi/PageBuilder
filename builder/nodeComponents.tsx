@@ -1,57 +1,36 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import { NodeComponentProps, PanelProps, PageNode } from './types'
 import {
   StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle,
-  buildFlexLayoutClassName, buildFlexLayoutStyle,
   buildSectionOuterStyle, buildSectionOuterClassName, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
 import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel } from './panelComponents'
 import { useBuilderStore } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
 import { AnimationProps } from './animations'
+import { EditorContent } from '@tiptap/react'
+import { useRichTextEdit, buildTextExtensions, buildHeadingExtensions } from './richText'
+import { RichTextToolbar } from './RichTextToolbar'
 
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
   patchNodeStyle(node, onChange, partial)
 }
 
-function useInlineEdit(node: PageNode, prop: string = 'content') {
-  const updateProps = useBuilderStore(s => s.updateProps)
-  const selectedId  = useBuilderStore(s => s.selectedId)
-  const isSelected  = selectedId === node.id
-  const ref         = useRef<HTMLElement>(null)
-  const isFocused   = useRef(false)
+// Built once and shared across every Text/Heading node — these are
+// stateless extension configs (no per-instance state lives on them), so
+// there's no reason to rebuild them per-render or per-node the way the
+// editor instance itself (per-node, via useEditor inside useRichTextEdit)
+// has to be.
+let _textExtensions: ReturnType<typeof buildTextExtensions> | null = null
+function getTextExtensions() {
+  return _textExtensions ??= buildTextExtensions()
+}
 
-  useEffect(() => {
-    if (!ref.current || isFocused.current) return
-    const val = (node.props[prop] as string) ?? ''
-    if (ref.current.textContent !== val) ref.current.textContent = val
-  }, [node.props, prop])
-
-  const onFocus = useCallback(() => { isFocused.current = true }, [])
-
-  const onBlur = useCallback(() => {
-    isFocused.current = false
-    if (!ref.current) return
-    updateProps(node.id, { [prop]: ref.current.textContent ?? '' })
-  }, [node.id, prop, updateProps])
-
-  const onKeyDown = useCallback((e: React.KeyboardEvent) => {
-    e.stopPropagation()
-    if (e.key === 'Escape') ref.current?.blur()
-    if (e.key === 'Enter' && !e.shiftKey && node.type === 'heading') {
-      e.preventDefault()
-      ref.current?.blur()
-    }
-  }, [node.type])
-
-  const onInput = useCallback(() => {
-    if (!ref.current) return
-    updateProps(node.id, { [prop]: ref.current.textContent ?? '' })
-  }, [node.id, prop, updateProps])
-
-  return { ref, isSelected, onFocus, onBlur, onKeyDown, onInput }
+let _headingExtensions: ReturnType<typeof buildHeadingExtensions> | null = null
+function getHeadingExtensions() {
+  return _headingExtensions ??= buildHeadingExtensions()
 }
 
 function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
@@ -70,23 +49,25 @@ function useRootAdjustedStyle(node: PageNode, s: StyleProps): StyleProps {
 // SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// BUG FIXED HERE: SectionEditor's outer <section> previously hardcoded
-// className="w-full relative" as a plain string, completely bypassing
-// buildClassName/buildSectionOuterClassName. buildSectionOuterStyle (inline
-// `style` object) already carried bgColor/textColor/borderColor/opacity/
-// margin — so those looked right in the Editor. But rounded/borderWidth/
-// borderStyle/shadow are TAILWIND CLASSES, not inline styles — they only
-// ever come from buildClassName-family functions. Since the className was a
-// hardcoded string, those four properties never reached the DOM in the
-// Editor at all, even though state was updating correctly (confirmed by
-// Preview, whose <section> already called buildClassName(s, 'w-full
-// relative') and therefore always showed them). Same root cause as the
-// earlier text-color bug — just the class-based half of the styling system
-// instead of the inline-style half. Fix: route through
-// buildSectionOuterClassName(s, 'w-full relative') here too, which strips
-// out only the classes that belong on the INNER column (layout/sizing) and
-// keeps everything else (rounded, border, shadow, typography) — see
-// styleMapper.ts for the exact filtering logic.
+// SectionEditor and SectionPreview must mirror EACH OTHER structurally — both
+// split into an OUTER band (background/border/rounded/shadow/opacity/margin,
+// full width, never a flex/grid container on its own... except that it IS one:
+// see buildSectionOuterStyle in styleMapper.ts, which deliberately applies the
+// SAME display/justify/align as the inner div. This is what lets Justify="end"/
+// Align="end" push the ENTIRE inner content block to the bottom-right of the
+// section's own box whenever minHeight gives it extra room (e.g. a hero section
+// taller than its content) — while the inner div's OWN justify/align (also
+// applied via buildSectionInnerStyle) independently positions that Section's
+// actual CHILDREN within the content block itself. Both views must build this
+// identically or Editor/Preview will visually disagree.
+//
+// Preview has no SelectableShell wrapper handling width (Editor does), so its
+// outer band applies sizing directly (no skipSizing) while Editor's does
+// (skipSizing: true) to avoid double-applying percentage widths.
+//
+// NOTE ON ANIMATIONS: the editor canvas deliberately never plays animations —
+// EditorComponent is never passed animationRef/animationStyle. Animations only
+// ever play in Preview (see Renderer.tsx).
 
 export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const rawStyle       = useNodeStyle(node)
@@ -122,13 +103,17 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, a
   return (
     <section
       ref={animationRef}
-      className={buildClassName(s, 'w-full relative')}
-      style={{ ...buildInlineStyle(s), minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64, ...animationStyle }}
+      className={buildSectionOuterClassName(s, 'w-full relative')}
+      style={{
+        ...buildSectionOuterStyle(s),
+        minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64,
+        ...animationStyle,
+      }}
     >
       {overlayStyle && <div style={overlayStyle} aria-hidden />}
       <div
-        className={[buildFlexLayoutClassName(s), 'w-full', hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
-        style={buildFlexLayoutStyle(s)}
+        className={[buildSectionInnerClassName(s), hasBackground ? 'relative z-10' : ''].filter(Boolean).join(' ')}
+        style={buildSectionInnerStyle(s)}
       >
         {children}
       </div>
@@ -139,14 +124,31 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, a
 export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
+  const display = s.display ?? 'flex'
 
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Layout">
-        <SelectField label="Display"   value={s.display ?? 'flex'} options={['flex','block','grid']} onChange={v => patchStyle(node, onChange, { display: v as StyleProps['display'] })} />
-        <SelectField label="Direction" value={s.flexDir ?? 'col'}  options={['col','row','row-reverse','col-reverse']} onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })} />
-        <SelectField label="Justify"        value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
-        <SelectField label="Align children" value={s.align ?? 'start'}  options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+        <SelectField label="Display"   value={display} options={['flex','block','grid']} onChange={v => patchStyle(node, onChange, { display: v as StyleProps['display'] })} />
+
+        {display === 'grid' ? (
+          <SelectField
+            label="Columns"
+            value={String(s.gridCols ?? 2)}
+            options={['1','2','3','4','5','6']}
+            onChange={v => patchStyle(node, onChange, { gridCols: (+v) as StyleProps['gridCols'] })}
+          />
+        ) : display === 'flex' && (
+          <SelectField label="Direction" value={s.flexDir ?? 'col'}  options={['col','row','row-reverse','col-reverse']} onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })} />
+        )}
+
+        {display !== 'block' && (
+          <>
+            <SelectField label="Justify"        value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+            <SelectField label="Align children" value={s.align ?? 'start'}  options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+          </>
+        )}
+
         <SpacingField label="Gap"      value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
       </FieldGroup>
 
@@ -166,8 +168,8 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           label="Margin"
           values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
           onChange={next => patchStyle(node, onChange, {
-            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
-            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+            mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | 'auto' | undefined, ml: next.left as number | 'auto' | undefined,
           })}
         />
       </FieldGroup>
@@ -178,7 +180,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Where this Section sits if its Max Width is narrower than the page</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">Where this Section's content block sits within the Section's own box if there's extra room (e.g. minHeight taller than the content)</p>
       </FieldGroup>
 
       <FieldGroup label="Background">
@@ -461,7 +463,7 @@ export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width is narrower than its container</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width/height is smaller than its container</p>
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}
@@ -709,9 +711,9 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
     <div className="space-y-5 p-4">
       <FieldGroup label="Layout">
         <SpacingField label="Gap"          value={s.gap}    onChange={v => patchStyle(node, onChange, { gap: v })} />
-        <SelectField  label="Align items"  value={s.align ?? 'stretch'} options={['start','center','end','stretch']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+        <SelectField  label="Align items"  value={s.align ?? 'stretch'} options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
         <SelectField  label="Justify"      value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Controls how the Columns inside line up — each Column's own position is set on the Column itself via Justify above, not on the Column</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">Justify only has room to act once at least one Column below is set to something other than its default "Fill evenly" width — otherwise every Column grows to fill the row and there's no leftover space to distribute.</p>
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}
@@ -745,8 +747,56 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
 
 export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+
+  // "Fill evenly" (no explicit width) is the default and is what makes every
+  // un-sized Column share the row equally via the hardcoded flex-1 on
+  // ColumnEditor/ColumnPreview (see defaultFlexFill in registry.ts). Picking
+  // any other mode here sets an explicit style.width, which opts this Column
+  // out of that fill behavior — buildBoxSizingStyle/buildInlineStyle then
+  // pin flexGrow/flexShrink to 0 and flexBasis to 'auto' so the explicit
+  // width actually sticks instead of being overridden by the flex-1 class.
+  const widthMode = typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'fill'
+
   return (
     <div className="space-y-5 p-4">
+      <FieldGroup label="Width">
+        <SelectField
+          label="Mode"
+          value={widthMode}
+          options={[
+            { label: 'Fill evenly (default)', value: 'fill' },
+            { label: 'Fixed pixels',          value: 'fixed' },
+            { label: 'Half',                  value: '1/2' },
+            { label: 'Third',                 value: '1/3' },
+            { label: 'Two thirds',            value: '2/3' },
+            { label: 'Quarter',               value: '1/4' },
+            { label: 'Three quarters',        value: '3/4' },
+          ]}
+          onChange={v => {
+            if (v === 'fill') {
+              patchStyle(node, onChange, { width: undefined, widthUnit: undefined })
+            } else if (v === 'fixed') {
+              patchStyle(node, onChange, { width: typeof s.width === 'number' ? s.width : 240, widthUnit: 'px' })
+            } else {
+              patchStyle(node, onChange, { width: v as StyleProps['width'], widthUnit: undefined })
+            }
+          }}
+        />
+        {widthMode === 'fixed' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">Width (px)</span>
+            <input
+              type="number" min={40} max={1000} step={10}
+              className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
+              value={s.width as number} onChange={e => patchStyle(node, onChange, { width: +e.target.value || 0, widthUnit: 'px' })}
+            />
+          </div>
+        )}
+        <p className="text-[10px] text-neutral-400">
+          "Fill evenly" makes every un-sized Column in this row share the space equally. Set a Column to anything else here to give the Columns block's own Justify option (in its own panel) room to actually distribute leftover space.
+        </p>
+      </FieldGroup>
+
       <FieldGroup label="Padding">
         <BoxSpacingField
           label="Padding"
@@ -762,8 +812,8 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           label="Margin"
           values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
           onChange={next => patchStyle(node, onChange, {
-            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
-            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+            mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | 'auto' | undefined, ml: next.left as number | 'auto' | undefined,
           })}
         />
       </FieldGroup>
@@ -781,19 +831,44 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TEXT
 // ═══════════════════════════════════════════════════════════════════════════════
+// EDITING MODEL: single click selects (outline, drag handle, toolbar) like
+// any other block — it does NOT enter text editing. DOUBLE click calls
+// startEditing(), which swaps the static <p> out for a live Tiptap
+// <EditorContent>. Finishing happens on blur OR on selecting a different
+// block (see useRichTextEdit in richText.ts) — either way it commits
+// sanitized HTML back into node.props.content and swaps back to static.
+//
+// content is now an HTML STRING (e.g. "<p>Hello <strong>world</strong></p>"),
+// not plain text — TextPreview/the static branch of TextEditor both render
+// it via dangerouslySetInnerHTML rather than as a text node. Old
+// plain-string content still works fine here: Tiptap parses a plain string
+// as a single unformatted paragraph, so nothing needs migrating.
 
 export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const s = useNodeStyle(node)
-  const { ref, isSelected, onFocus, onBlur, onKeyDown, onInput } = useInlineEdit(node, 'content')
+  const selectedId = useBuilderStore(st => st.selectedId)
+  const isSelected = selectedId === node.id
+  const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getTextExtensions())
+
+if (isRichEditing) {
+    return (
+      <div className="relative" style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
+        <RichTextToolbar editor={editor} allowBlocks />
+        <EditorContent
+          editor={editor}
+          className={buildClassName(s, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none')}
+        />
+      </div>
+    )
+  }
+
+  const hasContent = !!(node.props.content as string)
   return (
     <p
-      ref={ref as React.RefObject<HTMLParagraphElement>}
-      contentEditable={isSelected}
-      suppressContentEditableWarning
-      onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown} onInput={onInput}
-      className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text ring-1 ring-violet-300 ring-inset rounded' : '', !node.props.content && !isSelected ? 'text-neutral-300 italic' : ''].join(' '))}
+      onDoubleClick={e => { e.stopPropagation(); startEditing() }}
+      className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' '))}
       style={buildInlineStyle(s, { skipSizing: true })}
-      data-placeholder="Click to edit text…"
+      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : 'Double-click to edit text…' }}
     />
   )
 }
@@ -805,9 +880,8 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
       ref={animationRef}
       className={buildClassName(s)}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
-    >
-      {node.props.content as string}
-    </p>
+      dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
+    />
   )
 }
 
@@ -816,13 +890,20 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
 // same component for whatever's selected, so having it here too meant
 // Content and Style tabs showed 100% identical fields. This panel now only
 // holds what's actually unique to Text (its content) plus Animation.
+//
+// The textarea below still works as a plain-text fallback editor for
+// people who'd rather type than double-click the canvas — it reads/writes
+// the same node.props.content HTML string, just without any formatting
+// controls of its own. Typing here bypasses Tiptap entirely, so anything
+// typed is treated as plain text (no HTML parsing) — fine for quick edits,
+// just not where you'd add bold/links/etc.
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
         <label className="block text-xs text-neutral-500 mb-1">Text</label>
         <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
-        <p className="text-[10px] text-neutral-400 mt-1">Tip: click text on the canvas to edit inline</p>
+        <p className="text-[10px] text-neutral-400 mt-1">Tip: double-click the text on the canvas for the full formatting toolbar (bold, links, lists, alignment…)</p>
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}
@@ -835,21 +916,40 @@ export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // HEADING
 // ═══════════════════════════════════════════════════════════════════════════════
+// Same double-click-to-edit model as Text above, but with a narrower
+// extension set (see buildHeadingExtensions in richText.ts — no lists/
+// blockquote, since a Heading is one line by design) and Enter commits
+// instead of inserting a line break (handled inside useRichTextEdit's
+// editorProps.handleKeyDown, checking node.type === 'heading').
 
 type HTag = 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'
 
 export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const s   = useNodeStyle(node)
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
-  const { ref, isSelected, onFocus, onBlur, onKeyDown, onInput } = useInlineEdit(node, 'content')
+  const selectedId = useBuilderStore(st => st.selectedId)
+  const isSelected = selectedId === node.id
+  const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getHeadingExtensions())
+
+if (isRichEditing) {
+    return (
+      <div className="relative" style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
+        <RichTextToolbar editor={editor} allowBlocks={false} />
+        <EditorContent
+          editor={editor}
+          className={buildClassName(s, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none')}
+        />
+      </div>
+    )
+  }
+
+  const hasContent = !!(node.props.content as string)
   return (
     <Tag
-      ref={ref as React.RefObject<HTMLHeadingElement>}
-      contentEditable={isSelected}
-      suppressContentEditableWarning
-      onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown} onInput={onInput}
-      className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text ring-1 ring-violet-300 ring-inset rounded' : ''].join(' '))}
+      onDoubleClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing() }}
+      className={buildClassName(s, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' '))}
       style={buildInlineStyle(s, { skipSizing: true })}
+      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : 'Double-click to edit heading…' }}
     />
   )
 }
@@ -862,13 +962,14 @@ export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRe
       ref={animationRef}
       className={buildClassName(s)}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
-    >
-      {node.props.content as string}
-    </Tag>
+      dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
+    />
   )
 }
 
 // NOTE: also used to embed <StylePanel/> — removed, same reason as TextPanel.
+// The text input below is a plain-text fallback (same caveat as TextPanel's
+// textarea: bypasses Tiptap, no formatting applied to whatever's typed here).
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   return (
     <div className="space-y-5 p-4">
@@ -876,7 +977,7 @@ export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <label className="block text-xs text-neutral-500 mb-1">Text</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
         <SelectField label="Tag" value={(node.props.tag as string) ?? 'h2'} options={['h1','h2','h3','h4','h5','h6']} onChange={v => onChange({ tag: v })} />
-        <p className="text-[10px] text-neutral-400 mt-1">Tip: click the heading on the canvas to edit inline</p>
+        <p className="text-[10px] text-neutral-400 mt-1">Tip: double-click the heading on the canvas for the full formatting toolbar</p>
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}
@@ -1031,7 +1132,7 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider than the button itself</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider/taller than the button itself</p>
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}
@@ -1104,14 +1205,14 @@ export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           label="Margin"
           values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
           onChange={next => patchStyle(node, onChange, {
-            mt: next.top as number | undefined, mr: next.right as number | 'auto' | undefined,
-            mb: next.bottom as number | undefined, ml: next.left as number | 'auto' | undefined,
+            mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
+            mb: next.bottom as number | 'auto' | undefined, ml: next.left as number | 'auto' | undefined,
           })}
         />
       </FieldGroup>
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only has a visible effect if this Divider's width has been resized narrower than its container</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">Only has a visible effect if this Divider's width/height has been resized smaller than its container</p>
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}

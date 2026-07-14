@@ -17,19 +17,31 @@ interface SelectableShellProps {
 export function SelectableShell({ node, children }: SelectableShellProps) {
   const selectedId    = useBuilderStore(s => s.selectedId)
   const draggingId    = useBuilderStore(s => s.draggingId)
+  const richEditingId = useBuilderStore(s => s.richEditingId)
   const selectNode    = useBuilderStore(s => s.selectNode)
   const deleteNode    = useBuilderStore(s => s.deleteNode)
   const duplicateNode = useBuilderStore(s => s.duplicateNode)
   const rootId        = useBuilderStore(s => s.rootId)
   const isSelected    = selectedId === node.id
   const isDragging    = draggingId === node.id
-  const isRoot        = node.id === rootId
-  const isContainer   = NODE_REGISTRY[node.type]?.isContainer ?? false
-  const ref           = useRef<HTMLDivElement>(null)
+  // While this exact node has a live Tiptap editor mounted (double-clicked
+  // into rich-editing — see useRichTextEdit in richText.ts), suppress this
+  // component's own floating toolbar and resize handles entirely, and
+  // disable dragging. Two reasons: (1) RichTextToolbar renders its OWN
+  // floating toolbar in roughly the same spot — showing both at once
+  // produced two overlapping toolbars crowded right on top of the text
+  // instead of one clean one above it; (2) dragging/duplicating/deleting/
+  // resizing a block while actively typing inside it doesn't make sense —
+  // there's no clean "commit the edit first" story for any of those.
+  const isRichEditing  = richEditingId === node.id
+  const isRoot         = node.id === rootId
+  const isContainer    = NODE_REGISTRY[node.type]?.isContainer ?? false
+  const ref            = useRef<HTMLDivElement>(null)
 
   // Everything gets resize handles except the root node (the page canvas
-  // itself isn't resizable).
-  const canResize = !isRoot
+  // itself isn't resizable) and a node that's currently rich-editing (see
+  // above).
+  const canResize = !isRoot && !isRichEditing
 
   // The wrapper (this div) is the thing that actually participates in the
   // parent's layout (flex item inside Columns/Section, etc). It needs to
@@ -81,7 +93,7 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
 
   const { attributes, listeners, setNodeRef, setActivatorNodeRef } = useDraggable({
     id:       node.id,
-    disabled: isRoot,
+    disabled: isRoot || isRichEditing,
     data:     { nodeId: node.id, type: node.type },
   })
 
@@ -133,8 +145,10 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
       }}
       {...attributes}
     >
-      {/* Floating toolbar — only when selected */}
-      {isSelected && !isRoot && (
+      {/* Floating toolbar — only when selected, and never while this node
+          is rich-editing (RichTextToolbar takes over that same visual
+          slot instead — see the isRichEditing comment above). */}
+      {isSelected && !isRoot && !isRichEditing && (
         <div
           style={{ position: 'absolute', top: -34, left: 0, zIndex: 1000 }}
           className="flex items-center gap-0.5 bg-white border border-neutral-200 rounded-lg shadow-lg px-1.5 py-1 pointer-events-auto"
@@ -158,7 +172,8 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
 
       {children}
 
-      {/* Drag-to-resize handles — only when selected and this type supports it */}
+      {/* Drag-to-resize handles — only when selected, this type supports
+          it, and it's not currently rich-editing (see canResize above). */}
       {isSelected && canResize && (
         <ResizeHandles node={node} shellRef={ref} />
       )}

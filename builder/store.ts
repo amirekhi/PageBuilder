@@ -45,7 +45,7 @@ const ROOT_ID = 'root'
 const INITIAL_NODES: NodeMap = {
   [ROOT_ID]: {
     id: ROOT_ID, type: 'section',
-    props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 6, maxWidth: '5xl', centerContent: true } },
+    props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 6, maxWidth: 'full', centerContent: true } },
     children: [], parentId: null,
   },
 }
@@ -118,6 +118,19 @@ interface BuilderStore {
   // TopBar — a totally separate component — can trigger it via a button.
   previewReplayNonce: number
 
+  // Which node (if any) currently has a live Tiptap editor mounted in
+  // rich-editing mode (see useRichTextEdit in richText.ts — set true on
+  // startEditing, cleared on commitAndClose). SelectableShell reads this to
+  // suppress its own floating toolbar and disable dragging for that one
+  // node while it's active: dragging/duplicating/deleting mid-edit doesn't
+  // make sense, and showing SelectableShell's toolbar AND RichTextToolbar
+  // at the same time was producing two overlapping floating toolbars
+  // crowded right on top of the text. Only one node can hold this at a
+  // time (starting a new rich edit anywhere always replaces it — there's
+  // never two active simultaneously since a double-click first triggers a
+  // single-click select elsewhere, which already runs any pending commit).
+  richEditingId: string | null
+
   past:         NodeMap[]
   future:       NodeMap[]
 
@@ -135,6 +148,7 @@ interface BuilderStore {
   setEditingBreakpoint: (bp: PreviewWidth) => void
   setCanvasScale:       (scale: number) => void
   replayAnimations:     () => void
+  setRichEditing:       (id: string | null) => void
   selectNode:      (id: string | null) => void
   setDragging:     (id: string | null) => void
   setResizing:     (id: string | null) => void
@@ -165,6 +179,7 @@ export const useBuilderStore = create<BuilderStore>()(
       editingBreakpoint: 'desktop',
       canvasScale: 1,
       previewReplayNonce: 0,
+      richEditingId: null,
       past:         [],
       future:       [],
 
@@ -184,6 +199,7 @@ export const useBuilderStore = create<BuilderStore>()(
       setEditingBreakpoint: (bp)   => set(s => { s.editingBreakpoint = bp }),
       setCanvasScale:       (scale) => set(s => { s.canvasScale = scale }),
       replayAnimations:     () => set(s => { s.previewReplayNonce += 1 }),
+      setRichEditing:       (id) => set(s => { s.richEditingId = id }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
       setResizing:     (id)   => set(s => { s.resizingId = id }),

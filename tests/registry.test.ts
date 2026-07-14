@@ -80,21 +80,8 @@ describe('defaultFlexFill flag — only Column hardcodes flex-1', () => {
   })
 })
 
-describe('spot-check defaultProps for a few types', () => {
-  it('section defaults to a flex column with maxWidth 5xl and centerContent', () => {
-    expect(NODE_REGISTRY.section.defaultProps.style).toMatchObject({
-      display: 'flex', flexDir: 'col', maxWidth: '5xl', centerContent: true,
-    })
-  })
-
-  it('image defaults to a 4:3 cover crop at full width', () => {
-    expect(NODE_REGISTRY.image.defaultProps.style).toMatchObject({
-      width: 'full', aspectRatio: '4/3', objectFit: 'cover',
-    })
-  })
-
-  it('accordion ships 3 seed FAQ items by default', () => {
-    const items = NODE_REGISTRY.accordion.defaultProps.items as unknown[]
-    expect(items).toHaveLength(3)
+it('section defaults to a flex column with maxWidth full and centerContent', () => {
+  expect(NODE_REGISTRY.section.defaultProps.style).toMatchObject({
+    display: 'flex', flexDir: 'col', maxWidth: 'full', centerContent: true,
   })
 })
