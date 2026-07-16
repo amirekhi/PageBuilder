@@ -106,3 +106,35 @@ export function fakeUploadFile(file: File): Promise<MediaItem> {
     reader.readAsDataURL(file)
   })
 }
+
+// Turns an already-in-hand data URL (e.g. what Filerobot's onSave hands
+// back as imageBase64 — see ImageEditorModal.tsx) into a proper MediaItem,
+// the same shape fakeUploadFile produces. This is what lets an edited image
+// get added back into the media library (via addUploadedMedia) instead of
+// only ever being applied to the one block that launched the editor —
+// mirrors fakeUploadFile's Image()-based width/height measurement, just
+// skipping the FileReader step since there's no File object here, only the
+// data URL string the editor already produced.
+export function mediaItemFromDataUrl(dataUrl: string, name = 'edited-image.png'): Promise<MediaItem> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      // Rough byte-size estimate from the base64 payload length — base64
+      // encodes 3 bytes as 4 characters, so this is a standard approximation.
+      const base64Length = dataUrl.length - (dataUrl.indexOf(',') + 1)
+      const approxBytes   = Math.round(base64Length * 0.75)
+      resolve({
+        id:        makeId(),
+        url:       dataUrl,
+        name,
+        alt:       name.replace(/\.[^/.]+$/, ''),
+        width:     img.width,
+        height:    img.height,
+        category:  'photo',
+        sizeLabel: `${Math.round(approxBytes / 1024)} KB`,
+      })
+    }
+    img.onerror = () => reject(new Error('Could not read edited image'))
+    img.src = dataUrl
+  })
+}

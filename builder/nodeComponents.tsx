@@ -311,6 +311,7 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-neutral-400 text-xl">🙂</div>}
         </button>
         {src && <button onClick={() => onChange({ src: '' })} className="w-full mt-2 text-xs font-medium text-neutral-400 hover:text-red-500 py-1.5 rounded-md hover:bg-red-50 transition-colors">Remove photo (use initials)</button>}
+
         <label className="block text-xs text-neutral-500 mt-3 mb-1">Initials (shown if no image)</label>
         <input maxLength={2} className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.initials as string) ?? ''} onChange={e => onChange({ initials: e.target.value.toUpperCase() })} />
       </FieldGroup>
@@ -1004,6 +1005,17 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
             : <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-neutral-400"><span className="text-xl">🖼️</span><span className="text-xs font-medium">Browse media library</span></div>}
         </button>
         {src && <button onClick={handleBrowse} className="w-full mt-2 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">Replace image</button>}
+        {src && (
+          <button
+          onClick={() => {
+    console.log('Edit image clicked, src:', src)
+    useBuilderStore.getState().openImageEditor(src, editedDataUrl => onChange({ src: editedDataUrl }))
+    console.log('isImageEditorOpen now:', useBuilderStore.getState().isImageEditorOpen)
+  }}  className="w-full mt-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+          >
+            Edit image
+          </button>
+        )}
         <label className="block text-xs text-neutral-500 mt-3 mb-1">URL (or paste a link)</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="https://…" value={src} onChange={e => onChange({ src: e.target.value })} />
         <label className="block text-xs text-neutral-500 mt-2 mb-1">Alt text</label>

@@ -89,6 +89,7 @@ export const PREVIEW_WIDTHS: Record<PreviewWidth, { px: number; label: string; i
 }
 
 type MediaPickCallback = (item: MediaItem) => void
+type ImageEditCallback = (editedDataUrl: string) => void
 
 interface BuilderStore {
   nodes:        NodeMap
@@ -103,15 +104,6 @@ interface BuilderStore {
   canvasScale: number
   previewReplayNonce: number
   richEditingId: string | null
-
-  // Raw CSS text (with {{WRAPPER}} tokens for per-node scoping — per-node
-  // custom CSS itself lives in each node's own props.customCss, written
-  // through the ordinary updateProps action so it's automatically
-  // undoable) applied page-wide, with no per-node scoping at all. Kept as
-  // plain page-level config rather than undoable content — same treatment
-  // `mode`/`previewWidth` already get — so typing here doesn't spam the
-  // undo stack on every keystroke. See customCss.ts for how this and each
-  // node's props.customCss get compiled into a real <style> tag.
   globalCustomCss: string
 
   past:         NodeMap[]
@@ -120,6 +112,17 @@ interface BuilderStore {
   mediaLibrary:      MediaItem[]
   isMediaPickerOpen: boolean
   mediaPickCallback: MediaPickCallback | null
+
+  // Image editor (see ImageEditorModal.tsx). Sibling to the media picker
+  // above, not a replacement — the media picker chooses WHICH image; the
+  // image editor fine-tunes the one already chosen. Same callback-based
+  // shape deliberately, so it drops into the existing pattern instead of
+  // inventing a new one: openImageEditor(src, onSave) hands back an edited
+  // data URL through onSave exactly the way openMediaPicker(onPick) hands
+  // back a MediaItem through onPick.
+  isImageEditorOpen:    boolean
+  imageEditorSrc:       string | null
+  imageEditorCallback:  ImageEditCallback | null
 
   selectedNode:    () => PageNode | null
   canUndo:         () => boolean
@@ -146,6 +149,9 @@ interface BuilderStore {
   openMediaPicker:  (onPick: MediaPickCallback) => void
   closeMediaPicker: () => void
   addUploadedMedia: (item: MediaItem) => void
+
+  openImageEditor:  (src: string, onSave: ImageEditCallback) => void
+  closeImageEditor: () => void
 }
 
 export const useBuilderStore = create<BuilderStore>()(
@@ -169,6 +175,10 @@ export const useBuilderStore = create<BuilderStore>()(
       mediaLibrary:      SEED_MEDIA,
       isMediaPickerOpen: false,
       mediaPickCallback: null,
+
+      isImageEditorOpen:   false,
+      imageEditorSrc:      null,
+      imageEditorCallback: null,
 
       selectedNode: () => {
         const { nodes, selectedId } = get()
@@ -282,6 +292,18 @@ export const useBuilderStore = create<BuilderStore>()(
 
       addUploadedMedia: (item) => set(s => {
         s.mediaLibrary.unshift(item)
+      }),
+
+      openImageEditor: (src, onSave) => set(s => {
+        s.isImageEditorOpen   = true
+        s.imageEditorSrc      = src
+        s.imageEditorCallback = onSave
+      }),
+
+      closeImageEditor: () => set(s => {
+        s.isImageEditorOpen   = false
+        s.imageEditorSrc      = null
+        s.imageEditorCallback = null
       }),
     }))
   )
