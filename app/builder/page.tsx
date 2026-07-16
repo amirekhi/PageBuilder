@@ -5,6 +5,7 @@ import { EditorRenderer, PreviewRenderer } from '@/builder/Renderers'
 import { ControlPanel } from '@/builder/ControlPanel'
 import { TopBar } from '@/builder/TopBar'
 import { MediaPickerModal } from '@/builder/MediaPickerModal'
+import { ImageEditorModal } from '@/builder/ImageEditorModal'
 
 export default function BuilderPage() {
   const mode   = useBuilderStore(s => s.mode)
@@ -27,6 +28,7 @@ export default function BuilderPage() {
 
       {/* Mounted once, controlled entirely via store state */}
       <MediaPickerModal />
+      <ImageEditorModal />
     </div>
   )
 }
