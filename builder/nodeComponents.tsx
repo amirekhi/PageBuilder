@@ -129,19 +129,36 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Display"   value={display} options={['flex','block','grid']} onChange={v => patchStyle(node, onChange, { display: v as StyleProps['display'] })} />
 
         {display === 'grid' ? (
-          <SelectField
-            label="Columns"
-            value={String(s.gridCols ?? 2)}
-            options={['1','2','3','4','5','6']}
-            onChange={v => patchStyle(node, onChange, { gridCols: (+v) as StyleProps['gridCols'] })}
-          />
+          <>
+            <SelectField
+              label="Columns"
+              value={String(s.gridCols ?? 2)}
+              options={['1','2','3','4','5','6']}
+              onChange={v => patchStyle(node, onChange, { gridCols: (+v) as StyleProps['gridCols'] })}
+            />
+            <SelectField
+              label="Rows"
+              value={String(s.gridRows ?? 'auto')}
+              options={[{ label: 'Auto (as needed)', value: 'auto' }, '1','2','3','4','5','6']}
+              onChange={v => patchStyle(node, onChange, { gridRows: (v === 'auto' ? 'auto' : +v) as StyleProps['gridRows'] })}
+            />
+          </>
         ) : display === 'flex' && (
           <SelectField label="Direction" value={s.flexDir ?? 'col'}  options={['col','row','row-reverse','col-reverse']} onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })} />
         )}
 
         {display !== 'block' && (
           <>
-            <SelectField label="Justify"        value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+            {display === 'grid' ? (
+              <SelectField
+                label="Justify items"
+                value={s.justifyItems ?? 'stretch'}
+                options={['start','center','end','stretch']}
+                onChange={v => patchStyle(node, onChange, { justifyItems: v as StyleProps['justifyItems'] })}
+              />
+            ) : (
+              <SelectField label="Justify" value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+            )}
             <SelectField label="Align children" value={s.align ?? 'start'}  options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
           </>
         )}
@@ -177,7 +194,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
       <FieldGroup label="Position">
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Where this Section's content block sits within the Section's own box if there's extra room (e.g. minHeight taller than the content)</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">Vertical Position defaults to "·" (None), which stretches this Section's content to fill the full box so Justify/Align actually has room to space children apart. Pick Top/Middle/Bottom instead to shrink-wrap the content and position it within extra room (e.g. minHeight taller than the content).</p>
       </FieldGroup>
 
       <FieldGroup label="Background">
@@ -263,7 +280,6 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
     </div>
   )
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // AVATAR
 // ═══════════════════════════════════════════════════════════════════════════════

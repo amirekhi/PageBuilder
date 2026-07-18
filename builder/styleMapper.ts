@@ -62,8 +62,19 @@ export interface StyleProps {
   justify?:   'start'|'end'|'center'|'between'|'around'|'evenly'
   align?:     'start'|'end'|'center'|'stretch'|'baseline'
   flex?:      '1'|'auto'|'none'
-  // Number of columns when display === 'grid'. Ignored otherwise.
+  // Grid: number of columns/rows when display === 'grid'. Ignored otherwise.
+  // gridRows defaults to 'auto' — rows are simply generated as needed based
+  // on how many children exist, which is what most grids actually want;
+  // picking an explicit number instead forces exactly that many row tracks
+  // (repeat(N, 1fr)), same mechanism as gridCols.
   gridCols?:  1|2|3|4|5|6
+  gridRows?:  'auto'|1|2|3|4|5|6
+  // Grid-native replacement for `justify` (see buildFlexInlineProps below
+  // for why `justify-content`/space-between/space-around are dead controls
+  // for our grid: columns are always `1fr` each, so there is never leftover
+  // space between tracks to distribute). justifyItems positions each ITEM
+  // within its own column instead — meaningful regardless of column width.
+  justifyItems?: 'start'|'end'|'center'|'stretch'
 
   // Sizing — stored as numbers, unit depends on widthUnit
   width?:     number | 'full' | 'auto' | 'screen' | '1/2' | '1/3' | '2/3' | '1/4' | '3/4'
@@ -156,18 +167,30 @@ export function resolveColor(value?: string): string | undefined {
 }
 
 // ─── Enum → real CSS value maps ────────────────────────────────────────────
-// Every one of these used to be assembled as a Tailwind class name via
-// template-literal interpolation — see the file header comment for why that's
-// unreliable. These maps drive real inline `style` values instead.
 
 const JUSTIFY_MAP: Record<string, string> = {
   start: 'flex-start', end: 'flex-end', center: 'center',
   between: 'space-between', around: 'space-around', evenly: 'space-evenly',
 }
 
+// Flex wants flex-start/flex-end; grid wants start/end. Using the flex
+// keywords on a grid container is technically invalid CSS for align-items/
+// justify-items (browsers vary in how tolerantly they handle it) — these
+// two maps exist so each container type always gets its own correct
+// keyword set instead of silently sharing one that's only really valid for
+// one of them.
 const ALIGN_MAP: Record<string, string> = {
   start: 'flex-start', end: 'flex-end', center: 'center',
   stretch: 'stretch', baseline: 'baseline',
+}
+
+const GRID_ALIGN_MAP: Record<string, string> = {
+  start: 'start', end: 'end', center: 'center',
+  stretch: 'stretch', baseline: 'baseline',
+}
+
+const JUSTIFY_ITEMS_MAP: Record<string, string> = {
+  start: 'start', end: 'end', center: 'center', stretch: 'stretch',
 }
 
 const GRID_TEMPLATE: Record<number, string> = {
@@ -215,20 +238,37 @@ const SHADOW_CSS: Record<string, string> = {
   '2xl': '0 25px 50px -12px rgb(0 0 0 / 0.25)',
 }
 
+// Returns whether this node has an explicit VERTICAL self-position set (see
+// getBoxAlignY/setBoxAlignY — Top/Middle/Bottom write mt/mb:'auto'). Used
+// below to decide whether the Section's inner content div should stretch to
+// fill the outer band's full height (default: yes, so the inner's OWN
+// Justify/Align has real room to distribute space among children) or stay
+// sized to its own content (only when the user explicitly asked for a
+// corner-positioned, non-stretched block via the vertical Position control).
+function hasVerticalSelfPosition(style: StyleProps): boolean {
+  return style.mt === 'auto' || style.mb === 'auto'
+}
+
 // Real display/flex/grid/justify/align CSS. Used by buildInlineStyle for
-// non-Section components, AND — deliberately — by BOTH buildSectionOuterStyle
-// and buildSectionInnerStyle for Section, so a Section's Justify/Align genuinely
-// positions two independent things: the outer band positions the inner content
-// block within the section's own box (visible whenever minHeight gives it extra
-// room — e.g. a hero section taller than its content), and the inner div
-// positions its children within that content block. Both apply the SAME
-// justify/align value from the single Justify/Align control in SectionPanel.
+// non-Section components, AND by buildSectionInnerStyle for Section's actual
+// content-children layout — gridCols/gridRows/justifyItems only ever apply
+// HERE (on the inner div), never on the outer band (see
+// buildOuterLayoutInlineProps below — the outer band is always flex,
+// regardless of what this function produces for the inner).
 export function buildFlexInlineProps(style: StyleProps = {}): React.CSSProperties {
   const s: React.CSSProperties = {}
   if (style.display) s.display = style.display
 
   if (style.display === 'grid') {
     s.gridTemplateColumns = GRID_TEMPLATE[style.gridCols ?? 2] ?? GRID_TEMPLATE[2]
+    if (style.gridRows && style.gridRows !== 'auto') {
+      s.gridTemplateRows = GRID_TEMPLATE[style.gridRows] ?? undefined
+    }
+    // justify-content/space-between/space-around are dead controls here —
+    // our columns are always equal `1fr` tracks, so there is never leftover
+    // space between them to distribute. justifyItems positions each ITEM
+    // within its own column instead, which works regardless of column width.
+    if (style.justifyItems) s.justifyItems = JUSTIFY_ITEMS_MAP[style.justifyItems] ?? style.justifyItems
   } else if (style.display === 'flex' || style.display === 'inline-flex') {
     if (style.flexDir) {
       s.flexDirection =
@@ -237,6 +277,33 @@ export function buildFlexInlineProps(style: StyleProps = {}): React.CSSPropertie
         style.flexDir
     }
     if (style.flexWrap) s.flexWrap = style.flexWrap
+  }
+
+  if (style.justify) s.justifyContent = JUSTIFY_MAP[style.justify] ?? style.justify
+  if (style.align) {
+    s.alignItems = style.display === 'grid'
+      ? (GRID_ALIGN_MAP[style.align] ?? style.align)
+      : (ALIGN_MAP[style.align] ?? style.align)
+  }
+
+  return s
+}
+
+// Section's OUTER band always wraps exactly ONE child — the inner content
+// div. Its ONLY job is positioning that single child within itself (via
+// Justify = main axis = vertical, Align = cross axis = horizontal, since
+// flexDirection is always 'column' here). That's a pure single-item
+// positioning problem, and flexbox already solves it completely and
+// reliably — there is NO reason the outer band itself ever needs to be
+// display:grid, even when the INNER div (which lays out the Section's real
+// children) is set to Grid. This is deliberately decoupled from
+// style.flexDir too — that value is for the INNER div's own children
+// arrangement (the "Direction" control), not for how the outer positions
+// its one child.
+function buildOuterLayoutInlineProps(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
   }
 
   if (style.justify) s.justifyContent = JUSTIFY_MAP[style.justify] ?? style.justify
@@ -539,16 +606,17 @@ export function buildFlexLayoutStyle(style: StyleProps = {}): React.CSSPropertie
 //
 // These two helpers split a Section's StyleProps into:
 //   - an OUTER "band": background + border/rounded/shadow + vertical padding,
-//     full width, no max-width — this is what SectionEditor/SectionPreview's
-//     root <section> should use. It is ALSO a real flex/grid container using
-//     the SAME display/justify/align as the inner div — this is what makes
-//     Justify="end"/Align="end" push the entire inner content block to the
-//     bottom-right of the section's box whenever minHeight gives it extra
-//     room (e.g. a hero section taller than its content). Both Editor and
-//     Preview must build this identically or the two views will disagree.
+//     full width, no max-width by default — this is what SectionEditor/
+//     SectionPreview's root <section> should use. It is ALWAYS a real flex
+//     column container (see buildOuterLayoutInlineProps — deliberately
+//     never grid, regardless of what the INNER div's own Display is set
+//     to). Both Editor and Preview must build this identically or the two
+//     views will disagree.
 //   - an INNER "column": max-width + horizontal padding + centering (via
-//     buildAlignMargin's ml/mr:auto) + its OWN flex/grid layout — this
-//     positions the Section's actual CHILDREN within that content block.
+//     buildAlignMargin's ml/mr:auto) + its OWN flex/grid layout (via
+//     buildFlexLayoutStyle/buildFlexInlineProps, where gridCols/gridRows DO
+//     apply) — this positions the Section's actual CHILDREN within that
+//     content block.
 // Only Section uses this split; every other node type keeps using
 // buildClassName/buildInlineStyle directly.
 
@@ -587,15 +655,26 @@ export function buildSectionOuterStyle(
   if (style.opacity !== undefined) s.opacity = style.opacity / 100
 
   if (style.my !== undefined) { s.marginTop = style.my * 4; s.marginBottom = style.my * 4 }
-  if (style.mt !== undefined) s.marginTop    = style.mt === 'auto' ? 'auto' : style.mt * 4
-  if (style.mb !== undefined) s.marginBottom = style.mb === 'auto' ? 'auto' : style.mb * 4
 
-  // The outer band is a real flex/grid container too, using the SAME
-  // display/justify/align/gridCols as the inner div — see the function
-  // header comment above for why this matters (issue: outer needed to push
-  // the whole inner content block to bottom-right, not just position
-  // children within it).
-  Object.assign(s, buildFlexInlineProps(style))
+  // FIX: this function previously only ever applied VERTICAL margin (my/
+  // mt/mb) directly — HORIZONTAL margin (ml/mr) was never applied at all,
+  // so the outer band's own self-centering (via the centerContent:true
+  // default every new Section ships with, or an explicit ml/mr:auto from
+  // the Position control) was silently dropped in PREVIEW specifically.
+  // The Editor "looked" fine only by coincidence: SelectableShell's wrapper
+  // computes its own sizing via buildBoxSizingStyle, which already calls
+  // buildAlignMargin generically for every node type — so the Editor's
+  // WRAPPER div centered itself even though the actual <section>
+  // underneath never did. Preview has no such wrapper; it renders this
+  // <section> directly, so without this call a resized (width < 100%)
+  // Section fell back to whatever its PARENT's align-items resolved to —
+  // stretch's default behavior for a fixed-width item is effectively
+  // flex-start (left), not centered. This call makes Preview match Editor
+  // exactly, and makes every Section correctly self-center by default
+  // (or honor an explicit Position override) in BOTH views.
+  Object.assign(s, buildAlignMargin(style))
+
+  Object.assign(s, buildOuterLayoutInlineProps(style))
 
   if (!opts.skipSizing) {
     if (typeof style.width === 'number') {
@@ -652,7 +731,25 @@ export function buildSectionInnerStyle(style: StyleProps = {}): React.CSSPropert
   // the same per-item-override relationship every other node type has with
   // ITS parent.
   Object.assign(s, buildAlignMargin(style))
-  Object.assign(s, buildFlexLayoutStyle(style)) // this Section's OWN children's layout
+  Object.assign(s, buildFlexLayoutStyle(style)) // gridCols/gridRows/justifyItems/inner-flex-direction apply HERE, on the actual children
+
+  // The inner div is ALWAYS a flex child of the outer band (which is
+  // always display:flex — see buildOuterLayoutInlineProps), REGARDLESS of
+  // whether the inner div's OWN display (this Section's "Display" setting)
+  // is flex or grid — flex-grow here is entirely about how the OUTER sizes
+  // this child, independent of what layout system the inner uses for its
+  // own children. This is what makes the inner div reliably fill the
+  // outer band's full available width AND height in BOTH Flex and Grid
+  // content-layout modes. Skipped when the user has explicitly set a
+  // vertical self-position (Top/Middle/Bottom) — that's a deliberate
+  // signal they want a shrink-wrapped, corner-positioned block instead of
+  // a full-height content area, so forcing a fill here would silently
+  // undo that choice.
+  if (!hasVerticalSelfPosition(style)) {
+    s.flexGrow   = 1
+    s.flexShrink = 1
+    s.minHeight  = 0
+  }
 
   return s
 }
