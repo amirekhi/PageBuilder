@@ -20,6 +20,7 @@ import { DropSlot, parseSlotId } from './DropSlot'
 import { EmptyCanvasPrompt } from './TemplatePicker'
 import { AnimationStyleSheet, AnimationProps, useAnimationProps } from './animations'
 import { CustomCssStyleSheet } from './CustomCssStyleSheet'
+import { useNodeStyle } from './responsive'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
@@ -196,6 +197,12 @@ export function EditorRenderer() {
 function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }) {
   const node       = nodes[nodeId]
   const selectedId = useBuilderStore(s => s.selectedId)
+  // Resolved purely to check display mode below — cheap (same hook every
+  // other component in the app already calls), and unconditional so hook
+  // order stays stable regardless of the early `if (!node)` return further
+  // down (same rule RenderPreviewNode's own animation hook already follows).
+  const resolvedStyle = useNodeStyle(node ?? null)
+
   if (!node) return null
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
@@ -216,16 +223,37 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
     // both sufficient and exactly matches what ColumnsEditor itself does.
     const axis = node.type === 'columns' ? 'row' : 'col'
 
+    // FIX (grid columns/rows corrupted by DropSlots): when a container's
+    // resolved display is 'grid' (currently only ever Section, via
+    // SectionPanel's Display control), each DropSlot rendered as a sibling
+    // becomes a REAL grid item occupying one of the N column tracks —
+    // stealing a cell that should belong to actual content and throwing off
+    // which column everything else lands in. Flex never had this problem
+    // (a lone extra flex item just takes whatever space it's given; it
+    // doesn't pre-declare fixed tracks the way grid's gridTemplateColumns
+    // does). The fix: whenever the parent is a grid, wrap each DropSlot in a
+    // div spanning EVERY column (gridColumn: '1 / -1') instead of letting it
+    // occupy just one — it can never again steal a content column. This is
+    // Editor-only: PreviewRenderer never renders DropSlot at all, so the
+    // published/Preview grid always shows exactly the row/column count set
+    // in the panel, with zero drop-slot interference regardless of this.
+    const isGrid = resolvedStyle.display === 'grid'
+    function wrapIfGrid(key: string, slot: React.ReactNode): React.ReactNode {
+      if (!isGrid) return slot
+      return <div key={key} style={{ gridColumn: '1 / -1' }}>{slot}</div>
+    }
+
     const ids = node.children
     if (ids.length === 0) {
-      content = <DropSlot parentId={node.id} index={0} isOnly />
+      const slot = <DropSlot parentId={node.id} index={0} isOnly />
+      content = isGrid ? <div style={{ gridColumn: '1 / -1' }}>{slot}</div> : slot
     } else {
       const items: React.ReactNode[] = [
-        <DropSlot key="slot-pre" parentId={node.id} index={0} axis={axis} />,
+        wrapIfGrid('slot-pre', <DropSlot key="slot-pre-inner" parentId={node.id} index={0} axis={axis} />),
       ]
       ids.forEach((childId, i) => {
         items.push(<RenderEditorNode key={childId} nodeId={childId} nodes={nodes} />)
-        items.push(<DropSlot key={`slot-${i}`} parentId={node.id} index={i + 1} axis={axis} />)
+        items.push(wrapIfGrid(`slot-${i}`, <DropSlot key={`slot-${i}-inner`} parentId={node.id} index={i + 1} axis={axis} />))
       })
       content = <>{items}</>
     }
@@ -234,12 +262,19 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
   // When this container is selected, show a persistent "Add block" button
   // at the bottom so finding the thin hover-only slots isn't the only way in.
   const showPersistentAdd = def.isContainer && selectedId === node.id && node.children.length > 0
+  const isGridForAdd = def.isContainer && resolvedStyle.display === 'grid'
 
   return (
     <SelectableShell node={node}>
       <EditorComponent node={node}>{content}</EditorComponent>
       {showPersistentAdd && (
-        <DropSlot parentId={node.id} index={node.children.length} isPersistent />
+        isGridForAdd ? (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <DropSlot parentId={node.id} index={node.children.length} isPersistent />
+          </div>
+        ) : (
+          <DropSlot parentId={node.id} index={node.children.length} isPersistent />
+        )
       )}
     </SelectableShell>
   )

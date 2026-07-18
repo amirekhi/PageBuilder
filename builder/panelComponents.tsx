@@ -402,12 +402,43 @@ export function GradientField({
 // ─── Shared StylePanel (spacing + color + typography) ─────────────────────────
 
 export function StylePanel({
-  style, onChange, hideBoxModel = false, hideBackground = false,
+  style, onChange, hideBoxModel = false, hideBackground = false, hideSize = false, hideWidth = false, isContainer = false,
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
+  // Skips Position/Padding/Margin — used only for node types whose own
+  // Content-tab panel already has a full, equally-capable version of these
+  // same controls (currently just Section, which has its own Padding/
+  // Margin/Position/Width group). Without this, Section showed every one
+  // of these fields twice: once in Content, once again here in Style.
   hideBoxModel?: boolean
+  // Skips the Background section here — used only for Section, whose own
+  // Content-tab panel already has the fuller version (flat color + gradient
+  // + image + overlay) vs. this component's plain-color-only version. Every
+  // other node type still gets Background from here, since nothing else
+  // has its own copy.
   hideBackground?: boolean
+  // Skips the ENTIRE Size section (both Width and Height) — used only for
+  // node types that size themselves through node.props directly rather
+  // than style.width/style.height at all (Avatar uses props.size as a
+  // diameter; Spacer uses props.height). A generic style.width/height
+  // control there would silently do nothing, since neither type's render
+  // function reads those style fields for sizing.
+  hideSize?: boolean
+  // Skips only the Width slider (Height still shows) — used for node types
+  // whose own Content-tab panel already has a richer, dedicated width
+  // control (Column's Fill/Fixed/fraction Mode select; Image's equivalent
+  // Width mode select). Nothing else in either of those panels covers
+  // Height, so Height stays shown here for both.
+  hideWidth?: boolean
+  // Whether the selected node is a container (Section, Columns, Column) —
+  // determines which field the Height control reads/writes: containers use
+  // minHeight (they can still grow taller to fit content), leaf nodes use a
+  // literal height. This exactly mirrors ResizeHandles.tsx's own onUp
+  // logic (`isContainer ? patch.minHeight : patch.height`), so dragging the
+  // bottom resize handle on the canvas and typing a value here always stay
+  // in sync — both read/write the identical style field.
+  isContainer?: boolean
 }) {
   return (
     <div className="space-y-5 p-4">
@@ -415,6 +446,67 @@ export function StylePanel({
         <FieldGroup label="Position">
           <AlignField style={style} onChange={onChange} />
           <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width/height is smaller than its container</p>
+        </FieldGroup>
+      )}
+
+      {!hideSize && (
+        <FieldGroup label="Size">
+          {!hideWidth && (
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-neutral-500 w-20 shrink-0">Width</span>
+                <input
+                  type="range" min={5} max={100} step={1}
+                  className="flex-1 accent-violet-600"
+                  value={typeof style.width === 'number' && style.widthUnit === '%' ? style.width : 100}
+                  onChange={e => onChange({ width: +e.target.value, widthUnit: '%' })}
+                />
+                <span className="text-xs text-neutral-400 w-10 text-right tabular-nums">
+                  {typeof style.width === 'number' && style.widthUnit === '%' ? `${style.width}%` : '100%'}
+                </span>
+              </div>
+              {typeof style.width === 'number' && style.widthUnit === '%' && (
+                <button
+                  onClick={() => onChange({ width: undefined, widthUnit: undefined })}
+                  className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors mt-1"
+                >
+                  Reset to fill container
+                </button>
+              )}
+              <p className="text-[10px] text-neutral-400 mt-1">
+                Percentage of this block's immediate parent — the same thing dragging the resize handle on the canvas does, so it stays proportionally correct across every breakpoint and Preview width. (Deliberately percentage-only here, not pixels — a fixed pixel width from this panel would look right in the editor canvas but could break at a very different Preview/live width, since everything else in this layout is relative.)
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">Height</span>
+            <input
+              type="number" min={0} step={4}
+              placeholder="Auto"
+              className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
+              value={
+                isContainer
+                  ? (typeof style.minHeight === 'number' ? style.minHeight : '')
+                  : (typeof style.height === 'number' ? style.height : '')
+              }
+              onChange={e => {
+                const raw = e.target.value
+                if (raw === '') {
+                  onChange(isContainer ? { minHeight: undefined } : { height: undefined })
+                  return
+                }
+                const px = Math.max(0, Math.round(+raw) || 0)
+                onChange(isContainer ? { minHeight: px, height: undefined } : { height: px })
+              }}
+            />
+            <span className="text-xs text-neutral-400 shrink-0">px</span>
+          </div>
+          <p className="text-[10px] text-neutral-400 -mt-1">
+            {isContainer
+              ? 'Minimum height — this container can still grow taller to fit its content. Matches dragging the bottom resize handle on the canvas.'
+              : 'Fixed pixel height. Matches dragging the bottom resize handle on the canvas.'}
+          </p>
         </FieldGroup>
       )}
 
