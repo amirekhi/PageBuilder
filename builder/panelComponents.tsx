@@ -717,6 +717,67 @@ export function AnimationPanel({
   )
 }
 
+
+// ─── Hover style field ──────────────────────────────────────────────────────
+// Shared, curated hover UI — see HoverStyleProps in customCss.ts for why
+// this is deliberately a small subset (color/opacity/shadow) rather than
+// the full StyleProps. Used only in the handful of per-node panels where
+// hovering is actually a common interaction (Button, Badge, Image) — see
+// customCss.ts's compileHoverCss for how this compiles into a real
+// `:hover` rule, and buildHoverTransitionStyle for the matching transition.
+
+export function HoverStyleField({
+  value, onChange,
+}: {
+  value?: import('./customCss').HoverStyleProps
+  onChange: (next: import('./customCss').HoverStyleProps) => void
+}) {
+  const hover = value ?? {}
+  function patch(partial: Partial<import('./customCss').HoverStyleProps>) {
+    onChange({ ...hover, ...partial })
+  }
+
+  const hasAny = Object.values(hover).some(v => v !== undefined)
+
+  return (
+    <FieldGroup label="Hover state">
+      <ColorField label="Background (hover)" value={hover.bgColor} onChange={v => patch({ bgColor: v || undefined })} />
+      <ColorField label="Text color (hover)" value={hover.textColor} onChange={v => patch({ textColor: v || undefined })} />
+      <ColorField label="Border color (hover)" value={hover.borderColor} onChange={v => patch({ borderColor: v || undefined })} />
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-neutral-500 w-20 shrink-0">Opacity</span>
+        <input
+          type="range" min={0} max={100} step={5}
+          className="flex-1 accent-violet-600"
+          value={hover.opacity ?? 100}
+          onChange={e => patch({ opacity: +e.target.value })}
+        />
+        <span className="text-xs text-neutral-400 w-8 text-right">{hover.opacity ?? 100}%</span>
+      </div>
+
+      <SelectField
+        label="Shadow" value={hover.shadow ?? 'none'}
+        options={['none','sm','md','lg','xl','2xl']}
+        onChange={v => patch({ shadow: v as import('./customCss').HoverStyleProps['shadow'] })}
+      />
+
+      {hasAny && (
+        <button
+          onClick={() => onChange({})}
+          className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+        >
+          Clear all hover styles
+        </button>
+      )}
+
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        These apply only while the mouse is over this block (real CSS :hover — no effect on touch devices without a mouse). For anything beyond these five properties, use Custom CSS below with <code className="font-mono">{'{{WRAPPER}}:hover'}</code>.
+      </p>
+    </FieldGroup>
+  )
+}
+
 // ─── Custom CSS field ───────────────────────────────────────────────────────
 // Shared by every per-node panel (via ControlPanel's ContentTab, appended
 // after each type's own EditorPanel) AND by the page-level global CSS

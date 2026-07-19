@@ -13,7 +13,9 @@ import { AnimationProps } from './animations'
 import { EditorContent } from '@tiptap/react'
 import { useRichTextEdit, buildTextExtensions, buildHeadingExtensions } from './richText'
 import { RichTextToolbar } from './RichTextToolbar'
-import { customCssClass } from './customCss'
+import { customCssClass, buildHoverTransitionStyle } from './customCss'
+import { HoverStyleField } from './panelComponents'
+
 
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
   patchNodeStyle(node, onChange, partial)
@@ -1088,7 +1090,7 @@ function ButtonRender({
     <button
       ref={animationRef}
       className={buildClassName(s, withCustomCss(node, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`))}
-      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...buildHoverTransitionStyle(node), ...animationStyle }}
     >
       {(node.props.label as string) || 'Button'}
     </button>
@@ -1116,6 +1118,10 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
         <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider/taller than the button itself</p>
       </FieldGroup>
+       <HoverStyleField
+          value={node.props.styleHover as import('./customCss').HoverStyleProps}
+          onChange={hover => onChange({ styleHover: hover })}
+        />
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}

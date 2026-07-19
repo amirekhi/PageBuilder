@@ -230,7 +230,7 @@ const ROUNDED_PX: Record<string, number> = {
   sm: 2, md: 6, lg: 8, xl: 12, '2xl': 16, '3xl': 24, full: 9999,
 }
 
-const SHADOW_CSS: Record<string, string> = {
+export const SHADOW_CSS: Record<string, string> = {
   sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
   md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
   lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
