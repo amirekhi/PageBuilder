@@ -20,6 +20,7 @@ export function wrapperClassFor(nodeId: string): string {
 // requiring hand-written CSS for something this simple.
 export interface HoverStyleProps {
   bgColor?:     string
+  bgGradient?:  string // CSS linear-gradient(...) string, same format as StyleProps.bgGradient
   textColor?:   string
   borderColor?: string
   opacity?:     number // 0-100, same scale as the base StyleProps.opacity
@@ -61,18 +62,30 @@ export function compileCustomCss(nodeId: string, raw: string | undefined): strin
 // rule — reuses the exact same color/shadow resolution styleMapper already
 // uses for the base (non-hover) styles, so a hover color picked from the
 // same preset swatches renders identically to picking that color normally.
+//
+// IMPORTANT: every declaration here needs !important. The base (Normal)
+// value for these same properties is applied as an INLINE style on the
+// element (via buildInlineStyle in styleMapper), and inline styles always
+// beat class-based rules in the cascade regardless of selector specificity
+// — a plain `.cc-id:hover { background-color: ... }` can never override
+// `style="background-color: ..."` on the same element. Without
+// !important, setting a Normal background color permanently blocks the
+// hover background color from ever showing. This is the ONLY rule ever
+// written for this selector, so !important here is safe and doesn't fight
+// anything else.
 export function compileHoverCss(nodeId: string, hover: HoverStyleProps | undefined): string {
   if (!hover) return ''
   const decls: string[] = []
 
   const bg = resolveColor(hover.bgColor)
-  if (bg) decls.push(`background-color: ${bg}`)
+  if (bg) decls.push(`background-color: ${bg} !important`)
+  if (hover.bgGradient) decls.push(`background-image: ${hover.bgGradient} !important`)
   const fg = resolveColor(hover.textColor)
-  if (fg) decls.push(`color: ${fg}`)
+  if (fg) decls.push(`color: ${fg} !important`)
   const bd = resolveColor(hover.borderColor)
-  if (bd) decls.push(`border-color: ${bd}`)
-  if (hover.opacity !== undefined) decls.push(`opacity: ${hover.opacity / 100}`)
-  if (hover.shadow && hover.shadow !== 'none') decls.push(`box-shadow: ${SHADOW_CSS[hover.shadow]}`)
+  if (bd) decls.push(`border-color: ${bd} !important`)
+  if (hover.opacity !== undefined) decls.push(`opacity: ${hover.opacity / 100} !important`)
+  if (hover.shadow && hover.shadow !== 'none') decls.push(`box-shadow: ${SHADOW_CSS[hover.shadow]} !important`)
 
   if (decls.length === 0) return ''
   return `.${wrapperClassFor(nodeId)}:hover {\n  ${decls.join(';\n  ')};\n}`

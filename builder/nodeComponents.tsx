@@ -6,7 +6,7 @@ import {
   StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle,
   buildSectionOuterStyle, buildSectionOuterClassName, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
-import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel } from './panelComponents'
+import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel, HoverToggle } from './panelComponents'
 import { useBuilderStore } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
 import { AnimationProps } from './animations'
@@ -14,7 +14,8 @@ import { EditorContent } from '@tiptap/react'
 import { useRichTextEdit, buildTextExtensions, buildHeadingExtensions } from './richText'
 import { RichTextToolbar } from './RichTextToolbar'
 import { customCssClass, buildHoverTransitionStyle } from './customCss'
-import { HoverStyleField } from './panelComponents'
+import type { HoverStyleProps } from './customCss'
+
 
 
 function patchStyle(node: PageNode, onChange: PanelProps['onChange'], partial: Partial<StyleProps>) {
@@ -106,6 +107,7 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, a
       style={{
         ...buildSectionOuterStyle(s),
         minHeight: typeof s.minHeight === 'number' ? s.minHeight : 64,
+        ...buildHoverTransitionStyle(node),
         ...animationStyle,
       }}
     >
@@ -124,6 +126,25 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const display = s.display ?? 'flex'
+
+  // Section's flat background color AND gradient each get their own
+  // hover toggle here (image backgrounds are left Custom-CSS-only for
+  // hover). Tracked as two separate booleans rather than the multi-field
+  // object StylePanel uses, since this panel only ever has these two
+  // hover-capable fields.
+  const [bgHover, setBgHover] = useState(false)
+  const [gradientHover, setGradientHover] = useState(false)
+  const hover = (node.props.styleHover as HoverStyleProps) ?? {}
+  const bgColorValue = bgHover ? hover.bgColor : s.bgColor
+  const setBgColor = (v: string) =>
+    bgHover
+      ? onChange({ styleHover: { ...hover, bgColor: v || undefined } })
+      : patchStyle(node, onChange, { bgColor: v || undefined })
+  const gradientValue = gradientHover ? hover.bgGradient : s.bgGradient
+  const setGradient = (v: string) =>
+    gradientHover
+      ? onChange({ styleHover: { ...hover, bgGradient: v || undefined } })
+      : patchStyle(node, onChange, { bgGradient: v || undefined })
 
   return (
     <div className="space-y-5 p-4">
@@ -200,12 +221,33 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
 
       <FieldGroup label="Background">
-        <ColorField label="Flat color" value={s.bgColor} onChange={v => patchStyle(node, onChange, { bgColor: v || undefined })} />
+        <ColorField
+          label={bgHover ? 'Flat color (hover)' : 'Flat color'}
+          value={bgColorValue}
+          onChange={setBgColor}
+          hoverAdornment={
+            <HoverToggle active={bgHover} hasValue={!!hover.bgColor} onToggle={() => setBgHover(v => !v)} />
+          }
+        />
+        {bgHover && (
+          <p className="text-[10px] text-neutral-400 -mt-1">
+            Editing the hover color.
+          </p>
+        )}
 
         <GradientField
-          value={s.bgGradient}
-          onChange={v => patchStyle(node, onChange, { bgGradient: v || undefined })}
+          label={gradientHover ? 'Gradient (hover)' : 'Gradient'}
+          value={gradientValue}
+          onChange={setGradient}
+          hoverAdornment={
+            <HoverToggle active={gradientHover} hasValue={!!hover.bgGradient} onToggle={() => setGradientHover(v => !v)} />
+          }
         />
+        {gradientHover && (
+          <p className="text-[10px] text-neutral-400 -mt-1">
+            Editing the hover gradient. Image backgrounds below still don&apos;t have a hover variant — use Custom CSS for those.
+          </p>
+        )}
 
         <div>
           <label className="block text-xs text-neutral-500 mb-1">Image</label>
@@ -663,7 +705,7 @@ function BadgeRender({
     <span
       ref={animationRef}
       className={buildClassName(s, withCustomCss(node, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`))}
-      style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
+      style={{ ...buildInlineStyle(s, { skipSizing }), ...buildHoverTransitionStyle(node), ...animationStyle }}
     >
       {(node.props.label as string) || 'Badge'}
     </span>
@@ -751,7 +793,7 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
     <div
       ref={animationRef}
       className={buildClassName(s, withCustomCss(node, 'flex-1 min-w-0'))}
-      style={{ ...buildInlineStyle(s), ...animationStyle }}
+      style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
     >
       {children}
     </div>
@@ -761,6 +803,25 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
 export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
   const widthMode = typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'fill'
+
+  // Same pattern as SectionPanel: Column's background lives here in the
+  // Content tab (the Style tab's own Background field is hidden for
+  // Column — see ControlPanel.tsx — since this is the single source of
+  // truth for it), so both the flat color and gradient hover toggles
+  // live here too instead of in StylePanel.
+  const [bgHover, setBgHover] = useState(false)
+  const [gradientHover, setGradientHover] = useState(false)
+  const hover = (node.props.styleHover as HoverStyleProps) ?? {}
+  const bgColorValue = bgHover ? hover.bgColor : s.bgColor
+  const setBgColor = (v: string) =>
+    bgHover
+      ? onChange({ styleHover: { ...hover, bgColor: v || undefined } })
+      : patchStyle(node, onChange, { bgColor: v || undefined })
+  const gradientValue = gradientHover ? hover.bgGradient : s.bgGradient
+  const setGradient = (v: string) =>
+    gradientHover
+      ? onChange({ styleHover: { ...hover, bgGradient: v || undefined } })
+      : patchStyle(node, onChange, { bgGradient: v || undefined })
 
   return (
     <div className="space-y-5 p-4">
@@ -823,7 +884,22 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         />
       </FieldGroup>
       <FieldGroup label="Background">
-        <ColorField label="Color" value={s.bgColor} onChange={v => patchStyle(node, onChange, { bgColor: v || undefined })} />
+        <ColorField
+          label={bgHover ? 'Color (hover)' : 'Color'}
+          value={bgColorValue}
+          onChange={setBgColor}
+          hoverAdornment={
+            <HoverToggle active={bgHover} hasValue={!!hover.bgColor} onToggle={() => setBgHover(v => !v)} />
+          }
+        />
+        <GradientField
+          label={gradientHover ? 'Gradient (hover)' : 'Gradient'}
+          value={gradientValue}
+          onChange={setGradient}
+          hoverAdornment={
+            <HoverToggle active={gradientHover} hasValue={!!hover.bgGradient} onToggle={() => setGradientHover(v => !v)} />
+          }
+        />
       </FieldGroup>
       <AnimationPanel
         value={node.props.animation as AnimationProps}
@@ -872,7 +948,7 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
     <p
       ref={animationRef}
       className={buildClassName(s, customCssClass(node))}
-      style={{ ...buildInlineStyle(s), ...animationStyle }}
+      style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
       dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
     />
   )
@@ -937,7 +1013,7 @@ export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRe
     <Tag
       ref={animationRef}
       className={buildClassName(s, customCssClass(node))}
-      style={{ ...buildInlineStyle(s), ...animationStyle }}
+      style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
       dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
     />
   )
@@ -998,7 +1074,7 @@ export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef,
       src={node.props.src as string}
       alt={(node.props.alt as string) || ''}
       className={buildClassName(s, withCustomCss(node, hasFixedWidth ? 'block' : 'max-w-full block'))}
-      style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s), ...animationStyle }}
+      style={{ width: hasFixedWidth ? s.width : '100%', height: 'auto', ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
     />
   )
 }
@@ -1118,10 +1194,7 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
         <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider/taller than the button itself</p>
       </FieldGroup>
-       <HoverStyleField
-          value={node.props.styleHover as import('./customCss').HoverStyleProps}
-          onChange={hover => onChange({ styleHover: hover })}
-        />
+
       <AnimationPanel
         value={node.props.animation as AnimationProps}
         onChange={anim => onChange({ animation: anim })}
@@ -1176,7 +1249,7 @@ export const DividerPreview: React.FC<NodeComponentProps> = ({ node, animationRe
     <hr
       ref={animationRef}
       className={buildClassName(s, withCustomCss(node, 'w-full'))}
-      style={{ ...buildInlineStyle(s), ...animationStyle }}
+      style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
     />
   )
 }

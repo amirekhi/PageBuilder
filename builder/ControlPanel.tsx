@@ -6,6 +6,7 @@ import { NODE_REGISTRY } from './registry'
 import { NodeMap, PageNode } from './types'
 import { StylePanel, CustomCssField } from './panelComponents'
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
+import type { HoverStyleProps } from './customCss'
 
 type Tab = 'layers' | 'style' | 'content'
 
@@ -108,31 +109,14 @@ function LayerNode({
 }
 
 // ─── Style tab ────────────────────────────────────────────────────────────────
-// When NOTHING is selected, shows the page-level global Custom CSS field
-// instead of just an empty placeholder — a sensible home for page-wide
-// fine-tuning that doesn't belong to any one block.
-//
-// SECTION IS A SPECIAL CASE for hideBoxModel/hideBackground: SectionPanel
-// (the Content tab's panel for this type) already has its own full
-// Position/Padding/Margin/Width group, and a strictly more capable
-// Background section (flat color + gradient + image + overlay, vs. this
-// generic panel's plain-color-only version). Without these flags, Section
-// showed every one of those fields TWICE.
-//
-// SIZE (Width%/Height px) IS A SEPARATE, INDEPENDENT SPECIAL CASE:
-//   - hideSize (skips BOTH Width and Height): Avatar and Spacer size
-//     themselves via node.props (props.size, props.height respectively),
-//     never via style.width/style.height at all — a generic Size control
-//     for either would silently do nothing.
-//   - hideWidth (skips only Width, Height still shows): Column and Image
-//     both already have a richer, dedicated width control in their own
-//     Content-tab panel (Fill/Fixed/fraction modes) — but NEITHER panel has
-//     a Height control at all, so Height still needs to come from here.
-// isContainer is passed through so the Height field knows whether to read/
-// write style.height (leaf nodes) or style.minHeight (containers) — this
-// exactly matches ResizeHandles.tsx's own onUp logic, so dragging the
-// bottom resize handle on the canvas and typing a value in this panel
-// always stay in sync, both reading/writing the identical style field.
+// Every node type now gets the per-field "H" hover toggles rendered inside
+// StylePanel (Background color, Text color, Border color, Opacity, Shadow
+// each get their own independent toggle) — there's no longer a curated
+// HOVER_CAPABLE whitelist here. That whitelist made sense when hover was a
+// single panel-wide switch flipping every dual-mode field at once (only
+// worth it for a few node types); now each field opts in on its own, so
+// gating by node type buys nothing and just means most blocks silently
+// lack a feature that costs nothing to expose everywhere.
 
 function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
@@ -155,6 +139,11 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
   const isContainer           = NODE_REGISTRY[node.type]?.isContainer ?? false
   const hideSize              = node.type === 'avatar' || node.type === 'spacer'
   const hideWidth             = node.type === 'column' || node.type === 'image'
+  // Section and Column both have their own, richer background picker in
+  // the Content tab (SectionPanel / ColumnPanel) — hiding the Style tab's
+  // generic Background field for them avoids two controls silently
+  // editing the exact same bgColor value.
+  const hideBackground         = isSection || node.type === 'column'
 
   return (
     <div>
@@ -180,22 +169,26 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
         </p>
       )}
       <StylePanel
+        // Resets which fields are mid-hover-edit whenever a different block
+        // is selected, instead of carrying that transient UI state over
+        // from whatever was previously selected.
+        key={node.id}
         style={style}
         onChange={partial => patchNodeStyle(node, p => onUpdate(node.id, p), partial)}
         hideBoxModel={isSection}
-        hideBackground={isSection}
+        hideBackground={hideBackground}
         hideSize={hideSize}
         hideWidth={hideWidth}
         isContainer={isContainer}
+        enableHover
+        hoverValue={node.props.styleHover as HoverStyleProps}
+        onHoverChange={hover => onUpdate(node.id, { styleHover: hover })}
       />
     </div>
   )
 }
 
 // ─── Content tab ──────────────────────────────────────────────────────────────
-// Every node type's own EditorPanel now gets a shared Custom CSS field
-// appended after it — one addition here covers all 15 node types, so no
-// individual *Panel component in nodeComponents.tsx needed to change.
 
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   if (!node) return <Empty text="Select a block to edit its content" />
