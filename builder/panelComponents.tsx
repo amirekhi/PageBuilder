@@ -3,6 +3,7 @@ import React, { useState , useEffect } from 'react'
 
 import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, BoxAlignY, getBoxAlign, setBoxAlign, getBoxAlignY, setBoxAlignY } from './styleMapper'
 import { AnimationProps, ANIMATION_EFFECTS, DEFAULT_ANIMATION, AnimationStyleSheet, EFFECT_KEYFRAME } from './animations'
+import type { HoverStyleProps } from './customCss'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -20,12 +21,16 @@ export function FieldGroup({ label, children }: { label: string; children: React
 type SelectOption = string | { label: string; value: string }
 
 export function SelectField({
-  label, value, options, onChange,
+  label, value, options, onChange, after,
 }: {
   label: string
   value: string
   options: SelectOption[]
   onChange: (v: string) => void
+  // Optional trailing slot, rendered after the <select> itself — used by
+  // StylePanel to attach a per-field "H" hover toggle to fields like
+  // Shadow, without every other caller of SelectField needing to care.
+  after?: React.ReactNode
 }) {
   const opts = options.map(o => typeof o === 'string' ? { label: o, value: o } : o)
   return (
@@ -38,6 +43,7 @@ export function SelectField({
       >
         {opts.map(o => <option key={o.value} value={o.value}>{o.label || '—'}</option>)}
       </select>
+      {after}
     </div>
   )
 }
@@ -234,9 +240,16 @@ export function CheckField({
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
 export function ColorField({
-  label, value, onChange,
+  label, value, onChange, hoverAdornment,
 }: {
-  label: string; value?: string; onChange: (v: string) => void
+  label: string
+  value?: string
+  onChange: (v: string) => void
+  // Optional slot next to the "Clear" button — used by StylePanel to attach
+  // a per-field "H" hover toggle. Kept optional so every other existing
+  // caller of ColorField (Section background, Column background, Divider
+  // color, Quote/Avatar, Gradient swatches, etc.) needs zero changes.
+  hoverAdornment?: React.ReactNode
 }) {
   const resolved   = resolveColor(value)
   const swatchHex  = resolved && HEX_RE.test(resolved) ? resolved : '#ffffff'
@@ -246,14 +259,17 @@ export function ColorField({
     <div>
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs text-neutral-500">{label}</span>
-        {value && (
-          <button
-            onClick={() => onChange('')}
-            className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
-          >
-            Clear
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {value && (
+            <button
+              onClick={() => onChange('')}
+              className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          {hoverAdornment}
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -325,10 +341,15 @@ function parseGradient(css?: string): ParsedGradient | null {
 const DEFAULT_GRADIENT: ParsedGradient = { direction: 'to right', from: '#7c3aed', to: '#4f46e5' }
 
 export function GradientField({
-  value, onChange,
+  value, onChange, label = 'Gradient', hoverAdornment,
 }: {
   value?: string
   onChange: (v: string) => void
+  label?: string
+  // Optional slot next to the "Clear" button — used by StylePanel/
+  // SectionPanel/ColumnPanel to attach a per-field "H" hover toggle, same
+  // pattern as ColorField.
+  hoverAdornment?: React.ReactNode
 }) {
   const parsed = parseGradient(value) ?? DEFAULT_GRADIENT
 
@@ -340,15 +361,18 @@ export function GradientField({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-neutral-500">Gradient</span>
-        {value && (
-          <button
-            onClick={() => onChange('')}
-            className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
-          >
-            Clear
-          </button>
-        )}
+        <span className="text-xs text-neutral-500">{label}</span>
+        <div className="flex items-center gap-2">
+          {value && (
+            <button
+              onClick={() => onChange('')}
+              className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          {hoverAdornment}
+        </div>
       </div>
 
       <div
@@ -399,47 +423,121 @@ export function GradientField({
   )
 }
 
+// ─── Per-field hover toggle ─────────────────────────────────────────────────
+// The small "H" pill that sits next to a single field (Background color,
+// Text color, Border color, Opacity, Shadow). Clicking it toggles ONLY that
+// field between reading/writing the base (Normal) style and the hover
+// style — every other field in the panel keeps whatever mode it was
+// already showing. This replaces the old panel-wide Normal/Hover switch:
+// that older version flipped every dual-mode field at once, which meant you
+// couldn't set a hover background while leaving text color on Normal.
+export function HoverToggle({
+  active, hasValue, onToggle,
+}: {
+  active: boolean
+  hasValue: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={
+        active
+          ? 'Editing the hover value — click to go back to the normal value'
+          : hasValue
+            ? 'A hover value is set here — click to edit it'
+            : 'Click to set a different value for when the mouse hovers over this block'
+      }
+      className={[
+        'shrink-0 w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold transition-colors',
+        active
+          ? 'bg-violet-600 text-white'
+          : hasValue
+            ? 'bg-violet-100 text-violet-600'
+            : 'text-neutral-300 border border-neutral-200 hover:bg-neutral-100 hover:text-neutral-500',
+      ].join(' ')}
+    >
+      H
+    </button>
+  )
+}
+
 // ─── Shared StylePanel (spacing + color + typography) ─────────────────────────
+// When enableHover is true, each of the 5 hover-capable fields (Background
+// color, Text color, Border color, Opacity, Shadow) gets its own "H"
+// toggle button. Clicking a field's toggle switches JUST that field to
+// read/write node.props.styleHover (via hoverValue/onHoverChange) instead
+// of the base style — independently of every other field. Layout/sizing/
+// typography-size/weight/align/border-radius are NEVER hover-aware (hover
+// effects that change layout cause visible jank) — those always read/write
+// the base style regardless of any toggle state.
 
 export function StylePanel({
   style, onChange, hideBoxModel = false, hideBackground = false, hideSize = false, hideWidth = false, isContainer = false,
+  enableHover = false, hoverValue, onHoverChange,
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
-  // Skips Position/Padding/Margin — used only for node types whose own
-  // Content-tab panel already has a full, equally-capable version of these
-  // same controls (currently just Section, which has its own Padding/
-  // Margin/Position/Width group). Without this, Section showed every one
-  // of these fields twice: once in Content, once again here in Style.
   hideBoxModel?: boolean
-  // Skips the Background section here — used only for Section, whose own
-  // Content-tab panel already has the fuller version (flat color + gradient
-  // + image + overlay) vs. this component's plain-color-only version. Every
-  // other node type still gets Background from here, since nothing else
-  // has its own copy.
   hideBackground?: boolean
-  // Skips the ENTIRE Size section (both Width and Height) — used only for
-  // node types that size themselves through node.props directly rather
-  // than style.width/style.height at all (Avatar uses props.size as a
-  // diameter; Spacer uses props.height). A generic style.width/height
-  // control there would silently do nothing, since neither type's render
-  // function reads those style fields for sizing.
   hideSize?: boolean
-  // Skips only the Width slider (Height still shows) — used for node types
-  // whose own Content-tab panel already has a richer, dedicated width
-  // control (Column's Fill/Fixed/fraction Mode select; Image's equivalent
-  // Width mode select). Nothing else in either of those panels covers
-  // Height, so Height stays shown here for both.
   hideWidth?: boolean
-  // Whether the selected node is a container (Section, Columns, Column) —
-  // determines which field the Height control reads/writes: containers use
-  // minHeight (they can still grow taller to fit content), leaf nodes use a
-  // literal height. This exactly mirrors ResizeHandles.tsx's own onUp
-  // logic (`isContainer ? patch.minHeight : patch.height`), so dragging the
-  // bottom resize handle on the canvas and typing a value here always stay
-  // in sync — both read/write the identical style field.
   isContainer?: boolean
+  // Whether this node type gets the per-field hover toggles at all. Pass
+  // true for every node type that should support hover — currently every
+  // caller in ControlPanel.tsx passes true unconditionally, but the flag is
+  // kept so a node type can be opted out later without touching this file.
+  enableHover?: boolean
+  hoverValue?: HoverStyleProps
+  onHoverChange?: (next: HoverStyleProps) => void
 }) {
+  // Which of the 5 hover-capable fields is currently in "hover-edit" mode.
+  // Independent per field — e.g. Background can be on hover while Text
+  // color stays on Normal. Callers should pass a `key={node.id}` down to
+  // this component so this resets when a different block is selected,
+  // rather than bleeding over from whatever was open on the last one.
+  const [hoverEdit, setHoverEdit] = useState<Partial<Record<keyof HoverStyleProps, boolean>>>({})
+  const toggleHover = (field: keyof HoverStyleProps) =>
+    setHoverEdit(prev => ({ ...prev, [field]: !prev[field] }))
+
+  const hover = hoverValue ?? {}
+  function patchHover(partial: Partial<HoverStyleProps>) {
+    onHoverChange?.({ ...hover, ...partial })
+  }
+
+  const bgIsHover = enableHover && !!hoverEdit.bgColor
+  const bgColorValue = bgIsHover ? hover.bgColor : style.bgColor
+  const setBgColor = (v: string) =>
+    bgIsHover ? patchHover({ bgColor: v || undefined }) : onChange({ bgColor: v || undefined })
+
+  const gradientIsHover = enableHover && !!hoverEdit.bgGradient
+  const gradientValue = gradientIsHover ? hover.bgGradient : style.bgGradient
+  const setGradient = (v: string) =>
+    gradientIsHover ? patchHover({ bgGradient: v || undefined }) : onChange({ bgGradient: v || undefined })
+
+  const textIsHover = enableHover && !!hoverEdit.textColor
+  const textColorValue = textIsHover ? hover.textColor : style.textColor
+  const setTextColor = (v: string) =>
+    textIsHover ? patchHover({ textColor: v || undefined }) : onChange({ textColor: v || undefined })
+
+  const borderIsHover = enableHover && !!hoverEdit.borderColor
+  const borderColorValue = borderIsHover ? hover.borderColor : style.borderColor
+  const setBorderColor = (v: string) =>
+    borderIsHover ? patchHover({ borderColor: v || undefined }) : onChange({ borderColor: v || undefined })
+
+  const opacityIsHover = enableHover && !!hoverEdit.opacity
+  const opacityValue = opacityIsHover ? (hover.opacity ?? 100) : (style.opacity ?? 100)
+  const setOpacity = (v: number) =>
+    opacityIsHover ? patchHover({ opacity: v }) : onChange({ opacity: v })
+
+  const shadowIsHover = enableHover && !!hoverEdit.shadow
+  const shadowValue = shadowIsHover ? (hover.shadow ?? 'none') : (style.shadow ?? 'none')
+  const setShadow = (v: string) =>
+    shadowIsHover
+      ? patchHover({ shadow: v as HoverStyleProps['shadow'] })
+      : onChange({ shadow: v as StyleProps['shadow'] })
+
   return (
     <div className="space-y-5 p-4">
       {!hideBoxModel && (
@@ -548,7 +646,22 @@ export function StylePanel({
 
       {!hideBackground && (
         <FieldGroup label="Background">
-          <ColorField label="Color" value={style.bgColor} onChange={v => onChange({ bgColor: v || undefined })} />
+          <ColorField
+            label={bgIsHover ? 'Color (hover)' : 'Color'}
+            value={bgColorValue}
+            onChange={setBgColor}
+            hoverAdornment={enableHover && (
+              <HoverToggle active={bgIsHover} hasValue={!!hover.bgColor} onToggle={() => toggleHover('bgColor')} />
+            )}
+          />
+          <GradientField
+            label={gradientIsHover ? 'Gradient (hover)' : 'Gradient'}
+            value={gradientValue}
+            onChange={setGradient}
+            hoverAdornment={enableHover && (
+              <HoverToggle active={gradientIsHover} hasValue={!!hover.bgGradient} onToggle={() => toggleHover('bgGradient')} />
+            )}
+          />
         </FieldGroup>
       )}
 
@@ -568,7 +681,14 @@ export function StylePanel({
           options={[{label:'—',value:''}, 'left','center','right','justify']}
           onChange={v => onChange({ textAlign: v as StyleProps['textAlign'] || undefined })}
         />
-        <ColorField label="Text color" value={style.textColor} onChange={v => onChange({ textColor: v || undefined })} />
+        <ColorField
+          label={textIsHover ? 'Text color (hover)' : 'Text color'}
+          value={textColorValue}
+          onChange={setTextColor}
+          hoverAdornment={enableHover && (
+            <HoverToggle active={textIsHover} hasValue={!!hover.textColor} onToggle={() => toggleHover('textColor')} />
+          )}
+        />
       </FieldGroup>
 
       <FieldGroup label="Border">
@@ -577,13 +697,59 @@ export function StylePanel({
           options={['none','sm','md','lg','xl','2xl','full']}
           onChange={v => onChange({ rounded: v as StyleProps['rounded'] })}
         />
+        <SelectField
+          label="Width"
+          value={String(style.borderWidth ?? 0)}
+          options={[
+            { label: 'None', value: '0' },
+            { label: '1px',  value: '1' },
+            { label: '2px',  value: '2' },
+            { label: '4px',  value: '4' },
+            { label: '8px',  value: '8' },
+          ]}
+          onChange={v => onChange({ borderWidth: (+v) as StyleProps['borderWidth'] })}
+        />
+        <ColorField
+          label={borderIsHover ? 'Border color (hover)' : 'Border color'}
+          value={borderColorValue}
+          onChange={setBorderColor}
+          hoverAdornment={enableHover && (
+            <HoverToggle active={borderIsHover} hasValue={!!hover.borderColor} onToggle={() => toggleHover('borderColor')} />
+          )}
+        />
+        <p className="text-[10px] text-neutral-400 -mt-1">
+          Sets the color of this block's border. Width defaults to None (invisible) — pick 1–8px above to actually show it.
+        </p>
       </FieldGroup>
 
-      <FieldGroup label="Shadow">
+      <FieldGroup label="Effects">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">
+            Opacity{opacityIsHover ? ' (hover)' : ''}
+          </span>
+          <input
+            type="range" min={0} max={100} step={5}
+            className="flex-1 accent-violet-600"
+            value={opacityValue}
+            onChange={e => setOpacity(+e.target.value)}
+          />
+          <span className="text-xs text-neutral-400 w-8 text-right">{opacityValue}%</span>
+          {enableHover && (
+            <HoverToggle active={opacityIsHover} hasValue={hover.opacity !== undefined} onToggle={() => toggleHover('opacity')} />
+          )}
+        </div>
         <SelectField
-          label="Shadow" value={style.shadow ?? 'none'}
+          label={shadowIsHover ? 'Shadow (hover)' : 'Shadow'}
+          value={shadowValue}
           options={['none','sm','md','lg','xl','2xl']}
-          onChange={v => onChange({ shadow: v as StyleProps['shadow'] })}
+          onChange={setShadow}
+          after={enableHover && (
+            <HoverToggle
+              active={shadowIsHover}
+              hasValue={!!hover.shadow && hover.shadow !== 'none'}
+              onToggle={() => toggleHover('shadow')}
+            />
+          )}
         />
       </FieldGroup>
     </div>
@@ -717,76 +883,7 @@ export function AnimationPanel({
   )
 }
 
-
-// ─── Hover style field ──────────────────────────────────────────────────────
-// Shared, curated hover UI — see HoverStyleProps in customCss.ts for why
-// this is deliberately a small subset (color/opacity/shadow) rather than
-// the full StyleProps. Used only in the handful of per-node panels where
-// hovering is actually a common interaction (Button, Badge, Image) — see
-// customCss.ts's compileHoverCss for how this compiles into a real
-// `:hover` rule, and buildHoverTransitionStyle for the matching transition.
-
-export function HoverStyleField({
-  value, onChange,
-}: {
-  value?: import('./customCss').HoverStyleProps
-  onChange: (next: import('./customCss').HoverStyleProps) => void
-}) {
-  const hover = value ?? {}
-  function patch(partial: Partial<import('./customCss').HoverStyleProps>) {
-    onChange({ ...hover, ...partial })
-  }
-
-  const hasAny = Object.values(hover).some(v => v !== undefined)
-
-  return (
-    <FieldGroup label="Hover state">
-      <ColorField label="Background (hover)" value={hover.bgColor} onChange={v => patch({ bgColor: v || undefined })} />
-      <ColorField label="Text color (hover)" value={hover.textColor} onChange={v => patch({ textColor: v || undefined })} />
-      <ColorField label="Border color (hover)" value={hover.borderColor} onChange={v => patch({ borderColor: v || undefined })} />
-
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-neutral-500 w-20 shrink-0">Opacity</span>
-        <input
-          type="range" min={0} max={100} step={5}
-          className="flex-1 accent-violet-600"
-          value={hover.opacity ?? 100}
-          onChange={e => patch({ opacity: +e.target.value })}
-        />
-        <span className="text-xs text-neutral-400 w-8 text-right">{hover.opacity ?? 100}%</span>
-      </div>
-
-      <SelectField
-        label="Shadow" value={hover.shadow ?? 'none'}
-        options={['none','sm','md','lg','xl','2xl']}
-        onChange={v => patch({ shadow: v as import('./customCss').HoverStyleProps['shadow'] })}
-      />
-
-      {hasAny && (
-        <button
-          onClick={() => onChange({})}
-          className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
-        >
-          Clear all hover styles
-        </button>
-      )}
-
-      <p className="text-[10px] text-neutral-400 -mt-1">
-        These apply only while the mouse is over this block (real CSS :hover — no effect on touch devices without a mouse). For anything beyond these five properties, use Custom CSS below with <code className="font-mono">{'{{WRAPPER}}:hover'}</code>.
-      </p>
-    </FieldGroup>
-  )
-}
-
 // ─── Custom CSS field ───────────────────────────────────────────────────────
-// Shared by every per-node panel (via ControlPanel's ContentTab, appended
-// after each type's own EditorPanel) AND by the page-level global CSS
-// setting (shown in the Style tab when nothing is selected — see
-// ControlPanel.tsx). {{WRAPPER}} is a plain string token the user types
-// literally; compileCustomCss (customCss.ts) swaps it for a real scoped
-// selector before injection, so raw CSS syntax is all that's ever required
-// here — no special editor, no validation beyond what the browser itself
-// silently tolerates.
 
 export function CustomCssField({
   value, onChange,

@@ -14,7 +14,6 @@ export function CustomCssStyleSheet() {
       const node = nodes[id]
       const compiled = compileCustomCss(id, node.props.customCss as string | undefined)
       if (compiled) parts.push(compiled)
-      // NEW: hover styles compile to their own :hover rule, same wrapper class
       const hoverCompiled = compileHoverCss(id, node.props.styleHover as any)
       if (hoverCompiled) parts.push(hoverCompiled)
     }
