@@ -183,6 +183,7 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
         enableHover
         hoverValue={node.props.styleHover as HoverStyleProps}
         onHoverChange={hover => onUpdate(node.id, { styleHover: hover })}
+        breakpointLabel={PREVIEW_WIDTHS[editingBreakpoint].label}
       />
     </div>
   )

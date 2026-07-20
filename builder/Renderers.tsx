@@ -18,9 +18,9 @@ import { NodeMap } from './types'
 import { SelectableShell } from './SelectableShell'
 import { DropSlot, parseSlotId } from './DropSlot'
 import { EmptyCanvasPrompt } from './TemplatePicker'
-import { AnimationStyleSheet, AnimationProps, useAnimationProps } from './animations'
+import { AnimationStyleSheet, useAnimationProps } from './animations'
 import { CustomCssStyleSheet } from './CustomCssStyleSheet'
-import { useNodeStyle } from './responsive'
+import { useNodeStyle, useNodeAnimation } from './responsive'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
@@ -297,6 +297,12 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
 // the replayAnimations() store action) — changing that key forces a full
 // unmount/remount of every node below, which resets every
 // IntersectionObserver and re-triggers every CSS animation from scratch.
+//
+// Each node's animation is now resolved per-breakpoint via useNodeAnimation
+// (see responsive.ts), the same way style already was — so switching the
+// Preview width switcher between Desktop/Tablet/Mobile can genuinely change
+// which effect plays, or skip it entirely, instead of always playing
+// whatever was set as the single (previously Desktop-only) animation.
 
 export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: string }) {
   const previewWidth = useBuilderStore(s => s.previewWidth)
@@ -349,8 +355,15 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
 }
 
 function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }) {
-  const node      = nodes[nodeId]
-  const animation = node?.props.animation as AnimationProps | undefined
+  const node = nodes[nodeId]
+
+  // Resolved per the ACTIVE breakpoint (previewWidth, since useNodeAnimation
+  // is mode-aware — see responsive.ts) instead of reading
+  // node.props.animation directly. This is what makes a Tablet/Mobile
+  // animation override (set via AnimationPanel while editingBreakpoint is
+  // Tablet/Mobile) actually take effect here rather than always playing
+  // the Desktop definition regardless of previewWidth.
+  const animation = useNodeAnimation(node ?? null)
 
   // Hook is called unconditionally, BEFORE the `if (!node) return null` below
   // — required by the rules of hooks (hook order must never depend on a
