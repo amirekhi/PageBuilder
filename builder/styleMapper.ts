@@ -56,7 +56,19 @@ export interface StyleProps {
   uppercase?:  boolean
 
   // Layout
-  display?:   'block'|'flex'|'grid'|'inline'|'inline-block'|'inline-flex'|'hidden'
+  // NOTE: 'hidden' is intentionally NOT a value here (see the dedicated
+  // `hidden` field further down). It used to be listed as a `display`
+  // value, but nothing ever translated it to a real CSS keyword —
+  // `buildFlexInlineProps` just assigned `style.display` straight to CSS
+  // `display`, and "hidden" isn't a valid CSS `display` value (that's a
+  // Tailwind CLASS name, not a CSS keyword; the actual keyword is `none`).
+  // The browser silently ignored it, so a block "hidden" this way stayed
+  // fully visible. Reusing `display` for visibility also collided with its
+  // real job on Section/Columns as the layout-mode selector (flex/grid/
+  // block): toggling "hidden" off would have reset a container back to
+  // some default layout instead of restoring whatever mode it was
+  // actually in. The separate boolean field below avoids both problems.
+  display?:   'block'|'flex'|'grid'|'inline'|'inline-block'|'inline-flex'
   flexDir?:   'row'|'col'|'row-reverse'|'col-reverse'
   flexWrap?:  'wrap'|'nowrap'
   justify?:   'start'|'end'|'center'|'between'|'around'|'evenly'
@@ -75,6 +87,14 @@ export interface StyleProps {
   // space between tracks to distribute). justifyItems positions each ITEM
   // within its own column instead — meaningful regardless of column width.
   justifyItems?: 'start'|'end'|'center'|'stretch'
+
+  // Visibility — deliberately separate from `display` (see the comment on
+  // `display` above for why). Cascades through the same per-breakpoint
+  // style/styleTablet/styleMobile mechanism as every other field (see
+  // responsive.ts), so "hidden on Mobile only" falls naturally out of the
+  // existing breakpoint system with no special-casing needed anywhere else
+  // — StylePanel just needs a checkbox bound to this field.
+  hidden?: boolean
 
   // Sizing — stored as numbers, unit depends on widthUnit
   width?:     number | 'full' | 'auto' | 'screen' | '1/2' | '1/3' | '2/3' | '1/4' | '3/4'
@@ -451,6 +471,13 @@ export function buildInlineStyle(
     s.backgroundImage = style.bgGradient
   }
 
+  // Visibility — deliberately applied LAST so it always wins over whatever
+  // buildFlexInlineProps set above, regardless of display mode. This is a
+  // real CSS `none`, unlike the old (broken, now-removed) `display:'hidden'`
+  // value — see the comment on the `hidden` field in StyleProps for why
+  // that never actually worked.
+  if (style.hidden) s.display = 'none'
+
   return s
 }
 
@@ -690,6 +717,10 @@ export function buildSectionOuterStyle(
       s.maxWidth = '100%'
     }
   }
+
+  // Same reasoning as buildInlineStyle: applied last so it always wins,
+  // regardless of whatever display buildOuterLayoutInlineProps just set.
+  if (style.hidden) s.display = 'none'
 
   return s
 }

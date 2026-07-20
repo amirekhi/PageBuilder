@@ -3,9 +3,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 // ─── Animation data model ───────────────────────────────────────────────────
-// Deliberately NOT per-breakpoint (unlike StyleProps) — animation stays the
-// same across desktop/tablet/mobile for now. Stored directly at
-// node.props.animation, sibling to node.props.style, not inside it.
+// Per-breakpoint, same cascade model as StyleProps (see responsive.ts's
+// resolveAnimationForBreakpoint/patchNodeAnimation) — node.props.animation
+// is the Desktop base, with node.props.animationTablet/animationMobile as
+// optional partial overrides layered on top, exactly like
+// style/styleTablet/styleMobile. This lets a block skip its animation
+// entirely on Mobile, or play a lighter/faster one there, without touching
+// the Desktop definition.
 
 export type AnimationEffect =
   | 'none'
@@ -159,6 +163,13 @@ function useInView(ref: React.RefObject<Element | null>, once: boolean): boolean
 // reach "the root DOM node of a function component" any other way, short of
 // adding a wrapper <div> (which was deliberately avoided elsewhere in this
 // codebase to not break flex sizing).
+//
+// NOTE: this hook takes an already-RESOLVED AnimationProps (i.e. the caller
+// has already merged Desktop/Tablet/Mobile via resolveAnimationForBreakpoint
+// — see Renderer.tsx's RenderPreviewNode, which now calls
+// useNodeAnimation(node) instead of reading node.props.animation directly).
+// This hook itself has no breakpoint awareness and doesn't need any — it
+// just plays whatever single AnimationProps it's handed.
 export function useAnimationProps(
   animation?: AnimationProps
 ): { ref: React.RefObject<any>; style: React.CSSProperties } {

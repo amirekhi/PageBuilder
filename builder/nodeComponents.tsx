@@ -318,8 +318,8 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
 
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -383,8 +383,8 @@ export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400">Tip: drag the corner handle on the canvas to resize instead</p>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -448,8 +448,8 @@ export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
         </button>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -523,8 +523,8 @@ export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width/height is smaller than its container</p>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -606,8 +606,8 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">+ Add question</button>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -674,8 +674,8 @@ export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <SelectField label="Marker" value={(node.props.markerType as string) ?? 'bullet'} options={[{ label:'Bullet',value:'bullet' },{ label:'Check',value:'check' },{ label:'Arrow',value:'arrow' },{ label:'Number',value:'number' }]} onChange={v => onChange({ markerType: v })} />
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -731,8 +731,8 @@ export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -771,8 +771,8 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 -mt-1">Justify only has room to act once at least one Column below is set to something other than its default "Fill evenly" width — otherwise every Column grows to fill the row and there's no leftover space to distribute.</p>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -902,8 +902,8 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         />
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -963,8 +963,8 @@ export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 mt-1">Tip: double-click the text on the canvas for the full formatting toolbar (bold, links, lists, alignment…)</p>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -1029,8 +1029,8 @@ export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 mt-1">Tip: double-click the heading on the canvas for the full formatting toolbar</p>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -1135,8 +1135,8 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -1196,8 +1196,8 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
       </FieldGroup>
 
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )
@@ -1229,8 +1229,8 @@ export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
       <p className="text-[10px] text-neutral-400">Tip: drag the bottom handle on the canvas to resize instead</p>
     </FieldGroup>
     <AnimationPanel
-      value={node.props.animation as AnimationProps}
-      onChange={anim => onChange({ animation: anim })}
+      node={node}
+      onChange={onChange}
     />
   </div>
 )
@@ -1276,8 +1276,8 @@ export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         <p className="text-[10px] text-neutral-400 -mt-1">Only has a visible effect if this Divider's width/height has been resized smaller than its container</p>
       </FieldGroup>
       <AnimationPanel
-        value={node.props.animation as AnimationProps}
-        onChange={anim => onChange({ animation: anim })}
+        node={node}
+        onChange={onChange}
       />
     </div>
   )

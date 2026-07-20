@@ -4,6 +4,9 @@ import React, { useState , useEffect } from 'react'
 import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, BoxAlignY, getBoxAlign, setBoxAlign, getBoxAlignY, setBoxAlignY } from './styleMapper'
 import { AnimationProps, ANIMATION_EFFECTS, DEFAULT_ANIMATION, AnimationStyleSheet, EFFECT_KEYFRAME } from './animations'
 import type { HoverStyleProps } from './customCss'
+import type { PageNode } from './types'
+import { useNodeAnimation, patchNodeAnimation, hasAnimationOverrideAt, clearNodeAnimationOverride } from './responsive'
+import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -475,7 +478,7 @@ export function HoverToggle({
 
 export function StylePanel({
   style, onChange, hideBoxModel = false, hideBackground = false, hideSize = false, hideWidth = false, isContainer = false,
-  enableHover = false, hoverValue, onHoverChange,
+  enableHover = false, hoverValue, onHoverChange, breakpointLabel = 'this breakpoint',
 }: {
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
@@ -491,6 +494,15 @@ export function StylePanel({
   enableHover?: boolean
   hoverValue?: HoverStyleProps
   onHoverChange?: (next: HoverStyleProps) => void
+  // Label for whichever breakpoint is currently being edited (e.g.
+  // "Mobile"), shown in the Visibility checkbox's caption so it's clear
+  // hiding only applies there — not globally. Purely cosmetic; the actual
+  // per-breakpoint write happens automatically because `onChange` here is
+  // already wired by the caller (ControlPanel) to write into whichever
+  // breakpoint bucket is active (see patchNodeStyle in responsive.ts) —
+  // this component doesn't need to know which one that is to behave
+  // correctly, only to word the caption accurately.
+  breakpointLabel?: string
 }) {
   // Which of the 5 hover-capable fields is currently in "hover-edit" mode.
   // Independent per field — e.g. Background can be on hover while Text
@@ -540,6 +552,17 @@ export function StylePanel({
 
   return (
     <div className="space-y-5 p-4">
+      <FieldGroup label="Visibility">
+        <CheckField
+          label={`Hide on ${breakpointLabel}`}
+          value={!!style.hidden}
+          onChange={checked => onChange({ hidden: checked ? true : undefined })}
+        />
+        <p className="text-[10px] text-neutral-400 -mt-1">
+          Only hides this block while viewing/editing at {breakpointLabel} — it stays visible at every other breakpoint unless hidden there too.
+        </p>
+      </FieldGroup>
+
       {!hideBoxModel && (
         <FieldGroup label="Position">
           <AlignField style={style} onChange={onChange} />
@@ -800,22 +823,50 @@ function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
 }
 
 // ─── Animation panel ────────────────────────────────────────────────────────
+// Breakpoint-aware the same way the Style tab is: reads/writes whichever
+// breakpoint is currently being edited (via useNodeAnimation/
+// patchNodeAnimation — see responsive.ts), and shows the same "differs from
+// Desktop" pill + reset button StyleTab already has, so a Tablet/Mobile-only
+// animation override is just as visible and just as easy to undo as a
+// Tablet/Mobile-only style override.
 
 export function AnimationPanel({
-  value, onChange,
+  node, onChange,
 }: {
-  value?: AnimationProps
-  onChange: (next: AnimationProps) => void
+  node: PageNode
+  onChange: (props: Record<string, unknown>) => void
 }) {
+  const value             = useNodeAnimation(node)
+  const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  const hasOverride          = isOverrideBreakpoint && hasAnimationOverrideAt(node, editingBreakpoint)
+
   const a = { ...DEFAULT_ANIMATION, ...value }
   const isNone = (a.effect ?? 'none') === 'none'
 
   function patch(partial: Partial<AnimationProps>) {
-    onChange({ ...a, ...partial })
+    patchNodeAnimation(node, onChange, partial)
   }
 
   return (
     <FieldGroup label="Animation">
+      {isOverrideBreakpoint && (
+        <div className="flex items-center justify-between -mt-1 mb-1">
+          <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+            {PREVIEW_WIDTHS[editingBreakpoint].icon} Editing {PREVIEW_WIDTHS[editingBreakpoint].label} animation
+          </span>
+          {hasOverride && (
+            <button
+              onClick={() => clearNodeAnimationOverride(node, onChange, editingBreakpoint)}
+              className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+              title="Remove this breakpoint's animation override"
+            >
+              Reset to Desktop
+            </button>
+          )}
+        </div>
+      )}
+
       <SelectField
         label="Effect"
         value={a.effect ?? 'none'}
@@ -877,6 +928,11 @@ export function AnimationPanel({
           <p className="text-[10px] text-neutral-400 -mt-1">
             The swatch above previews this exact effect instantly. The editor canvas itself never animates (it always shows blocks in their final static state, so drag/resize/text-editing stay predictable) — see the real thing in Preview, and use the Replay button in the top bar to re-trigger it there.
           </p>
+          {isOverrideBreakpoint && (
+            <p className="text-[10px] text-neutral-400 -mt-1">
+              This animation applies only while viewing/editing at {PREVIEW_WIDTHS[editingBreakpoint].label} — Desktop keeps its own settings above unless you also override them here.
+            </p>
+          )}
         </>
       )}
     </FieldGroup>
