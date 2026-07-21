@@ -1,7 +1,7 @@
 'use client'
 import React, { useState , useEffect } from 'react'
 
-import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, BoxAlignY, getBoxAlign, setBoxAlign, getBoxAlignY, setBoxAlignY } from './styleMapper'
+import { StyleProps, COLOR_PRESETS, GRADIENT_PRESETS, resolveColor, BoxAlign, BoxAlignY, getBoxAlign, setBoxAlign, getBoxAlignY, setBoxAlignY, isGlobalColorRef, globalColorRefId, makeGlobalColorRef } from './styleMapper'
 import { AnimationProps, ANIMATION_EFFECTS, DEFAULT_ANIMATION, AnimationStyleSheet, EFFECT_KEYFRAME } from './animations'
 import type { HoverStyleProps } from './customCss'
 import type { PageNode } from './types'
@@ -254,7 +254,16 @@ export function ColorField({
   // color, Quote/Avatar, Gradient swatches, etc.) needs zero changes.
   hoverAdornment?: React.ReactNode
 }) {
-  const resolved   = resolveColor(value)
+  // Live subscription (not the module-cache resolveColor uses internally
+  // for rendering — see styleMapper.ts) so this panel's OWN swatch preview
+  // and "which global is this bound to" lookup are always exactly in sync
+  // with the Theme tab, with no dependency on which render root happened to
+  // refresh the cache last.
+  const globalColors = useBuilderStore(s => s.globalColors)
+  const isGlobal     = isGlobalColorRef(value)
+  const boundGlobal  = isGlobal ? globalColors.find(c => c.id === globalColorRefId(value!)) : undefined
+
+  const resolved   = isGlobal ? boundGlobal?.value : resolveColor(value)
   const swatchHex  = resolved && HEX_RE.test(resolved) ? resolved : '#ffffff'
   const isTransparent = value === 'transparent'
 
@@ -275,23 +284,67 @@ export function ColorField({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={swatchHex}
-          onChange={e => onChange(e.target.value)}
-          className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
-          title="Pick a color"
-        />
-        <input
-          type="text"
-          value={value ?? ''}
-          onChange={e => onChange(e.target.value)}
-          placeholder="#ffffff or transparent"
-          spellCheck={false}
-          className="flex-1 border border-neutral-200 rounded-md text-xs p-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-violet-400"
-        />
-      </div>
+      {isGlobal ? (
+        // Bound to a global color — show a readable chip instead of a raw
+        // "global:xyz" id in a text box, plus a way back out. Unlink
+        // freezes the CURRENT resolved hex as a literal value, so the
+        // block's appearance doesn't change the instant you unlink it —
+        // only future palette edits stop reaching it.
+        <div className="flex items-center gap-2 border border-violet-200 bg-violet-50 rounded-md px-2 py-1.5">
+          <span
+            className="w-5 h-5 rounded-full border border-white shadow shrink-0"
+            style={{ backgroundColor: swatchHex }}
+          />
+          <span className="flex-1 text-xs font-medium text-violet-700 truncate">
+            🔗 {boundGlobal?.name ?? 'Deleted global color'}
+          </span>
+          <button
+            onClick={() => onChange(swatchHex)}
+            className="text-[10px] font-medium text-violet-500 hover:text-violet-700 transition-colors shrink-0"
+            title="Detach from the global color — keeps this exact color as a fixed, one-off value"
+          >
+            Unlink
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={swatchHex}
+            onChange={e => onChange(e.target.value)}
+            className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
+            title="Pick a color"
+          />
+          <input
+            type="text"
+            value={value ?? ''}
+            onChange={e => onChange(e.target.value)}
+            placeholder="#ffffff or transparent"
+            spellCheck={false}
+            className="flex-1 border border-neutral-200 rounded-md text-xs p-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+        </div>
+      )}
+
+      {globalColors.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+          <span className="text-[9px] text-neutral-400 mr-0.5">Global:</span>
+          {globalColors.map(c => (
+            <button
+              key={c.id}
+              onClick={() => onChange(makeGlobalColorRef(c.id))}
+              title={`${c.name} (global — stays linked)`}
+              className={[
+                'w-5 h-5 rounded-full transition-transform hover:scale-110',
+                isGlobal && boundGlobal?.id === c.id
+                  ? 'ring-2 ring-offset-1 ring-violet-600'
+                  : 'ring-1 ring-offset-1 ring-violet-200',
+              ].join(' ')}
+              style={{ backgroundColor: c.value }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5 mt-2">
         {COLOR_PRESETS.filter(c => c.value !== 'transparent').map(c => (
@@ -301,7 +354,7 @@ export function ColorField({
             title={c.label}
             className={[
               'w-5 h-5 rounded-full border transition-transform hover:scale-110',
-              value === c.value ? 'ring-2 ring-offset-1 ring-violet-500 border-transparent' : 'border-neutral-200',
+              !isGlobal && value === c.value ? 'ring-2 ring-offset-1 ring-violet-500 border-transparent' : 'border-neutral-200',
             ].join(' ')}
             style={{ backgroundColor: resolveColor(c.value) }}
           />
@@ -475,6 +528,50 @@ export function HoverToggle({
 // typography-size/weight/align/border-radius are NEVER hover-aware (hover
 // effects that change layout cause visible jank) — those always read/write
 // the base style regardless of any toggle state.
+
+// ─── Typography preset picker (one-shot apply, not a live link) ───────────
+// Sits inside StylePanel's Typography group. Deliberately a plain SelectField
+// whose displayed value always snaps back to '' after applying — this is a
+// trigger disguised as a dropdown, not a persistent selection, since there's
+// nothing on the node itself that remembers "this came from preset X" (see
+// GlobalTypographyStyle's doc comment in store.ts for why that's a
+// deliberate scope choice, not an oversight). If no typography presets have
+// been created yet (Theme tab), this renders nothing rather than an empty,
+// useless dropdown.
+function TypographyPresetPicker({
+  onApply,
+}: {
+  onApply: (partial: Partial<StyleProps>) => void
+}) {
+  const presets = useBuilderStore(s => s.globalTypography)
+  if (!presets.length) return null
+
+  return (
+    <div>
+      <SelectField
+        label="Preset"
+        value=""
+        options={[
+          { label: 'Apply a saved style…', value: '' },
+          ...presets.map(p => ({ label: p.name, value: p.id })),
+        ]}
+        onChange={id => {
+          const preset = presets.find(p => p.id === id)
+          if (!preset) return
+          onApply({
+            fontSize:   preset.fontSize,
+            fontWeight: preset.fontWeight,
+            leading:    preset.leading,
+            textAlign:  preset.textAlign,
+          })
+        }}
+      />
+      <p className="text-[9px] text-neutral-400 mt-0.5">
+        Copies that style's values onto this block once — editing the preset later in the Theme tab won't retroactively change blocks that already used it.
+      </p>
+    </div>
+  )
+}
 
 export function StylePanel({
   style, onChange, hideBoxModel = false, hideBackground = false, hideSize = false, hideWidth = false, isContainer = false,
@@ -689,6 +786,7 @@ export function StylePanel({
       )}
 
       <FieldGroup label="Typography">
+        <TypographyPresetPicker onApply={onChange} />
         <SelectField
           label="Size" value={style.fontSize ?? ''}
           options={[{label:'—',value:''}, 'xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl']}
@@ -960,5 +1058,320 @@ export function CustomCssField({
         Use <code className="font-mono">{'{{WRAPPER}}'}</code> in place of a selector to target just this block — e.g. <code className="font-mono">{'{{WRAPPER}}:hover { opacity: 0.8; }'}</code>. Supports anything real CSS supports (hover states, animations, media queries) that the panel controls above can't reach.
       </p>
     </FieldGroup>
+  )
+}
+
+// ─── Global color palette manager (Theme tab) ──────────────────────────────
+// Page-wide, not node-scoped — lives in the Theme tab (see ControlPanel.tsx)
+// rather than anywhere in the per-node Style/Content tabs. Every color here
+// is exactly the same GlobalColor list ColorField reads to render its
+// "Global:" swatch row — editing name/value here is instantly visible both
+// in every ColorField across the app AND on any canvas block already bound
+// to it, since both read straight from the store with no separate copy.
+
+export function GlobalColorManager() {
+  const colors             = useBuilderStore(s => s.globalColors)
+  const addGlobalColor     = useBuilderStore(s => s.addGlobalColor)
+  const updateGlobalColor  = useBuilderStore(s => s.updateGlobalColor)
+  const deleteGlobalColor  = useBuilderStore(s => s.deleteGlobalColor)
+
+  return (
+    <FieldGroup label="Color palette">
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        Shared, LIVE colors. Bind any color field on any block to one (via the small "Global:" swatches above every color picker) and changing it here updates every bound block instantly, page-wide.
+      </p>
+      <div className="space-y-2">
+        {colors.map(c => (
+          <div key={c.id} className="flex items-center gap-2 border border-neutral-200 rounded-md p-2">
+            <input
+              type="color"
+              value={HEX_RE.test(c.value) ? c.value : '#ffffff'}
+              onChange={e => updateGlobalColor(c.id, { value: e.target.value })}
+              className="w-7 h-7 rounded border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
+              title="Pick a color"
+            />
+            <input
+              type="text"
+              value={c.name}
+              onChange={e => updateGlobalColor(c.id, { name: e.target.value })}
+              className="flex-1 min-w-0 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
+              placeholder="Name"
+            />
+            <input
+              type="text"
+              value={c.value}
+              onChange={e => updateGlobalColor(c.id, { value: e.target.value })}
+              spellCheck={false}
+              className="w-20 shrink-0 border border-neutral-200 rounded text-xs p-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-violet-400"
+            />
+            <button
+              onClick={() => deleteGlobalColor(c.id)}
+              className="shrink-0 w-6 h-6 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-xs"
+              title="Delete — blocks bound to this fall back to no color, they don't break"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={() => addGlobalColor('New color', '#7c3aed')}
+        className="w-full text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+      >
+        + Add global color
+      </button>
+    </FieldGroup>
+  )
+}
+
+// ─── Global typography style manager (Theme tab) ───────────────────────────
+// Same list TypographyPresetPicker (inside StylePanel's Typography group)
+// reads from. Unlike colors, these are copy-once presets, not live links —
+// see the doc comment on GlobalTypographyStyle in store.ts for why.
+
+export function GlobalTypographyManager() {
+  const styles                  = useBuilderStore(s => s.globalTypography)
+  const addGlobalTypography     = useBuilderStore(s => s.addGlobalTypography)
+  const updateGlobalTypography  = useBuilderStore(s => s.updateGlobalTypography)
+  const deleteGlobalTypography  = useBuilderStore(s => s.deleteGlobalTypography)
+
+  return (
+    <FieldGroup label="Typography styles">
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        Reusable text presets (size, weight, line height, alignment). Applying one from a block's Style tab COPIES these values onto it once — it's not a live link, so editing a preset here won't retroactively change blocks that already used it.
+      </p>
+      <div className="space-y-3">
+        {styles.map(t => (
+          <div key={t.id} className="border border-neutral-200 rounded-lg p-2.5 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={t.name}
+                onChange={e => updateGlobalTypography(t.id, { name: e.target.value })}
+                className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+              />
+              <button
+                onClick={() => deleteGlobalTypography(t.id)}
+                className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm"
+                aria-label="Delete style"
+              >
+                ✕
+              </button>
+            </div>
+            <SelectField
+              label="Size" value={t.fontSize ?? 'base'}
+              options={['xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl']}
+              onChange={v => updateGlobalTypography(t.id, { fontSize: v as StyleProps['fontSize'] })}
+            />
+            <SelectField
+              label="Weight" value={t.fontWeight ?? 'normal'}
+              options={['light','normal','medium','semibold','bold','extrabold']}
+              onChange={v => updateGlobalTypography(t.id, { fontWeight: v as StyleProps['fontWeight'] })}
+            />
+            <SelectField
+              label="Line height" value={t.leading ?? 'normal'}
+              options={['none','tight','snug','normal','relaxed','loose']}
+              onChange={v => updateGlobalTypography(t.id, { leading: v as StyleProps['leading'] })}
+            />
+            <SelectField
+              label="Align" value={t.textAlign ?? ''}
+              options={[{label:'—',value:''}, 'left','center','right','justify']}
+              onChange={v => updateGlobalTypography(t.id, { textAlign: (v || undefined) as StyleProps['textAlign'] })}
+            />
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={() => addGlobalTypography('New style')}
+        className="w-full text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+      >
+        + Add typography style
+      </button>
+    </FieldGroup>
+  )
+}
+
+// ─── SEO panel (SEO tab) ────────────────────────────────────────────────────
+// Page-wide, like the Theme tab's managers — one set of metadata for the
+// whole page, not per-node. Per-node concerns that overlap with SEO (image
+// alt text, heading tag h1-h6) already live in their own node panels
+// (ImagePanel, HeadingPanel) and aren't duplicated here.
+
+function CharCount({ value, ideal }: { value: string; ideal: [number, number] }) {
+  const len = value.length
+  const inRange = len >= ideal[0] && len <= ideal[1]
+  return (
+    <span className={[
+      'text-[10px] tabular-nums',
+      len === 0 ? 'text-neutral-300' : inRange ? 'text-green-600' : 'text-amber-500',
+    ].join(' ')}>
+      {len}/{ideal[1]}{inRange && len > 0 ? ' ✓' : ''}
+    </span>
+  )
+}
+
+export function SeoPanel() {
+  const seo             = useBuilderStore(s => s.seo)
+  const updateSeo       = useBuilderStore(s => s.updateSeo)
+  const openMediaPicker = useBuilderStore(s => s.openMediaPicker)
+
+  const title       = seo.title ?? ''
+  const description = seo.description ?? ''
+
+  return (
+    <div className="space-y-6">
+      <FieldGroup label="Search appearance">
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-neutral-500">Page title</span>
+            <CharCount value={title} ideal={[40, 60]} />
+          </div>
+          <input
+            type="text"
+            value={title}
+            onChange={e => updateSeo({ title: e.target.value })}
+            placeholder="A short, descriptive page title"
+            className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-neutral-500">Meta description</span>
+            <CharCount value={description} ideal={[120, 160]} />
+          </div>
+          <textarea
+            value={description}
+            onChange={e => updateSeo({ description: e.target.value })}
+            placeholder="One or two sentences describing this page for search results"
+            className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+        </div>
+
+        <div>
+          <span className="text-xs text-neutral-500 mb-1 block">Keywords (optional, comma-separated)</span>
+          <input
+            type="text"
+            value={seo.keywords ?? ''}
+            onChange={e => updateSeo({ keywords: e.target.value })}
+            placeholder="landing page, page builder, no-code"
+            className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+          <p className="text-[10px] text-neutral-400 mt-1">
+            Most search engines ignore this now, but some site-search tools and older crawlers still read it.
+          </p>
+        </div>
+
+        <div className="border border-neutral-200 rounded-md p-3 bg-white">
+          <p className="text-[10px] text-neutral-400 mb-1.5 uppercase tracking-wide">Search result preview</p>
+          <p className="text-[13px] text-neutral-500 truncate">yoursite.com</p>
+          <p className="text-lg text-blue-700 truncate leading-snug">{title || 'Untitled Page'}</p>
+          <p className="text-sm text-neutral-600 line-clamp-2">
+            {description || 'No meta description set yet — search engines may generate one automatically from the page content instead.'}
+          </p>
+        </div>
+      </FieldGroup>
+
+      <FieldGroup label="Social sharing (Open Graph)">
+        <p className="text-[10px] text-neutral-400 -mt-1">
+          Controls how this page looks when shared on X, Facebook, LinkedIn, Slack, etc. Leave a field blank to fall back to the matching field above.
+        </p>
+
+        <div>
+          <span className="text-xs text-neutral-500 mb-1 block">OG title</span>
+          <input
+            type="text"
+            value={seo.ogTitle ?? ''}
+            onChange={e => updateSeo({ ogTitle: e.target.value })}
+            placeholder={title || 'Falls back to page title'}
+            className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+        </div>
+
+        <div>
+          <span className="text-xs text-neutral-500 mb-1 block">OG description</span>
+          <textarea
+            value={seo.ogDescription ?? ''}
+            onChange={e => updateSeo({ ogDescription: e.target.value })}
+            placeholder={description || 'Falls back to meta description'}
+            className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-16 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+        </div>
+
+        <div>
+          <span className="text-xs text-neutral-500 mb-1 block">OG image</span>
+          <button
+            onClick={() => openMediaPicker(item => updateSeo({ ogImage: item.url }))}
+            className="w-full rounded-lg border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden"
+            style={{ aspectRatio: '1200/630' }}
+          >
+            {seo.ogImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={seo.ogImage} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-neutral-400">
+                <span className="text-lg">🖼️</span>
+                <span className="text-xs font-medium">Choose share image (1200×630 recommended)</span>
+              </div>
+            )}
+          </button>
+          {seo.ogImage && (
+            <div className="flex gap-2 mt-1.5">
+              <button
+                onClick={() => openMediaPicker(item => updateSeo({ ogImage: item.url }))}
+                className="flex-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1 rounded-md hover:bg-violet-50 transition-colors"
+              >
+                Replace
+              </button>
+              <button
+                onClick={() => updateSeo({ ogImage: undefined })}
+                className="flex-1 text-xs font-medium text-neutral-400 hover:text-red-500 py-1 rounded-md hover:bg-red-50 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
+      </FieldGroup>
+
+      <FieldGroup label="Advanced">
+        <div>
+          <span className="text-xs text-neutral-500 mb-1 block">Canonical URL (optional)</span>
+          <input
+            type="text"
+            value={seo.canonicalUrl ?? ''}
+            onChange={e => updateSeo({ canonicalUrl: e.target.value })}
+            placeholder="https://example.com/this-page"
+            spellCheck={false}
+            className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          />
+          <p className="text-[10px] text-neutral-400 mt-1">
+            Set this if the same content is also published at another URL, so search engines credit the right one.
+          </p>
+        </div>
+
+        <CheckField
+          label="Hide this page from search engines (noindex)"
+          value={!!seo.noIndex}
+          onChange={v => updateSeo({ noIndex: v })}
+        />
+
+        <div>
+          <span className="text-xs text-neutral-500 mb-1 block">Favicon</span>
+          <button
+            onClick={() => openMediaPicker(item => updateSeo({ favicon: item.url }))}
+            className="flex items-center gap-2 border border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors rounded-md p-2"
+          >
+            {seo.favicon ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={seo.favicon} alt="" className="w-6 h-6 rounded" />
+            ) : (
+              <span className="w-6 h-6 rounded bg-neutral-100 flex items-center justify-center text-xs text-neutral-400">?</span>
+            )}
+            <span className="text-xs font-medium text-violet-600">{seo.favicon ? 'Replace favicon' : 'Choose favicon'}</span>
+          </button>
+        </div>
+      </FieldGroup>
+    </div>
   )
 }

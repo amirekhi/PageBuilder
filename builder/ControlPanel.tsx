@@ -1,25 +1,34 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useBuilderStore, PREVIEW_WIDTHS } from './store'
+import React from 'react'
+import { useBuilderStore, PREVIEW_WIDTHS, ControlPanelTab } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap, PageNode } from './types'
-import { StylePanel, CustomCssField } from './panelComponents'
+import { StylePanel, CustomCssField, GlobalColorManager, GlobalTypographyManager, SeoPanel } from './panelComponents'
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 import type { HoverStyleProps } from './customCss'
 
-type Tab = 'layers' | 'style' | 'content'
+// Only these three ever get a button in THIS component's own tab bar.
+// Theme and SEO are still perfectly valid values of controlPanelTab (see
+// store.ts) and still render their exact same body below — they're just
+// switched TO from TopBar's own buttons now instead of from a button here.
+const VISIBLE_TABS: ControlPanelTab[] = ['layers', 'style', 'content']
 
 export function ControlPanel() {
-  const [tab, setTab]  = useState<Tab>('layers')
-  const selectedNode   = useBuilderStore(s => s.selectedNode())
-  const updateProps    = useBuilderStore(s => s.updateProps)
+  const tab            = useBuilderStore(s => s.controlPanelTab)
+  const setTab          = useBuilderStore(s => s.setControlPanelTab)
+  const selectedNode    = useBuilderStore(s => s.selectedNode())
+  const updateProps     = useBuilderStore(s => s.updateProps)
 
   return (
     <aside className="w-72 h-full flex flex-col bg-white border-l border-neutral-200 shrink-0 overflow-hidden">
-      {/* Tab bar */}
+      {/* Tab bar — layers/style/content only. Theme/SEO are switched to
+          from TopBar, so they intentionally have no button here, even
+          though tab CAN equal 'theme' or 'seo' (in which case none of
+          these three buttons show as active, which is correct — the
+          active view genuinely isn't one of them). */}
       <div className="flex border-b border-neutral-200 shrink-0">
-        {(['layers','style','content'] as Tab[]).map(t => (
+        {VISIBLE_TABS.map(t => (
           <button
             key={t} onClick={() => setTab(t)}
             className={[
@@ -34,13 +43,35 @@ export function ControlPanel() {
         ))}
       </div>
 
-      {/* Panel body */}
+      {/* Panel body — all five possible tabs render from here, same as
+          before; only the switcher UI for two of them moved. */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'layers'  && <LayersTab />}
         {tab === 'style'   && <StyleTab   node={selectedNode} onUpdate={updateProps} />}
         {tab === 'content' && <ContentTab node={selectedNode} onUpdate={updateProps} />}
+        {tab === 'theme'   && <ThemeTab />}
+        {tab === 'seo'     && <div className="p-4"><SeoPanel /></div>}
       </div>
     </aside>
+  )
+}
+
+// ─── Theme tab ────────────────────────────────────────────────────────────
+// Page-wide design tokens — deliberately NOT node-scoped, unlike every other
+// tab here, so it doesn't matter whether a block is selected. Colors here
+// are live-linked (see GlobalColorManager/ColorField); typography styles
+// are copy-once presets (see GlobalTypographyManager's own doc comment for
+// why those two behave differently).
+
+function ThemeTab() {
+  return (
+    <div className="p-4 space-y-6">
+      <p className="text-neutral-400 text-sm">
+        Colors and typography styles here apply across the whole page. Manage them below, then reuse them from any block's Style tab.
+      </p>
+      <GlobalColorManager />
+      <GlobalTypographyManager />
+    </div>
   )
 }
 

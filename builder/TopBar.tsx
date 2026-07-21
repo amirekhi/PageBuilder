@@ -25,6 +25,8 @@ export function TopBar() {
   const redo                 = useBuilderStore(s => s.redo)
   const del                  = useBuilderStore(s => s.deleteNode)
   const dup                  = useBuilderStore(s => s.duplicateNode)
+  const controlPanelTab      = useBuilderStore(s => s.controlPanelTab)
+  const setControlPanelTab   = useBuilderStore(s => s.setControlPanelTab)
 
   const [toast, setToast]         = useState<string | null>(null)
   const [menuOpen, setMenuOpen]   = useState(false)
@@ -166,6 +168,34 @@ export function TopBar() {
       <div className="flex items-center gap-1 shrink-0">
         <TopBtn onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">↩</TopBtn>
         <TopBtn onClick={redo} disabled={!canRedo} title="Redo (⌘Y)">↪</TopBtn>
+      </div>
+
+      {/* Theme / SEO — these switch the sidebar's ControlPanel to its Theme
+          or SEO tab from out here, since neither one gets its own button in
+          ControlPanel's own tab bar anymore (that bar only ever shows
+          Layers/Style/Content — see ControlPanel.tsx). The tab CONTENT is
+          unchanged; only its switcher moved. */}
+      <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5 shrink-0">
+        <button
+          onClick={() => setControlPanelTab('theme')}
+          title="Theme — global colors & typography"
+          className={[
+            'px-3 py-1 rounded-md text-xs font-medium transition-colors',
+            controlPanelTab === 'theme' ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-500 hover:text-neutral-700',
+          ].join(' ')}
+        >
+          🎨 Theme
+        </button>
+        <button
+          onClick={() => setControlPanelTab('seo')}
+          title="SEO — search & social metadata"
+          className={[
+            'px-3 py-1 rounded-md text-xs font-medium transition-colors',
+            controlPanelTab === 'seo' ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-500 hover:text-neutral-700',
+          ].join(' ')}
+        >
+          🔍 SEO
+        </button>
       </div>
 
       {/* Centre: mode + responsive width */}
