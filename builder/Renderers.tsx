@@ -21,6 +21,7 @@ import { EmptyCanvasPrompt } from './TemplatePicker'
 import { AnimationStyleSheet, useAnimationProps } from './animations'
 import { CustomCssStyleSheet } from './CustomCssStyleSheet'
 import { useNodeStyle, useNodeAnimation } from './responsive'
+import { setGlobalColorPalette } from './styleMapper'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
@@ -53,6 +54,17 @@ export function EditorRenderer() {
   const draggingId        = useBuilderStore(s => s.draggingId)
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
   const setCanvasScale    = useBuilderStore(s => s.setCanvasScale)
+  const globalColors      = useBuilderStore(s => s.globalColors)
+
+  // Refreshes styleMapper's module-level color-resolution cache with the
+  // latest palette on every render, AND (just by subscribing here at all)
+  // makes this component re-render whenever a GlobalColor's value changes
+  // — which cascades down to every unmemoized child below, so a palette
+  // edit shows up live on every bound block without each one needing its
+  // own subscription. See the comment on setGlobalColorPalette in
+  // styleMapper.ts for why this is a plain call here rather than a store
+  // import inside styleMapper.ts itself.
+  setGlobalColorPalette(globalColors)
 
   const outerRef  = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -308,6 +320,12 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
   const previewWidth = useBuilderStore(s => s.previewWidth)
   const cfg           = PREVIEW_WIDTHS[previewWidth]
   const replayNonce   = useBuilderStore(s => s.previewReplayNonce)
+  const globalColors  = useBuilderStore(s => s.globalColors)
+
+  // Same reasoning as EditorRenderer above — Preview is a separate render
+  // root, so it needs its own subscription/cache-refresh rather than
+  // relying on EditorRenderer's.
+  setGlobalColorPalette(globalColors)
 
   return (
     <div

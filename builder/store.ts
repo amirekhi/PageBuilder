@@ -6,6 +6,7 @@ import { immer } from 'zustand/middleware/immer'
 import { NodeMap, PageNode, NodeType } from './types'
 import { NODE_REGISTRY } from './registry'
 import { SEED_MEDIA, MediaItem } from './Media'
+import type { StyleProps } from './styleMapper'
 
 const HISTORY_LIMIT = 50
 
@@ -88,6 +89,98 @@ export const PREVIEW_WIDTHS: Record<PreviewWidth, { px: number; label: string; i
   mobile:  { px: 390,  label: 'Mobile',  icon: '📱' },
 }
 
+// ─── Control panel tab ──────────────────────────────────────────────────────
+// Lifted into the store (rather than local useState inside ControlPanel)
+// specifically so TopBar — a completely separate component — can switch to
+// Theme/SEO from its own buttons. ControlPanel's own visible tab BAR only
+// ever renders layers/style/content (see ControlPanel.tsx); Theme and SEO
+// are still perfectly normal values this same field can hold and still
+// render the exact same tab body they always did — they've just lost their
+// own button in that particular tab bar, in favor of a button living in
+// TopBar instead. Nothing about how the tab content itself works changes.
+export type ControlPanelTab = 'layers' | 'style' | 'content' | 'theme' | 'seo'
+
+// ─── Global design tokens (colors + typography) ────────────────────────────
+// Page-wide, NOT per-node — sibling to globalCustomCss, not part of the
+// `nodes` tree. Colors are genuinely LIVE-linked: a node's style can store a
+// reference (`global:<id>`, see makeGlobalColorRef in styleMapper.ts)
+// instead of a literal hex, and every place that reference is used re-
+// resolves it at render time — so editing a GlobalColor's `value` here
+// instantly updates every block bound to it, with no per-node data to
+// migrate. Typography presets are deliberately NOT live-linked (see the
+// comment on GlobalTypographyStyle) — applying one just copies its values
+// onto a node's style once, the same as picking values by hand.
+//
+// NOT tracked in undo/redo history (pushHistory only ever snapshots
+// `nodes`) — same precedent as globalCustomCss, which has never been
+// undo-tracked either. Editing your brand palette is a rare, deliberate
+// action, not a rapid-iteration one the way node edits are.
+
+export interface GlobalColor {
+  id:    string
+  name:  string
+  value: string // hex, e.g. '#7c3aed'
+}
+
+// Deliberately just the "shape" fields (size/weight/line-height/align) —
+// the same subset StylePanel's own Typography group already exposes.
+// Unlike GlobalColor, applying one of these is a one-time COPY onto a
+// node's style, not a live reference: a text style touches several
+// StyleProps fields at once (fontSize + fontWeight + leading + textAlign),
+// and letting a node "subscribe" to all of them simultaneously would mean
+// either overriding fields the user deliberately customized afterward, or
+// building a much heavier partial-override-tracking system than a first
+// version needs. Copy-once matches how "paragraph styles" work in most
+// design tools' quick-apply feature, as opposed to their separate (heavier)
+// linked-style-system feature.
+export interface GlobalTypographyStyle {
+  id:         string
+  name:       string
+  fontSize?:   StyleProps['fontSize']
+  fontWeight?: StyleProps['fontWeight']
+  leading?:    StyleProps['leading']
+  textAlign?:  StyleProps['textAlign']
+}
+
+function makeGlobalId(): string {
+  return `global_${Math.random().toString(36).slice(2, 8)}`
+}
+
+// ─── SEO settings ───────────────────────────────────────────────────────────
+// Page-wide, same as globalColors/globalTypography/globalCustomCss above —
+// one set of metadata for the whole page, not per-node. Also NOT
+// undo-tracked, same precedent as the other global-settings fields.
+export interface SeoSettings {
+  title?:         string
+  description?:   string
+  keywords?:      string
+  ogTitle?:       string
+  ogDescription?: string
+  ogImage?:       string
+  canonicalUrl?:  string
+  noIndex?:       boolean
+  favicon?:       string
+}
+
+const DEFAULT_SEO: SeoSettings = {
+  title:       'Untitled Page',
+  description: '',
+}
+
+const DEFAULT_GLOBAL_COLORS: GlobalColor[] = [
+  { id: makeGlobalId(), name: 'Primary',   value: '#7c3aed' },
+  { id: makeGlobalId(), name: 'Secondary', value: '#4f46e5' },
+  { id: makeGlobalId(), name: 'Text',      value: '#171717' },
+  { id: makeGlobalId(), name: 'Accent',    value: '#f59e0b' },
+]
+
+const DEFAULT_GLOBAL_TYPOGRAPHY: GlobalTypographyStyle[] = [
+  { id: makeGlobalId(), name: 'Heading 1', fontSize: '5xl', fontWeight: 'bold',     leading: 'tight' },
+  { id: makeGlobalId(), name: 'Heading 2', fontSize: '3xl', fontWeight: 'bold',     leading: 'snug' },
+  { id: makeGlobalId(), name: 'Heading 3', fontSize: '2xl', fontWeight: 'semibold', leading: 'snug' },
+  { id: makeGlobalId(), name: 'Body',      fontSize: 'base', fontWeight: 'normal',  leading: 'relaxed' },
+]
+
 type MediaPickCallback = (item: MediaItem) => void
 type ImageEditCallback = (editedDataUrl: string) => void
 
@@ -105,6 +198,13 @@ interface BuilderStore {
   previewReplayNonce: number
   richEditingId: string | null
   globalCustomCss: string
+
+  controlPanelTab:    ControlPanelTab
+  setControlPanelTab: (tab: ControlPanelTab) => void
+
+  globalColors:     GlobalColor[]
+  globalTypography: GlobalTypographyStyle[]
+  seo:              SeoSettings
 
   past:         NodeMap[]
   future:       NodeMap[]
@@ -146,6 +246,16 @@ interface BuilderStore {
   undo:            () => void
   redo:            () => void
 
+  addGlobalColor:    (name: string, value: string) => void
+  updateGlobalColor: (id: string, patch: Partial<Omit<GlobalColor, 'id'>>) => void
+  deleteGlobalColor: (id: string) => void
+
+  addGlobalTypography:    (name: string) => void
+  updateGlobalTypography: (id: string, patch: Partial<Omit<GlobalTypographyStyle, 'id'>>) => void
+  deleteGlobalTypography: (id: string) => void
+
+  updateSeo: (patch: Partial<SeoSettings>) => void
+
   openMediaPicker:  (onPick: MediaPickCallback) => void
   closeMediaPicker: () => void
   addUploadedMedia: (item: MediaItem) => void
@@ -169,6 +279,13 @@ export const useBuilderStore = create<BuilderStore>()(
       previewReplayNonce: 0,
       richEditingId: null,
       globalCustomCss: '',
+
+      controlPanelTab: 'layers',
+
+      globalColors:     DEFAULT_GLOBAL_COLORS,
+      globalTypography: DEFAULT_GLOBAL_TYPOGRAPHY,
+      seo:              { ...DEFAULT_SEO },
+
       past:         [],
       future:       [],
 
@@ -194,6 +311,7 @@ export const useBuilderStore = create<BuilderStore>()(
       replayAnimations:     () => set(s => { s.previewReplayNonce += 1 }),
       setRichEditing:       (id) => set(s => { s.richEditingId = id }),
       setGlobalCustomCss:   (css) => set(s => { s.globalCustomCss = css }),
+      setControlPanelTab:   (tab) => set(s => { s.controlPanelTab = tab }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
       setResizing:     (id)   => set(s => { s.resizingId = id }),
@@ -278,6 +396,37 @@ export const useBuilderStore = create<BuilderStore>()(
         if (s.past.length > HISTORY_LIMIT) s.past.pop()
         s.nodes      = s.future.shift()!
         s.selectedId = null
+      }),
+
+      addGlobalColor: (name, value) => set(s => {
+        s.globalColors.push({ id: makeGlobalId(), name, value })
+      }),
+      updateGlobalColor: (id, patch) => set(s => {
+        const c = s.globalColors.find(c => c.id === id)
+        if (c) Object.assign(c, patch)
+      }),
+      deleteGlobalColor: (id) => set(s => {
+        // Deliberately does NOT touch any node's style — a node still
+        // storing a `global:<id>` reference to a since-deleted color
+        // simply resolves to no color at render time (see resolveColor in
+        // styleMapper.ts), the same as any other "value that no longer
+        // exists" case. No migration pass needed.
+        s.globalColors = s.globalColors.filter(c => c.id !== id)
+      }),
+
+      addGlobalTypography: (name) => set(s => {
+        s.globalTypography.push({ id: makeGlobalId(), name, fontSize: 'base', fontWeight: 'normal', leading: 'normal' })
+      }),
+      updateGlobalTypography: (id, patch) => set(s => {
+        const t = s.globalTypography.find(t => t.id === id)
+        if (t) Object.assign(t, patch)
+      }),
+      deleteGlobalTypography: (id) => set(s => {
+        s.globalTypography = s.globalTypography.filter(t => t.id !== id)
+      }),
+
+      updateSeo: (patch) => set(s => {
+        Object.assign(s.seo, patch)
       }),
 
       openMediaPicker: (onPick) => set(s => {

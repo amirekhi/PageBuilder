@@ -181,8 +181,61 @@ const COLOR_HEX: Record<string, string> = {
   'amber-500': '#f59e0b',
 }
 
+// ─── Global color references ───────────────────────────────────────────────
+// A node's bgColor/textColor/borderColor (and HoverStyleProps' equivalents)
+// can store either a literal value (hex, 'transparent', or a COLOR_HEX
+// preset name) OR a reference to a page-wide GlobalColor, written as the
+// string `global:<id>`. resolveColor below transparently handles both —
+// every existing caller (buildInlineStyle, buildSectionOuterStyle,
+// compileHoverCss, ColorField's own swatch preview) already just calls
+// resolveColor(value) and gets back a real hex either way, with zero
+// changes needed at any of those call sites.
+//
+// The live palette itself is kept in a module-level cache (_globalColorPalette
+// below), NOT imported directly from store.ts. store.ts sits at the top of
+// an import chain that flows store.ts → registry.tsx → nodeComponents.tsx →
+// THIS file — importing useBuilderStore here would close that into a real
+// module-evaluation cycle (the same class of bug already documented in
+// nodeComponents.tsx around richText.ts's lazy-built extensions). Instead,
+// Renderer.tsx (which already imports both useBuilderStore and this file,
+// with no cycle either way) calls setGlobalColorPalette(...) once per
+// render from a `useBuilderStore(s => s.globalColors)` subscription — that
+// both keeps this cache fresh AND forces the whole render tree beneath it
+// to re-render whenever the palette changes, since none of the node
+// components in between are memoized.
+
+const GLOBAL_COLOR_PREFIX = 'global:'
+
+export function isGlobalColorRef(value?: string): value is string {
+  return !!value && value.startsWith(GLOBAL_COLOR_PREFIX)
+}
+
+export function globalColorRefId(value: string): string {
+  return value.slice(GLOBAL_COLOR_PREFIX.length)
+}
+
+export function makeGlobalColorRef(id: string): string {
+  return `${GLOBAL_COLOR_PREFIX}${id}`
+}
+
+export interface GlobalColorRef {
+  id:    string
+  name:  string
+  value: string
+}
+
+let _globalColorPalette: GlobalColorRef[] = []
+
+export function setGlobalColorPalette(palette: GlobalColorRef[]): void {
+  _globalColorPalette = palette
+}
+
 export function resolveColor(value?: string): string | undefined {
   if (!value) return undefined
+  if (isGlobalColorRef(value)) {
+    const id = globalColorRefId(value)
+    return _globalColorPalette.find(c => c.id === id)?.value
+  }
   return COLOR_HEX[value] ?? value
 }
 
