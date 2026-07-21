@@ -115,17 +115,45 @@ export function TopBar() {
     setMenuOpen(false)
   }
 
-  function handleExportJSON() {
-    const { nodes, rootId } = useBuilderStore.getState()
-    downloadJSON(nodes, rootId)
-    setMenuOpen(false)
-  }
+function handleExportJSON() {
+  const {
+    nodes,
+    rootId,
+    globalColors,
+    globalTypography,
+    globalCustomCss,
+    seo,
+  } = useBuilderStore.getState()
 
-  function handleExportHTML() {
-    const { nodes, rootId } = useBuilderStore.getState()
-    downloadHtml(nodes, rootId, 'page.html', 'My Page')
-    setMenuOpen(false)
-  }
+  downloadJSON(nodes, rootId, 'page.json', {
+    globalColors,
+    globalTypography,
+    globalCustomCss,
+    seo,
+  })
+
+  setMenuOpen(false)
+}
+
+function handleExportHTML() {
+  const {
+    nodes,
+    rootId,
+    globalColors,
+    globalTypography,
+    globalCustomCss,
+    seo,
+  } = useBuilderStore.getState()
+
+  downloadHtml(nodes, rootId, 'page.html', {
+    title: seo.title || 'My Page',
+    globalColors,
+    globalCustomCss,
+    seo,
+  })
+
+  setMenuOpen(false)
+}
 
   async function handleImportJSON(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
