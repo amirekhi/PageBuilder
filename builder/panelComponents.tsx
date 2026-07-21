@@ -7,7 +7,7 @@ import type { HoverStyleProps } from './customCss'
 import type { PageNode } from './types'
 import { useNodeAnimation, patchNodeAnimation, hasAnimationOverrideAt, clearNodeAnimationOverride } from './responsive'
 import { useBuilderStore, PREVIEW_WIDTHS } from './store'
-
+import { sanitizeElementId } from './elementId'
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
 export function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
@@ -1373,5 +1373,36 @@ export function SeoPanel() {
         </div>
       </FieldGroup>
     </div>
+  )
+}
+
+
+// ─── Element ID field ───────────────────────────────────────────────────────
+// Shared by every per-node panel (via ControlPanel's ContentTab, appended
+// right alongside CustomCssField) — one field covers all 15 node types, no
+// individual *Panel component needed to change. Writes node.props.htmlId,
+// read by elementId.ts's elementId() helper and rendered as a real HTML id
+// attribute on the block's root element in nodeComponents.tsx.
+
+export function ElementIdField({
+  value, onChange,
+}: {
+  value?: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <FieldGroup label="Element ID">
+      <input
+        type="text"
+        value={value ?? ''}
+        onChange={e => onChange(sanitizeElementId(e.target.value))}
+        placeholder="e.g. pricing-section"
+        spellCheck={false}
+        className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+      />
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        Optional. Lets a Button/link elsewhere jump straight to this block using <code className="font-mono">#{value || 'this-id'}</code> as its link target, and gives you a stable hook for Custom CSS or your own scripts. Letters, numbers, hyphens, and underscores only.
+      </p>
+    </FieldGroup>
   )
 }

@@ -6,7 +6,7 @@ import {
   StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle,
   buildSectionOuterStyle, buildSectionOuterClassName, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
-import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel, HoverToggle } from './panelComponents'
+import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel, HoverToggle, CheckField } from './panelComponents'
 import { useBuilderStore } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
 import { AnimationProps } from './animations'
@@ -15,6 +15,8 @@ import { useRichTextEdit, buildTextExtensions, buildHeadingExtensions } from './
 import { RichTextToolbar } from './RichTextToolbar'
 import { customCssClass, buildHoverTransitionStyle } from './customCss'
 import type { HoverStyleProps } from './customCss'
+import { elementId } from './elementId'
+import { resolveHref, type LinkType } from './links'
 
 
 
@@ -77,6 +79,7 @@ export const SectionEditor: React.FC<NodeComponentProps> = ({ node, children }) 
 
   return (
     <section
+      id={elementId(node)}
       className={buildSectionOuterClassName(s, withCustomCss(node, 'w-full relative'))}
       style={{
         ...buildSectionOuterStyle(s, { skipSizing: true }),
@@ -103,6 +106,7 @@ export const SectionPreview: React.FC<NodeComponentProps> = ({ node, children, a
   return (
     <section
       ref={animationRef}
+      id={elementId(node)}
       className={buildSectionOuterClassName(s, withCustomCss(node, 'w-full relative'))}
       style={{
         ...buildSectionOuterStyle(s),
@@ -342,6 +346,7 @@ function AvatarRender({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       ref={animationRef}
+      id={elementId(node)}
       src={src} alt={(node.props.alt as string) || ''}
       className={withCustomCss(node, 'rounded-full object-cover shrink-0')}
       style={{ width: size, height: size, ...animationStyle }}
@@ -349,6 +354,7 @@ function AvatarRender({
   ) : (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={withCustomCss(node, 'rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-semibold shrink-0 select-none')}
       style={{ width: size, height: size, fontSize: size * 0.36, ...animationStyle }}
     >
@@ -407,6 +413,7 @@ function QuoteRender({
   return (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'flex flex-col gap-4'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
@@ -482,6 +489,7 @@ function VideoRender({
   if (!embed) return (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, minHeight: 160, ...animationStyle }}
     >
@@ -492,6 +500,7 @@ function VideoRender({
   return (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'overflow-hidden'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, ...animationStyle }}
     >
@@ -557,6 +566,7 @@ function AccordionRender({
   return (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
@@ -637,6 +647,7 @@ function ListRender({
   return (
     <ul
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'space-y-2 list-none'))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...animationStyle }}
     >
@@ -704,6 +715,7 @@ function BadgeRender({
   return (
     <span
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, `inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${varClass}`))}
       style={{ ...buildInlineStyle(s, { skipSizing }), ...buildHoverTransitionStyle(node), ...animationStyle }}
     >
@@ -744,7 +756,7 @@ export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
 export const ColumnsEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const s = useNodeStyle(node)
-  return <div className={buildClassName(s, withCustomCss(node, 'w-full flex flex-row'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), minHeight: 48 }}>{children}</div>
+  return <div id={elementId(node)} className={buildClassName(s, withCustomCss(node, 'w-full flex flex-row'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), minHeight: 48 }}>{children}</div>
 }
 
 export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
@@ -752,6 +764,7 @@ export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children, a
   return (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'w-full flex flex-row'))}
       style={{ ...buildInlineStyle(s), ...animationStyle }}
     >
@@ -784,7 +797,7 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
 export const ColumnEditor: React.FC<NodeComponentProps> = ({ node, children }) => {
   const s = useNodeStyle(node)
-  return <div className={buildClassName(s, withCustomCss(node, 'flex-1 min-w-0 min-h-12'))} style={buildInlineStyle(s, { skipSizing: true })}>{children}</div>
+  return <div id={elementId(node)} className={buildClassName(s, withCustomCss(node, 'flex-1 min-w-0 min-h-12'))} style={buildInlineStyle(s, { skipSizing: true })}>{children}</div>
 }
 
 export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, animationRef, animationStyle }) => {
@@ -792,6 +805,7 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
   return (
     <div
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'flex-1 min-w-0'))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
     >
@@ -921,7 +935,7 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
 
   if (isRichEditing) {
     return (
-      <div className="relative" style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
+      <div className="relative" id={elementId(node)} style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
         <RichTextToolbar editor={editor} allowBlocks />
         <EditorContent
           editor={editor}
@@ -934,6 +948,7 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const hasContent = !!(node.props.content as string)
   return (
     <p
+      id={elementId(node)}
       onDoubleClick={e => { e.stopPropagation(); startEditing() }}
       className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
@@ -947,6 +962,7 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
   return (
     <p
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, customCssClass(node))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
       dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
@@ -985,7 +1001,7 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
 
   if (isRichEditing) {
     return (
-      <div className="relative" style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
+      <div className="relative" id={elementId(node)} style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
         <RichTextToolbar editor={editor} allowBlocks={false} />
         <EditorContent
           editor={editor}
@@ -998,6 +1014,7 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const hasContent = !!(node.props.content as string)
   return (
     <Tag
+      id={elementId(node)}
       onDoubleClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing() }}
       className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
@@ -1012,6 +1029,7 @@ export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRe
   return (
     <Tag
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, customCssClass(node))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
       dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
@@ -1054,14 +1072,14 @@ export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
   }
 
   if (!src) return (
-    <div onClick={handleEmptyClick} className={buildClassName(s, withCustomCss(node, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
+    <div id={elementId(node)} onClick={handleEmptyClick} className={buildClassName(s, withCustomCss(node, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
       <span className="text-xl">🖼️</span>
       <span className="text-xs font-medium">Click to choose an image</span>
     </div>
   )
 
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, withCustomCss(node, 'block w-full'))} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
+  return <img id={elementId(node)} src={src} alt={(node.props.alt as string) || ''} className={buildClassName(s, withCustomCss(node, 'block w-full'))} style={{ height: 'auto', ...buildInlineStyle(s, { skipSizing: true }) }} />
 }
 
 export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
@@ -1071,6 +1089,7 @@ export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef,
   return (
     <img
       ref={animationRef}
+      id={elementId(node)}
       src={node.props.src as string}
       alt={(node.props.alt as string) || ''}
       className={buildClassName(s, withCustomCss(node, hasFixedWidth ? 'block' : 'max-w-full block'))}
@@ -1101,11 +1120,8 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
         {src && <button onClick={handleBrowse} className="w-full mt-2 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">Replace image</button>}
         {src && (
           <button
-          onClick={() => {
-    console.log('Edit image clicked, src:', src)
-    useBuilderStore.getState().openImageEditor(src, editedDataUrl => onChange({ src: editedDataUrl }))
-    console.log('isImageEditorOpen now:', useBuilderStore.getState().isImageEditorOpen)
-  }}  className="w-full mt-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+            onClick={() => useBuilderStore.getState().openImageEditor(src, editedDataUrl => onChange({ src: editedDataUrl }))}
+            className="w-full mt-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
           >
             Edit image
           </button>
@@ -1145,6 +1161,23 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUTTON
 // ═══════════════════════════════════════════════════════════════════════════════
+// FIX: this used to render a plain <button> element that NEVER read
+// node.props.href at all — the Link field in ButtonPanel saved a value, but
+// nothing anywhere ever consumed it, so "the link doesn't work" wasn't a
+// bug in the URL handling, it was that there was no href on the rendered
+// element in the first place. Now a real <a>, with the href resolved via
+// resolveHref (links.ts) based on the chosen Link type (Relative — used
+// exactly as typed, for in-page anchors like "#pricing" or same-site paths
+// like "/about" — or Absolute, which auto-prepends https:// if the user
+// left off a protocol).
+//
+// isEditor prevents ACTUAL navigation while editing: SelectableShell's
+// wrapper already handles selecting this block on click via its own
+// onClick further up the tree — but since this is now a real <a href>, the
+// browser's default click behavior would navigate away from the page
+// builder entirely before that selection logic even matters. Preview and
+// the exported HTML get the real, unprevented click — that's the one place
+// this should actually work as a normal link.
 
 const VARIANTS: Record<string, string> = {
   solid:   'bg-violet-600 text-white hover:bg-violet-700',
@@ -1153,40 +1186,95 @@ const VARIANTS: Record<string, string> = {
 }
 
 function ButtonRender({
-  node, skipSizing, animationRef, animationStyle,
+  node,
+  skipSizing,
+  isEditor,
+  animationRef,
+  animationStyle,
 }: {
-  node: PageNode; skipSizing: boolean
-  animationRef?: React.Ref<any>
+  node: PageNode
+  skipSizing: boolean
+  isEditor?: boolean
+  animationRef?: React.Ref<HTMLAnchorElement>
   animationStyle?: React.CSSProperties
 }) {
-  const s        = useNodeStyle(node)
-  const variant  = (node.props.variant as string) || 'solid'
+  const s = useNodeStyle(node)
+  const variant = (node.props.variant as string) || 'solid'
   const varClass = VARIANTS[variant] ?? VARIANTS.solid
+  const linkType = ((node.props.linkType as LinkType) || 'relative')
+  const href = resolveHref(node.props.href as string, linkType)
+  const openInNewTab = !!node.props.openInNewTab
+  const hasFixedSize = typeof s.width === 'number' || typeof s.height === 'number'
+
   return (
-    <button
+      <a
       ref={animationRef}
-      className={buildClassName(s, withCustomCss(node, `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${varClass}`))}
-      style={{ ...buildInlineStyle(s, { skipSizing }), ...buildHoverTransitionStyle(node), ...animationStyle }}
+      id={elementId(node)}
+      href={href}
+      target={openInNewTab ? '_blank' : undefined}
+      rel={openInNewTab ? 'noopener noreferrer' : undefined}
+      onClick={isEditor ? (e) => e.preventDefault() : undefined}
+      className={buildClassName(
+        s,
+        withCustomCss(
+          node,
+          `inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm box-border ${varClass} ${hasFixedSize ? 'w-full h-full' : ''}`
+        )
+      )}
+      style={{
+        ...buildInlineStyle(s, { skipSizing }),
+        ...buildHoverTransitionStyle(node),
+        ...animationStyle,
+      }}
     >
       {(node.props.label as string) || 'Button'}
-    </button>
+    </a>
   )
 }
 
-export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} skipSizing={true} />
+export const ButtonEditor:  React.FC<NodeComponentProps> = ({ node }) => <ButtonRender node={node} skipSizing={true} isEditor />
 export const ButtonPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) =>
   <ButtonRender node={node} skipSizing={false} animationRef={animationRef} animationStyle={animationStyle} />
 
 export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const linkType = ((node.props.linkType as LinkType) || 'relative')
+
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label="Content">
         <label className="block text-xs text-neutral-500 mb-1">Label</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
-        <label className="block text-xs text-neutral-500 mt-2 mb-1">Link (href)</label>
-        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="https://…" value={(node.props.href as string) ?? ''} onChange={e => onChange({ href: e.target.value })} />
       </FieldGroup>
+
+      <FieldGroup label="Link">
+        <SelectField
+          label="Type"
+          value={linkType}
+          options={[
+            { label: 'Relative (#anchor, /path)', value: 'relative' },
+            { label: 'Absolute (https://…)',      value: 'absolute' },
+          ]}
+          onChange={v => onChange({ linkType: v as LinkType })}
+        />
+        <input
+          className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          placeholder={linkType === 'absolute' ? 'example.com or https://example.com' : '/pricing or #contact'}
+          value={(node.props.href as string) ?? ''}
+          onChange={e => onChange({ href: e.target.value })}
+        />
+        <p className="text-[10px] text-neutral-400 -mt-1">
+          {linkType === 'absolute'
+            ? 'https:// is added automatically if you leave it off.'
+            : 'Used exactly as typed — good for in-page anchors (an Element ID elsewhere on this page, e.g. "#pricing") or paths on this same site (e.g. "/pricing").'}
+        </p>
+        <CheckField
+          label="Open in new tab"
+          value={!!node.props.openInNewTab}
+          onChange={v => onChange({ openInNewTab: v })}
+        />
+      </FieldGroup>
+
       <FieldGroup label="Style">
         <SelectField label="Variant" value={(node.props.variant as string) ?? 'solid'} options={['solid','outline','ghost']} onChange={v => onChange({ variant: v })} />
       </FieldGroup>
@@ -1208,7 +1296,7 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
-  <div style={{ height: (node.props.height as number) ?? 40 }} className={withCustomCss(node, 'w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none')}>
+  <div id={elementId(node)} style={{ height: (node.props.height as number) ?? 40 }} className={withCustomCss(node, 'w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none')}>
     spacer {(node.props.height as number) ?? 40}px
   </div>
 )
@@ -1216,6 +1304,7 @@ export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
 export const SpacerPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => (
   <div
     ref={animationRef}
+    id={elementId(node)}
     style={{ height: (node.props.height as number) ?? 40, ...animationStyle }}
     className={withCustomCss(node, 'w-full')}
   />
@@ -1241,13 +1330,14 @@ export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
 
 export const DividerEditor:  React.FC<NodeComponentProps> = ({ node }) => {
   const s = useNodeStyle(node)
-  return <hr className={buildClassName(s, withCustomCss(node, 'w-full border-neutral-200'))} style={buildInlineStyle(s, { skipSizing: true })} />
+  return <hr id={elementId(node)} className={buildClassName(s, withCustomCss(node, 'w-full border-neutral-200'))} style={buildInlineStyle(s, { skipSizing: true })} />
 }
 export const DividerPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
   return (
     <hr
       ref={animationRef}
+      id={elementId(node)}
       className={buildClassName(s, withCustomCss(node, 'w-full'))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
     />

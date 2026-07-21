@@ -4,7 +4,7 @@ import React from 'react'
 import { useBuilderStore, PREVIEW_WIDTHS, ControlPanelTab } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap, PageNode } from './types'
-import { StylePanel, CustomCssField, GlobalColorManager, GlobalTypographyManager, SeoPanel } from './panelComponents'
+import { StylePanel, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel } from './panelComponents'
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 import type { HoverStyleProps } from './customCss'
 
@@ -221,7 +221,6 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 }
 
 // ─── Content tab ──────────────────────────────────────────────────────────────
-
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   if (!node) return <Empty text="Select a block to edit its content" />
   const def = NODE_REGISTRY[node.type]
@@ -230,6 +229,10 @@ function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: 
   return (
     <>
       <Panel node={node} onChange={props => onUpdate(node.id, props)} />
+      <ElementIdField
+        value={node.props.htmlId as string}
+        onChange={id => onUpdate(node.id, { htmlId: id })}
+      />
       <CustomCssField
         value={node.props.customCss as string}
         onChange={css => onUpdate(node.id, { customCss: css })}
@@ -237,7 +240,6 @@ function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: 
     </>
   )
 }
-
 function Empty({ text }: { text: string }) {
   return (
     <div className="flex items-center justify-center h-48 px-6">
