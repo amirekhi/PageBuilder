@@ -4,7 +4,7 @@ import React from 'react'
 import { useBuilderStore, PREVIEW_WIDTHS, ControlPanelTab } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap, PageNode } from './types'
-import { StylePanel, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel } from './panelComponents'
+import { StylePanel, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel, GridCellSpanField } from './panelComponents'
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 import type { HoverStyleProps } from './customCss'
 
@@ -169,12 +169,12 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
   const isSection             = node.type === 'section'
   const isContainer           = NODE_REGISTRY[node.type]?.isContainer ?? false
   const hideSize              = node.type === 'avatar' || node.type === 'spacer'
-  const hideWidth             = node.type === 'column' || node.type === 'image'
-  // Section and Column both have their own, richer background picker in
-  // the Content tab (SectionPanel / ColumnPanel) — hiding the Style tab's
-  // generic Background field for them avoids two controls silently
-  // editing the exact same bgColor value.
-  const hideBackground         = isSection || node.type === 'column'
+  const hideWidth             = node.type === 'column' || node.type === 'image' || node.type === 'tabpane'
+  // Section, Column, and Tab Pane all have their own, richer background
+  // picker in the Content tab (SectionPanel / ColumnPanel / TabPanePanel)
+  // — hiding the Style tab's generic Background field for them avoids two
+  // controls silently editing the exact same bgColor value.
+  const hideBackground         = isSection || node.type === 'column' || node.type === 'tabpane'
 
   return (
     <div>
@@ -222,12 +222,37 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 
 // ─── Content tab ──────────────────────────────────────────────────────────────
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
+  // Both hooks called unconditionally, BEFORE the early `if (!node)` return
+  // below, per the rules of hooks — useNodeStyle already tolerates a null
+  // node (see responsive.ts) for exactly this reason.
+  const nodes = useBuilderStore(s => s.nodes)
+  const style = useNodeStyle(node)
+
   if (!node) return <Empty text="Select a block to edit its content" />
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
   const Panel = def.EditorPanel
+
+  // Whenever this block's direct parent is a Grid, surface the "Cell span"
+  // control right above that block's own Content panel — this is how a
+  // child claims more than one of the parent Grid's cells (see
+  // GridCellSpanField in panelComponents.tsx and the Grid element in
+  // nodeComponents.tsx/registry.tsx). Any other parent type never renders
+  // this field, since gridColSpan/gridRowSpan are inert outside a grid
+  // parent anyway. (A Tabs parent doesn't need an analogous field here —
+  // its children's "position" is just which tab they are, already edited
+  // via TabPanePanel's own Tab label field and TabsPanel's tab list.)
+  const parentNode  = node.parentId ? nodes[node.parentId] : null
+  const isGridChild = parentNode?.type === 'grid'
+
   return (
     <>
+      {isGridChild && (
+        <GridCellSpanField
+          style={style}
+          onChange={partial => patchNodeStyle(node, p => onUpdate(node.id, p), partial)}
+        />
+      )}
       <Panel node={node} onChange={props => onUpdate(node.id, props)} />
       <ElementIdField
         value={node.props.htmlId as string}

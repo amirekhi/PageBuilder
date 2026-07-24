@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useDroppable } from '@dnd-kit/core'
 import { useBuilderStore } from './store'
 import { NODE_REGISTRY, BLOCK_GROUPS } from './registry'
@@ -281,7 +282,7 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
     !query || t.label.toLowerCase().includes(query.toLowerCase())
   )
 
-  return (
+  const pickerContent = (
     <div
       ref={pickerRef}
       style={{ position: 'fixed', top, left, zIndex: 9999 }}
@@ -353,6 +354,17 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
       )}
     </div>
   )
+
+  // Portaled to document.body rather than rendered inline: this is a
+  // position:fixed element, but an ancestor with overflow:hidden (e.g.
+  // CarouselEditor's slide-track clipping wrapper) still clips a fixed
+  // descendant's PAINT even though `fixed` positions it relative to the
+  // viewport — the clip applies to the whole rendered subtree, not just
+  // elements still participating in normal layout flow. Portaling out to
+  // body sidesteps that entirely, so BlockPicker can never be silently
+  // clipped/hidden by any current or future container's overflow setting.
+  if (typeof document === 'undefined') return null
+  return createPortal(pickerContent, document.body)
 }
 
 function PickerTabBtn({ active, onClick, children }: {

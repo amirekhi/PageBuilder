@@ -827,6 +827,188 @@ function buildFAQAccordion(): { nodes: NodeMap; rootChildId: string } {
   return { nodes, rootChildId: sectionId }
 }
 
+// ─── Bento Grid ─────────────────────────────────────────────────────────────
+// Demonstrates the Grid element (nodeComponents.tsx / registry.tsx): a
+// 3-column × 2-row grid where cells span different amounts (one 2×2 "hero"
+// cell plus three 1×1/2×1 cells) via gridColSpan/gridRowSpan on each cell's
+// own style. gridAutoFlow:'dense' (styleMapper.ts) is what lets the smaller
+// cells pack neatly around the big one instead of leaving a gap. Each cell
+// reuses the Column node type as its wrapper (padding, background, rounded
+// corners all already built in) — see the note on Column's registry entry
+// for why that's a safe, harmless reuse inside a grid parent.
+
+function buildBentoGrid(): { nodes: NodeMap; rootChildId: string } {
+  const sectionId = id()
+  const headId    = id()
+  const subId     = id()
+  const gridId    = id()
+
+  function makeCell(
+    parent: string, colSpan: number, rowSpan: number,
+    title: string, body: string, bg: string, textColor: string,
+  ) {
+    const cellId  = id()
+    const titleId = id()
+    const bodyId  = id()
+    return {
+      cellId,
+      nodes: {
+        [cellId]: {
+          id: cellId, type: 'column', parentId: parent,
+          props: { style: {
+            px: 6, py: 6, display: 'flex', flexDir: 'col', gap: 2, justify: 'end',
+            bgColor: bg, rounded: 'xl',
+            gridColSpan: colSpan, gridRowSpan: rowSpan,
+          } },
+          children: [titleId, bodyId],
+        },
+        [titleId]: {
+          id: titleId, type: 'heading', parentId: cellId,
+          props: { tag: 'h3', content: title, style: { fontSize: colSpan >= 2 ? '2xl' : 'lg', fontWeight: 'bold', textColor } },
+          children: [],
+        },
+        [bodyId]: {
+          id: bodyId, type: 'text', parentId: cellId,
+          props: { content: body, style: { fontSize: 'sm', textColor } },
+          children: [],
+        },
+      } as Record<string, PageNode>,
+    }
+  }
+
+  const c1 = makeCell(gridId, 2, 2, 'Built for speed',   'Live preview with zero lag, however complex the page gets.', 'violet-600', 'white')
+  const c2 = makeCell(gridId, 1, 1, 'Any device',        'Responsive by default, on every breakpoint.',                'neutral-800', 'white')
+  const c3 = makeCell(gridId, 1, 1, '99.9% uptime',      'Rock-solid hosting, no surprises.',                          'blue-600',   'white')
+  const c4 = makeCell(gridId, 2, 1, 'Team-ready',        'Invite your whole team — no seat limits, ever.',            'neutral-900', 'white')
+
+  const nodes: NodeMap = {
+    [sectionId]: {
+      id: sectionId, type: 'section', parentId: null,
+      props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 8, maxWidth: '6xl', centerContent: true } },
+      children: [headId, subId, gridId],
+    },
+    [headId]: {
+      id: headId, type: 'heading', parentId: sectionId,
+      props: { tag: 'h2', content: 'Everything, at a glance', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      children: [],
+    },
+    [subId]: {
+      id: subId, type: 'text', parentId: sectionId,
+      props: { content: 'A bento-style overview of what makes it work.', style: { fontSize: 'base', textAlign: 'center', textColor: 'neutral-500' } },
+      children: [],
+    },
+    [gridId]: {
+      id: gridId, type: 'grid', parentId: sectionId,
+      props: { style: { display: 'grid', gridCols: 3, gridRows: 2, gap: 4, gridRowMinHeight: 140, justifyItems: 'stretch', align: 'stretch' } },
+      children: [c1.cellId, c2.cellId, c3.cellId, c4.cellId],
+    },
+    ...c1.nodes, ...c2.nodes, ...c3.nodes, ...c4.nodes,
+  }
+
+  return { nodes, rootChildId: sectionId }
+}
+
+// ─── Feature Tabs ───────────────────────────────────────────────────────────
+// Demonstrates the Tabs element (nodeComponents.tsx / registry.tsx): three
+// tabs, each holding a genuinely nested block tree (heading + text + image),
+// not just plain strings — proving tabpane children really do support
+// arbitrary, independently-editable content the same as any other container.
+
+function buildFeatureTabs(): { nodes: NodeMap; rootChildId: string } {
+  const sectionId = id()
+  const headId     = id()
+  const tabsId     = id()
+
+  function makeTabPane(
+    parent: string, label: string, title: string, body: string, img: string,
+  ) {
+    const paneId  = id()
+    const colsId  = id()
+    const col1Id  = id()
+    const col2Id  = id()
+    const titleId = id()
+    const bodyId  = id()
+    const imgId   = id()
+    return {
+      paneId,
+      nodes: {
+        [paneId]: {
+          id: paneId, type: 'tabpane', parentId: parent,
+          props: { label, style: { px: 0, py: 6, display: 'flex', flexDir: 'col' } },
+          children: [colsId],
+        },
+        [colsId]: {
+          id: colsId, type: 'columns', parentId: paneId,
+          props: { style: { gap: 8, align: 'center' } },
+          children: [col1Id, col2Id],
+        },
+        [col1Id]: {
+          id: col1Id, type: 'column', parentId: colsId,
+          props: { style: { px: 0, py: 0, display: 'flex', flexDir: 'col', gap: 3 } },
+          children: [titleId, bodyId],
+        },
+        [col2Id]: {
+          id: col2Id, type: 'column', parentId: colsId,
+          props: { style: { px: 0, py: 0 } },
+          children: [imgId],
+        },
+        [titleId]: {
+          id: titleId, type: 'heading', parentId: col1Id,
+          props: { tag: 'h3', content: title, style: { fontSize: '2xl', fontWeight: 'bold' } },
+          children: [],
+        },
+        [bodyId]: {
+          id: bodyId, type: 'text', parentId: col1Id,
+          props: { content: body, style: { fontSize: 'base', textColor: 'neutral-600' } },
+          children: [],
+        },
+        [imgId]: {
+          id: imgId, type: 'image', parentId: col2Id,
+          props: { src: img, alt: title, style: { width: 'full', rounded: 'xl', aspectRatio: '4/3', objectFit: 'cover' } },
+          children: [],
+        },
+      } as Record<string, PageNode>,
+    }
+  }
+
+  const t1 = makeTabPane(
+    tabsId, 'Design', 'Design without limits',
+    'Every spacing, color, and typography control an agency would charge you for — built in, and editable with a click.',
+    'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=600&q=80',
+  )
+  const t2 = makeTabPane(
+    tabsId, 'Collaborate', 'Built for teams',
+    'Real-time editing, comments, and shareable previews — everyone stays in sync without a single export/import round-trip.',
+    'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&q=80',
+  )
+  const t3 = makeTabPane(
+    tabsId, 'Publish', 'Ship in one click',
+    'Push straight to your domain with SSL, CDN caching, and SEO metadata already configured for you.',
+    'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&q=80',
+  )
+
+  const nodes: NodeMap = {
+    [sectionId]: {
+      id: sectionId, type: 'section', parentId: null,
+      props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 8, maxWidth: '5xl', centerContent: true } },
+      children: [headId, tabsId],
+    },
+    [headId]: {
+      id: headId, type: 'heading', parentId: sectionId,
+      props: { tag: 'h2', content: 'Everything you need, in one place', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      children: [],
+    },
+    [tabsId]: {
+      id: tabsId, type: 'tabs', parentId: sectionId,
+      props: { style: { gap: 4 } },
+      children: [t1.paneId, t2.paneId, t3.paneId],
+    },
+    ...t1.nodes, ...t2.nodes, ...t3.nodes,
+  }
+
+  return { nodes, rootChildId: sectionId }
+}
+
 // ─── CTA Banner ───────────────────────────────────────────────────────────────
 
 function buildCTABanner(): { nodes: NodeMap; rootChildId: string } {
@@ -856,6 +1038,163 @@ function buildCTABanner(): { nodes: NodeMap; rootChildId: string } {
       props: { label: 'Start building for free', href: '#', variant: 'solid' },
       children: [],
     },
+  }
+
+  return { nodes, rootChildId: sectionId }
+}
+
+// ─── Image Gallery (Carousel) ────────────────────────────────────────────────
+// Demonstrates the Carousel element (nodeComponents.tsx / registry.tsx) with
+// its simplest possible slide content — one full-bleed Image per slide.
+
+function buildImageGallery(): { nodes: NodeMap; rootChildId: string } {
+  const sectionId  = id()
+  const headId     = id()
+  const carouselId = id()
+
+  function makeImageSlide(parent: string, src: string, alt: string) {
+    const slideId = id()
+    const imgId   = id()
+    return {
+      slideId,
+      nodes: {
+        [slideId]: { id: slideId, type: 'slide', parentId: parent, props: { style: { px: 0, py: 0 } }, children: [imgId] },
+        [imgId]:   { id: imgId, type: 'image', parentId: slideId, props: { src, alt, style: { width: 'full', aspectRatio: '16/9', objectFit: 'cover' } }, children: [] },
+      } as Record<string, PageNode>,
+    }
+  }
+
+  const s1 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=1200&q=80', 'Product screenshot one')
+  const s2 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=1200&q=80', 'Product screenshot two')
+  const s3 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&q=80', 'Product screenshot three')
+
+  const nodes: NodeMap = {
+    [sectionId]: {
+      id: sectionId, type: 'section', parentId: null,
+      props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 8, maxWidth: '5xl', centerContent: true } },
+      children: [headId, carouselId],
+    },
+    [headId]: {
+      id: headId, type: 'heading', parentId: sectionId,
+      props: { tag: 'h2', content: 'See it in action', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      children: [],
+    },
+    [carouselId]: {
+      id: carouselId, type: 'carousel', parentId: sectionId,
+      props: { autoplay: true, autoplayInterval: 5000, loop: true, showArrows: true, showDots: true, style: { rounded: 'xl' } },
+      children: [s1.slideId, s2.slideId, s3.slideId],
+    },
+    ...s1.nodes, ...s2.nodes, ...s3.nodes,
+  }
+
+  return { nodes, rootChildId: sectionId }
+}
+
+// ─── Logo Carousel (Carousel) ────────────────────────────────────────────────
+// Same Carousel element again, this time each slide holding a small row of
+// centered wordmark text instead of a single image — proving slide content
+// isn't locked to any one block type.
+
+function buildLogoCarousel(): { nodes: NodeMap; rootChildId: string } {
+  const sectionId  = id()
+  const captionId  = id()
+  const carouselId = id()
+
+  function makeLogoSlide(parent: string, names: string[]) {
+    const slideId = id()
+    const colsId  = id()
+    const colIds  = names.map(() => id())
+    const txtIds  = names.map(() => id())
+    const nodes: Record<string, PageNode> = {
+      [slideId]: { id: slideId, type: 'slide', parentId: parent, props: { style: { px: 4, py: 6 } }, children: [colsId] },
+      [colsId]:  { id: colsId, type: 'columns', parentId: slideId, props: { style: { gap: 4, justify: 'between', align: 'center' } }, children: colIds },
+    }
+    names.forEach((name, i) => {
+      nodes[colIds[i]] = { id: colIds[i], type: 'column', parentId: colsId, props: { style: { px: 2, py: 2, display: 'flex', align: 'center', justify: 'center' } }, children: [txtIds[i]] }
+      nodes[txtIds[i]] = { id: txtIds[i], type: 'text', parentId: colIds[i], props: { content: name, style: { fontSize: 'lg', fontWeight: 'semibold', textAlign: 'center', textColor: 'neutral-400' } }, children: [] }
+    })
+    return { slideId, nodes }
+  }
+
+  const s1 = makeLogoSlide(carouselId, ['Acme', 'Globex', 'Initech'])
+  const s2 = makeLogoSlide(carouselId, ['Umbrella', 'Soylent', 'Stark'])
+
+  const nodes: NodeMap = {
+    [sectionId]: {
+      id: sectionId, type: 'section', parentId: null,
+      props: { style: { py: 12, px: 8, display: 'flex', flexDir: 'col', gap: 6, maxWidth: '5xl', centerContent: true } },
+      children: [captionId, carouselId],
+    },
+    [captionId]: {
+      id: captionId, type: 'text', parentId: sectionId,
+      props: { content: 'TRUSTED BY TEAMS AT', style: { fontSize: 'xs', fontWeight: 'semibold', textAlign: 'center', textColor: 'neutral-400' } },
+      children: [],
+    },
+    [carouselId]: {
+      id: carouselId, type: 'carousel', parentId: sectionId,
+      props: { autoplay: true, autoplayInterval: 3500, loop: true, showArrows: false, showDots: true, style: {} },
+      children: [s1.slideId, s2.slideId],
+    },
+    ...s1.nodes, ...s2.nodes,
+  }
+
+  return { nodes, rootChildId: sectionId }
+}
+
+// ─── Testimonial Carousel (Carousel) ─────────────────────────────────────────
+// A third Carousel template, each slide holding a self-contained Quote card
+// (which already bundles quote + name + role + avatar, no further nesting
+// needed) — centered within the slide via the slide's own Align control.
+
+function buildTestimonialCarousel(): { nodes: NodeMap; rootChildId: string } {
+  const sectionId  = id()
+  const headId     = id()
+  const carouselId = id()
+
+  function makeTestimonialSlide(parent: string, quote: string, name: string, role: string) {
+    const slideId = id()
+    const quoteId = id()
+    return {
+      slideId,
+      nodes: {
+        [slideId]: {
+          id: slideId, type: 'slide', parentId: parent,
+          props: { style: { px: 8, py: 4, display: 'flex', justify: 'center', align: 'center' } },
+          children: [quoteId],
+        },
+        [quoteId]: {
+          id: quoteId, type: 'quote', parentId: slideId,
+          props: {
+            quote, name, role, avatarSrc: '',
+            style: { px: 8, py: 8, bgColor: 'neutral-50', rounded: 'xl', maxWidth: 640 },
+          },
+          children: [],
+        },
+      } as Record<string, PageNode>,
+    }
+  }
+
+  const s1 = makeTestimonialSlide(carouselId, 'This builder cut our landing-page turnaround from two weeks to two hours.', 'Jordan Lee', 'Head of Growth, Acme Corp')
+  const s2 = makeTestimonialSlide(carouselId, 'The Grid and Tabs elements alone replaced three separate plugins we used to pay for.', 'Priya Nair', 'CTO, Globex')
+  const s3 = makeTestimonialSlide(carouselId, 'Our whole team ships pages now, not just the one person who knew CSS.', 'Sam Okafor', 'Head of Design, Initech')
+
+  const nodes: NodeMap = {
+    [sectionId]: {
+      id: sectionId, type: 'section', parentId: null,
+      props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 8, maxWidth: '4xl', centerContent: true } },
+      children: [headId, carouselId],
+    },
+    [headId]: {
+      id: headId, type: 'heading', parentId: sectionId,
+      props: { tag: 'h2', content: 'What teams are saying', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      children: [],
+    },
+    [carouselId]: {
+      id: carouselId, type: 'carousel', parentId: sectionId,
+      props: { autoplay: true, autoplayInterval: 6000, loop: true, showArrows: true, showDots: true, style: { minHeight: 260 } },
+      children: [s1.slideId, s2.slideId, s3.slideId],
+    },
+    ...s1.nodes, ...s2.nodes, ...s3.nodes,
   }
 
   return { nodes, rootChildId: sectionId }
@@ -906,4 +1245,9 @@ export const TEMPLATES: Template[] = [
   { label: 'Comparison Table', icon: '⚖️', thumbnail: 'Three plan columns with checked feature lists', build: buildComparison },
   { label: 'Blog Grid',        icon: '📰', thumbnail: 'Three-up article cards with image, badge, excerpt', build: buildBlogGrid },
   { label: 'FAQ (Accordion)',  icon: '🪗', thumbnail: 'Collapsible question/answer accordion',           build: buildFAQAccordion },
+  { label: 'Bento Grid',       icon: '🧩', thumbnail: 'Asymmetric grid: one big cell + three smaller ones', build: buildBentoGrid },
+  { label: 'Feature Tabs',     icon: '🗂️', thumbnail: 'Tabbed feature showcase — image + text per tab',   build: buildFeatureTabs },
+  { label: 'Image Gallery',    icon: '🖼️', thumbnail: 'Autoplaying full-bleed image carousel',              build: buildImageGallery },
+  { label: 'Logo Carousel',    icon: '🏳️', thumbnail: 'Autoplaying rotating rows of trusted-by logos',      build: buildLogoCarousel },
+  { label: 'Testimonial Carousel', icon: '💬', thumbnail: 'Autoplaying rotating customer quote cards',      build: buildTestimonialCarousel },
 ]

@@ -204,6 +204,56 @@ export function EditorRenderer() {
   )
 }
 
+// Shared by both RenderEditorNode and RenderPreviewNode's 'carousel'
+// handling below. Builds the ENTIRE sliding track — width math, transform,
+// transition — directly at the point activeIndex's state lives, exactly
+// mirroring the fix already proven for Tabs' display:none wrapping. This
+// is deliberately NOT built inside CarouselEditor/CarouselPreview
+// themselves (an earlier version did this via React.Children.toArray,
+// which reintroduced the same failure mode that originally broke Tabs —
+// positioning logic living one layer away from the component whose
+// setState actually fires doesn't reliably reach the DOM). CarouselEditor/
+// CarouselPreview now just render whatever this function already built.
+//
+// A naive per-slide `width: 100%` inside a plain `display:flex` track is a
+// CSS trap: percentage widths on a flex item resolve against ITS OWN flex
+// container's width — and since the track has no explicit width otherwise
+// (flex containers default to sizing off their content), that's a
+// circular reference browsers resolve by falling back to each slide's
+// intrinsic content size, breaking the layout. The fix: give the TRACK an
+// explicit width of `count * 100%` (of the outer, already-definite-width
+// viewport), and give each slide `100 / count` percent of THAT — every
+// percentage now resolves against a concrete number. One "slide-width"
+// step is then exactly `100 / count` percent of the track, which —
+// because the track itself is `count * 100%` of the viewport — always
+// works out to exactly one full viewport-width per index step, regardless
+// of slide count.
+function buildSlidingTrack(
+  childIds: string[],
+  activeIndex: number,
+  renderChild: (id: string) => React.ReactNode,
+): React.ReactNode {
+  const count = childIds.length
+  if (count === 0) return null
+  const widthPct = 100 / count
+  return (
+    <div
+      className="flex"
+      style={{
+        width: `${count * 100}%`,
+        transform: `translateX(-${widthPct * activeIndex}%)`,
+        transition: 'transform 450ms ease',
+      }}
+    >
+      {childIds.map(cid => (
+        <div key={cid} style={{ width: `${widthPct}%`, flexShrink: 0, minWidth: 0 }}>
+          {renderChild(cid)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Recursive editor node ────────────────────────────────────────────────────
 
 function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }) {
@@ -215,6 +265,14 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
   // down (same rule RenderPreviewNode's own animation hook already follows).
   const resolvedStyle = useNodeStyle(node ?? null)
 
+  // Which tab is active for a Tabs node — see the doc comment on
+  // activeIndex/onActiveIndexChange in types.ts for why this lives here as
+  // local state (one instance per Tabs node, scoped by this component's
+  // position in the tree) instead of on node.props. Called unconditionally,
+  // same hook-order rule as resolvedStyle above — harmless for every
+  // non-Tabs node, since nothing else reads it.
+  const [activeIndex, setActiveIndex] = useState(0)
+
   if (!node) return null
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
@@ -222,7 +280,59 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
   const { EditorComponent } = def
   let content: React.ReactNode = null
 
-  if (def.isContainer) {
+  // Clamped once here, up front, and reused both when building `content`
+  // below AND when passed down as the activeIndex prop to EditorComponent
+  // — so TabsEditor's header-button highlight and the actual visible pane
+  // can never disagree with each other. Harmless to compute for every
+  // non-Tabs node (just unused in that case).
+  const safeActiveIndex = node.children.length > 0
+    ? Math.min(activeIndex, node.children.length - 1)
+    : 0
+
+  if (node.type === 'tabs') {
+    // Tabs is a "switched container": its children are ALWAYS tabpane
+    // nodes, added exclusively via the dedicated "+ Add tab" action (see
+    // TabsPanel/TabsEditor's empty-state button) — never via the generic
+    // DropSlot "+ Add block" flow every other container uses. So,
+    // deliberately unlike every other isContainer branch below: NO
+    // DropSlots are rendered here at all — there's nowhere for dnd-kit to
+    // register a drop target directly inside Tabs, so a stray non-tabpane
+    // block can never land here by drag-and-drop. (You can still drag a
+    // block INTO a tabpane's own content — it falls through to the
+    // ordinary isContainer branch below once you're one level inside it.)
+    //
+    // Each inactive tabpane is hidden via display:none, wrapped HERE —
+    // right at the point activeIndex's state lives — rather than inside
+    // TabsEditor itself (see the FIX note in the git history / prior
+    // version of this comment for why that indirection was unreliable).
+    // A tab panel swapping instantly (no slide/fade motion) is the correct
+    // behavior here, unlike Carousel below.
+    content = node.children.length > 0
+      ? (
+        <>
+          {node.children.map((childId, i) => (
+            <div key={childId} style={{ display: i === safeActiveIndex ? undefined : 'none' }}>
+              <RenderEditorNode nodeId={childId} nodes={nodes} />
+            </div>
+          ))}
+        </>
+      )
+      : null
+  } else if (node.type === 'carousel') {
+    // Carousel is also a "switched container" with no generic DropSlots —
+    // same reasoning as Tabs above (slides are added exclusively via
+    // CarouselPanel/CarouselEditor's "+ Add slide" action). Unlike Tabs,
+    // it doesn't hide inactive children — buildSlidingTrack above lays
+    // every slide out side by side and translateX's the whole track into
+    // view, which is what produces the actual sliding motion. Built HERE,
+    // not inside CarouselEditor, for the same reason Tabs' hide/show moved
+    // here — see the comment on buildSlidingTrack for the full story.
+    content = buildSlidingTrack(
+      node.children,
+      safeActiveIndex,
+      childId => <RenderEditorNode nodeId={childId} nodes={nodes} />,
+    )
+  } else if (def.isContainer) {
     // FIX (Pricing template columns rendering uneven/out-of-order): a
     // between-block DropSlot used to always render as a full-width
     // horizontal divider regardless of the parent's layout direction. Fine
@@ -236,15 +346,15 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
     const axis = node.type === 'columns' ? 'row' : 'col'
 
     // FIX (grid columns/rows corrupted by DropSlots): when a container's
-    // resolved display is 'grid' (currently only ever Section, via
-    // SectionPanel's Display control), each DropSlot rendered as a sibling
-    // becomes a REAL grid item occupying one of the N column tracks —
-    // stealing a cell that should belong to actual content and throwing off
-    // which column everything else lands in. Flex never had this problem
-    // (a lone extra flex item just takes whatever space it's given; it
-    // doesn't pre-declare fixed tracks the way grid's gridTemplateColumns
-    // does). The fix: whenever the parent is a grid, wrap each DropSlot in a
-    // div spanning EVERY column (gridColumn: '1 / -1') instead of letting it
+    // resolved display is 'grid' (Section's Display control, or the Grid
+    // element), each DropSlot rendered as a sibling becomes a REAL grid
+    // item occupying one of the N column tracks — stealing a cell that
+    // should belong to actual content and throwing off which column
+    // everything else lands in. Flex never had this problem (a lone extra
+    // flex item just takes whatever space it's given; it doesn't
+    // pre-declare fixed tracks the way grid's gridTemplateColumns does).
+    // The fix: whenever the parent is a grid, wrap each DropSlot in a div
+    // spanning EVERY column (gridColumn: '1 / -1') instead of letting it
     // occupy just one — it can never again steal a content column. This is
     // Editor-only: PreviewRenderer never renders DropSlot at all, so the
     // published/Preview grid always shows exactly the row/column count set
@@ -273,12 +383,17 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
 
   // When this container is selected, show a persistent "Add block" button
   // at the bottom so finding the thin hover-only slots isn't the only way in.
-  const showPersistentAdd = def.isContainer && selectedId === node.id && node.children.length > 0
+  // Excludes Tabs and Carousel — neither has a generic "Add block" slot at
+  // all (see above); growing them happens through their own Panel/Editor's
+  // dedicated "+ Add tab"/"+ Add slide" action instead.
+  const showPersistentAdd = def.isContainer && node.type !== 'tabs' && node.type !== 'carousel' && selectedId === node.id && node.children.length > 0
   const isGridForAdd = def.isContainer && resolvedStyle.display === 'grid'
 
   return (
     <SelectableShell node={node}>
-      <EditorComponent node={node}>{content}</EditorComponent>
+      <EditorComponent node={node} activeIndex={safeActiveIndex} onActiveIndexChange={setActiveIndex}>
+        {content}
+      </EditorComponent>
       {showPersistentAdd && (
         isGridForAdd ? (
           <div style={{ gridColumn: '1 / -1' }}>
@@ -389,17 +504,55 @@ function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }
   // returns an empty style and an unattached ref in that case.
   const { ref: animationRef, style: animationStyle } = useAnimationProps(animation)
 
+  // Same Tabs/Carousel active-index local state as RenderEditorNode above
+  // (see the doc comment on activeIndex/onActiveIndexChange in types.ts) —
+  // a separate instance here since Preview is an entirely separate render
+  // tree/root from the Editor, with its own independent "which child is
+  // currently showing" state per Tabs/Carousel block.
+  const [activeIndex, setActiveIndex] = useState(0)
+
   if (!node) return null
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
 
-  const children = node.children.map(cid => (
-    <RenderPreviewNode key={cid} nodeId={cid} nodes={nodes} />
-  ))
+  // Tabs and Carousel each get their own treatment, built directly here —
+  // right where activeIndex's state lives — rather than inside
+  // TabsPreview/CarouselPreview themselves. Tabs' inactive children are
+  // hidden via display:none (an instant swap is correct there); Carousel's
+  // children are laid out via buildSlidingTrack (see above RenderEditorNode)
+  // so the whole row can translateX into view, producing real sliding
+  // motion. Every other node type just gets its children as a plain array,
+  // unchanged.
+  const safeActiveIndex = node.children.length > 0
+    ? Math.min(activeIndex, node.children.length - 1)
+    : 0
+
+  let children: React.ReactNode
+  if (node.type === 'tabs') {
+    children = node.children.map((cid, i) => (
+      <div key={cid} style={{ display: i === safeActiveIndex ? undefined : 'none' }}>
+        <RenderPreviewNode nodeId={cid} nodes={nodes} />
+      </div>
+    ))
+  } else if (node.type === 'carousel') {
+    children = buildSlidingTrack(
+      node.children,
+      safeActiveIndex,
+      cid => <RenderPreviewNode nodeId={cid} nodes={nodes} />,
+    )
+  } else {
+    children = node.children.map(cid => <RenderPreviewNode key={cid} nodeId={cid} nodes={nodes} />)
+  }
 
   return (
-    <def.PreviewComponent node={node} animationRef={animationRef} animationStyle={animationStyle}>
-      {children.length > 0 ? children : undefined}
+    <def.PreviewComponent
+      node={node}
+      animationRef={animationRef}
+      animationStyle={animationStyle}
+      activeIndex={safeActiveIndex}
+      onActiveIndexChange={setActiveIndex}
+    >
+      {children}
     </def.PreviewComponent>
   )
 }
