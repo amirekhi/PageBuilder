@@ -87,6 +87,29 @@ export interface StyleProps {
   // space between tracks to distribute). justifyItems positions each ITEM
   // within its own column instead — meaningful regardless of column width.
   justifyItems?: 'start'|'end'|'center'|'stretch'
+  // Minimum row height (px) for a grid container — see the Grid element
+  // (nodeComponents.tsx). When gridRows is an explicit number, each of
+  // those N row tracks becomes `minmax(gridRowMinHeight, auto)` instead of
+  // a plain `1fr` — this is what keeps bento-style cells from collapsing
+  // down to whatever their (possibly very short) content happens to need.
+  // When gridRows is 'auto' (rows added as needed), this instead sets
+  // `grid-auto-rows` to the same minmax so every auto-generated row gets
+  // the same minimum height too. Ignored when display !== 'grid'.
+  gridRowMinHeight?: number
+  // Per-CHILD grid placement — how many of the PARENT grid's column/row
+  // tracks this one block should span. Deliberately lives on the CHILD's
+  // own style rather than as a coordinate map on the parent: children stay
+  // ordinary ordered nodes (drag/drop, add, delete, duplicate all keep
+  // working exactly as they already do for Columns/Section), and a child's
+  // visual cell falls out of its position in that order plus however many
+  // cells it's told to span here. Harmless on any node whose parent isn't
+  // a grid — grid-column/grid-row are simply ignored by the browser
+  // outside a grid formatting context. See GridCellSpanField in
+  // panelComponents.tsx, and gridAutoFlow:'dense' in buildFlexInlineProps
+  // below, which is what lets a smaller sibling fill the hole a spanning
+  // child would otherwise leave behind.
+  gridColSpan?: 1|2|3|4
+  gridRowSpan?: 1|2|3|4
 
   // Visibility — deliberately separate from `display` (see the comment on
   // `display` above for why). Cascades through the same per-breakpoint
@@ -335,13 +358,35 @@ export function buildFlexInlineProps(style: StyleProps = {}): React.CSSPropertie
   if (style.display === 'grid') {
     s.gridTemplateColumns = GRID_TEMPLATE[style.gridCols ?? 2] ?? GRID_TEMPLATE[2]
     if (style.gridRows && style.gridRows !== 'auto') {
-      s.gridTemplateRows = GRID_TEMPLATE[style.gridRows] ?? undefined
+      const rows = style.gridRows as number
+      // An explicit minimum row height (see the Grid element in
+      // nodeComponents.tsx) beats the plain 1fr GRID_TEMPLATE tracks — 1fr
+      // alone can collapse a row to near-nothing in an auto-height
+      // container, which is exactly wrong for a bento-style layout where
+      // every cell needs a legible minimum size regardless of its content.
+      s.gridTemplateRows = style.gridRowMinHeight
+        ? `repeat(${rows}, minmax(${style.gridRowMinHeight}px, auto))`
+        : (GRID_TEMPLATE[rows] ?? undefined)
+    } else if (style.gridRowMinHeight) {
+      // 'auto' row count (rows generated as needed) with the same explicit
+      // minimum applied to every row that gets auto-created.
+      s.gridAutoRows = `minmax(${style.gridRowMinHeight}px, auto)`
     }
     // justify-content/space-between/space-around are dead controls here —
     // our columns are always equal `1fr` tracks, so there is never leftover
     // space between them to distribute. justifyItems positions each ITEM
     // within its own column instead, which works regardless of column width.
     if (style.justifyItems) s.justifyItems = JUSTIFY_ITEMS_MAP[style.justifyItems] ?? style.justifyItems
+    // 'dense' lets a smaller item fill a hole left behind by an earlier
+    // spanning item (see gridColSpan/gridRowSpan on StyleProps above),
+    // instead of leaving that cell empty and pushing every later item
+    // further down the grid than it needs to go — this is what actually
+    // makes col/row spans look like a real bento layout instead of a leaky
+    // one. Safe for every existing grid user (previously just Section's own
+    // Display:Grid mode) since it only changes anything once at least one
+    // child spans more than a single cell; plain auto-placement (every
+    // child spanning exactly 1×1) behaves identically either way.
+    s.gridAutoFlow = 'dense'
   } else if (style.display === 'flex' || style.display === 'inline-flex') {
     if (style.flexDir) {
       s.flexDirection =
@@ -359,6 +404,21 @@ export function buildFlexInlineProps(style: StyleProps = {}): React.CSSPropertie
       : (ALIGN_MAP[style.align] ?? style.align)
   }
 
+  return s
+}
+
+// ─── Grid item placement (for a CHILD whose PARENT is a grid) ─────────────
+// Deliberately unconditional — harmless on any node whose parent ISN'T a
+// grid (grid-column/grid-row are simply ignored by the browser outside a
+// grid formatting context), so no parent-type check is needed here at all.
+// The Grid element (nodeComponents.tsx) is currently the only node type
+// that exposes a UI for setting these on a child (via GridCellSpanField in
+// panelComponents.tsx, wired in through ControlPanel's ContentTab), but any
+// node — Section, Column, Text, whatever — can carry them.
+function buildGridItemStyle(style: StyleProps = {}): React.CSSProperties {
+  const s: React.CSSProperties = {}
+  if (style.gridColSpan) s.gridColumn = `span ${style.gridColSpan}`
+  if (style.gridRowSpan) s.gridRow    = `span ${style.gridRowSpan}`
   return s
 }
 
@@ -446,6 +506,13 @@ export function buildInlineStyle(
   // self-positioning) without trying to multiply the string 'auto' by 4.
   Object.assign(s, buildAlignMargin(style))
   Object.assign(s, buildFlexInlineProps(style))
+  // Per-child grid placement (span N columns/rows) — deliberately applied
+  // unconditionally, same as justify/align above, regardless of skipSizing:
+  // this is a layout/position property, not a sizing one, so it must apply
+  // identically whether or not the SelectableShell wrapper is also mirroring
+  // it (see buildBoxSizingStyle below) — same reasoning already used for
+  // buildFlexInlineProps here.
+  Object.assign(s, buildGridItemStyle(style))
 
   // Typography — real inline CSS now (see buildFlexInlineProps comment above
   // for why the old `text-${style.fontSize}`-style classes were unreliable).
@@ -657,6 +724,14 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
   // called last so it correctly overrides the mx/my shorthand above when
   // present — same precedence buildInlineStyle uses.
   Object.assign(s, buildAlignMargin(style))
+
+  // Per-child grid placement (span N columns/rows) — the SelectableShell
+  // wrapper is the REAL grid item in the Editor tree whenever this node's
+  // parent is a Grid (its own EditorComponent's root div is one level
+  // further in and is never itself a grid child) — same reasoning as every
+  // other sizing/layout mirror in this function. Preview has no such
+  // wrapper, so it picks this up directly via buildInlineStyle instead.
+  Object.assign(s, buildGridItemStyle(style))
 
   return s
 }

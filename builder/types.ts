@@ -1,7 +1,9 @@
 // ─── Node types ───────────────────────────────────────────────────────────────
 
 export type NodeType =
-  | 'section' | 'columns' | 'column'
+  | 'section' | 'columns' | 'column' | 'grid'
+  | 'tabs' | 'tabpane'
+  | 'carousel' | 'slide'
   | 'text' | 'heading' | 'image' | 'button'
   | 'spacer' | 'divider'
   | 'list' | 'badge'
@@ -42,6 +44,34 @@ export interface NodeComponentProps {
   // them to its own root element's `ref` and `style`.
   animationRef?:   React.Ref<any>
   animationStyle?: React.CSSProperties
+
+  // ── "Which child is currently active" (Editor AND Preview) ────────────
+  // Used by any container whose children are mutually exclusive — only ONE
+  // is ever visible at a time (currently Tabs and Carousel). Which index is
+  // active, plus a setter. Threaded in from Renderer.tsx (RenderEditorNode/
+  // RenderPreviewNode) via a local `useState` — ONE instance per node,
+  // since React scopes component-local state by the node's position/key in
+  // the tree, which is exactly what's needed here (each Tabs/Carousel
+  // block on the page tracks its own active child independently). This is
+  // deliberately NOT stored in node.props: persisting it through
+  // updateProps would push a full undo-history entry on every single
+  // click/autoplay tick, for state that isn't really "page content" — same
+  // reasoning AccordionRender already applies to its own openIdx (local
+  // state, never persisted).
+  //
+  // Renderer.tsx is also where the display:none hide/show wrapping for the
+  // INACTIVE children happens — directly around each RenderEditorNode/
+  // RenderPreviewNode call, at the exact point this state lives (see the
+  // FIX comment in Renderer.tsx's RenderEditorNode for why doing that
+  // wrapping one layer further out, inside TabsEditor itself, turned out to
+  // be unreliable). TabsEditor/TabsPreview/CarouselEditor/CarouselPreview
+  // never get per-child metadata any other way, since `children` above is
+  // an opaque, already-rendered ReactNode blob.
+  //
+  // Optional and harmless for every other node type — nothing else
+  // destructures or reads them.
+  activeIndex?:          number
+  onActiveIndexChange?: (index: number) => void
 }
 
 // ─── Props passed into every sidebar panel ────────────────────────────────────
@@ -65,13 +95,13 @@ export interface NodeDefinition {
   createExtras?:    (parentId: string) => PageNode[]
   // True for node types whose own render function hardcodes a `w-full`
   // class regardless of style.width (Section, Columns, Image, Divider,
-  // Accordion). The SelectableShell wrapper needs to mirror this exact
-  // same default — otherwise, when style.width is genuinely unset AND the
-  // node sits in a flex parent that isn't using the default `stretch`
-  // alignment (e.g. align:'center'), the wrapper shrink-wraps to content
-  // while the component's own inner element still renders full-width one
-  // level deeper inside it — invisible until the wrapper is the thing
-  // constraining the box.
+  // Accordion, Grid, Tabs, Tab Pane). The SelectableShell wrapper needs to
+  // mirror this exact same default — otherwise, when style.width is
+  // genuinely unset AND the node sits in a flex parent that isn't using
+  // the default `stretch` alignment (e.g. align:'center'), the wrapper
+  // shrink-wraps to content while the component's own inner element still
+  // renders full-width one level deeper inside it — invisible until the
+  // wrapper is the thing constraining the box.
   defaultFullWidth?: boolean
   // True for node types whose own render function hardcodes `flex-1` (or
   // equivalent flex-fill behavior) regardless of style.width (currently

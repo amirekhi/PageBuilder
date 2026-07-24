@@ -7,7 +7,7 @@ import type { HoverStyleProps } from './customCss'
 import type { PageNode } from './types'
 import { useNodeAnimation, patchNodeAnimation, hasAnimationOverrideAt, clearNodeAnimationOverride } from './responsive'
 import { useBuilderStore, PREVIEW_WIDTHS } from './store'
-
+import { sanitizeElementId } from './elementId'
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
 export function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
@@ -216,6 +216,70 @@ export function AlignField({
         </p>
       )}
     </div>
+  )
+}
+
+// ─── Grid cell span (shown on a CHILD whose direct parent is a Grid) ──────
+// Companion to the Grid element's own panel (GridPanel, in
+// nodeComponents.tsx), which controls the parent's column/row COUNT. This
+// controls how many of those cells a single selected CHILD block should
+// span — writing gridColSpan/gridRowSpan onto the CHILD's own style (see
+// StyleProps in styleMapper.ts). Wired into ControlPanel's ContentTab,
+// which looks up whether the selected node's parent is type 'grid' and
+// only then renders this field — a child of any other container type never
+// sees it, since the two properties would simply be inert there anyway.
+export function GridCellSpanField({
+  style, onChange,
+}: {
+  style: StyleProps
+  onChange: (partial: Partial<StyleProps>) => void
+}) {
+  const colSpan = style.gridColSpan ?? 1
+  const rowSpan = style.gridRowSpan ?? 1
+  const SPANS = [1, 2, 3, 4] as const
+
+  return (
+    <FieldGroup label="Cell span">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-neutral-500 w-20 shrink-0">Columns</span>
+        <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+          {SPANS.map(n => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onChange({ gridColSpan: n as StyleProps['gridColSpan'] })}
+              className={[
+                'flex-1 py-1 text-xs transition-colors',
+                colSpan === n ? 'bg-violet-600 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50',
+              ].join(' ')}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-neutral-500 w-20 shrink-0">Rows</span>
+        <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+          {SPANS.map(n => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onChange({ gridRowSpan: n as StyleProps['gridRowSpan'] })}
+              className={[
+                'flex-1 py-1 text-xs transition-colors',
+                rowSpan === n ? 'bg-violet-600 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50',
+              ].join(' ')}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        How many of the parent Grid's cells this block spans. A spanning block leaves a gap that later, smaller siblings automatically fill in — rearrange with drag-and-drop to control which sibling fills which gap.
+      </p>
+    </FieldGroup>
   )
 }
 
@@ -1373,5 +1437,36 @@ export function SeoPanel() {
         </div>
       </FieldGroup>
     </div>
+  )
+}
+
+
+// ─── Element ID field ───────────────────────────────────────────────────────
+// Shared by every per-node panel (via ControlPanel's ContentTab, appended
+// right alongside CustomCssField) — one field covers all 15 node types, no
+// individual *Panel component needed to change. Writes node.props.htmlId,
+// read by elementId.ts's elementId() helper and rendered as a real HTML id
+// attribute on the block's root element in nodeComponents.tsx.
+
+export function ElementIdField({
+  value, onChange,
+}: {
+  value?: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <FieldGroup label="Element ID">
+      <input
+        type="text"
+        value={value ?? ''}
+        onChange={e => onChange(sanitizeElementId(e.target.value))}
+        placeholder="e.g. pricing-section"
+        spellCheck={false}
+        className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+      />
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        Optional. Lets a Button/link elsewhere jump straight to this block using <code className="font-mono">#{value || 'this-id'}</code> as its link target, and gives you a stable hook for Custom CSS or your own scripts. Letters, numbers, hyphens, and underscores only.
+      </p>
+    </FieldGroup>
   )
 }
