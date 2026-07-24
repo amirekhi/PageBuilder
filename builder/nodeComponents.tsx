@@ -942,7 +942,7 @@ function CarouselDots({
 
 export const CarouselEditor: React.FC<NodeComponentProps> = ({ node, children, activeIndex, onActiveIndexChange }) => {
   const s        = useNodeStyle(node)
-  const addNode  = useBuilderStore(st => st.addNode)
+  const addNode    = useBuilderStore(st => st.addNode)
   const selectNode = useBuilderStore(st => st.selectNode)
   const slideIds = node.children
   const count    = slideIds.length
@@ -974,38 +974,35 @@ export const CarouselEditor: React.FC<NodeComponentProps> = ({ node, children, a
   // React.Children.toArray, was tried and reintroduced the exact failure
   // mode that originally broke Tabs (positioning logic living one layer
   // away from the state that drives it doesn't reliably reach the DOM).
-  // This component only adds the clipping viewport (overflow-hidden) and
-  // the arrows/dots controls around the track.
+  //
+  // The small strip above the track is Editor-only chrome (never rendered
+  // by CarouselPreview): with the active slide now filling 100% of the
+  // carousel's box, there's no "empty" space left inside it to click
+  // through to select the CAROUSEL itself — every click lands on the
+  // slide's own selectable region instead (unlike Tabs, whose header row
+  // already provides that empty click area for free). This strip exists
+  // solely to give Carousel a genuine clickable area of its own, calling
+  // selectNode directly rather than relying on click-bubbling to reach it.
   return (
     <div
       id={elementId(node)}
-      className={buildClassName(s, withCustomCss(node, 'w-full relative overflow-hidden'))}
+      className={buildClassName(s, withCustomCss(node, 'w-full'))}
       style={buildInlineStyle(s, { skipSizing: true })}
     >
-      {children}
-      {/* Carousel-select handle — every pixel of a slide's own content is
-          covered by that slide's own SelectableShell (Slide is an ordinary
-          container, rendered through RenderEditorNode just like Section/
-          Column), so there's no "empty chrome" left for a click to land on
-          and select the Carousel itself the way there is for e.g. Section's
-          padding or Tabs' header row. This badge is that missing surface:
-          a small always-present handle, absolutely positioned so it never
-          overlaps the arrows (top-1/2) or dots (bottom-3), that selects the
-          Carousel node directly and stops the click from reaching the slide
-          underneath. Editor-only — CarouselPreview has no equivalent and
-          shouldn't, since Preview has no selection concept at all. */}
-      <button
-        type="button"
+      <div
         onClick={e => { e.stopPropagation(); selectNode(node.id) }}
-        className="absolute top-2 left-2 z-20 px-2 py-1 rounded-md bg-neutral-900/80 hover:bg-neutral-900 text-white text-[10px] font-medium tracking-wide backdrop-blur-sm transition-colors"
-        title="Select Carousel"
+        className="flex items-center gap-1.5 px-2 py-1 mb-1 rounded-md bg-neutral-50 border border-neutral-200 text-[10px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 cursor-pointer select-none w-fit"
       >
-        ⤢ Carousel
-      </button>
-      {showArrows && (
-        <CarouselArrows count={count} onPrev={() => goTo(safeIndex - 1)} onNext={() => goTo(safeIndex + 1)} stopPropagation />
-      )}
-      {showDots && <CarouselDots slideIds={slideIds} activeIndex={safeIndex} onSelect={goTo} stopPropagation />}
+        <span aria-hidden>🎠</span>
+        <span>Carousel · {count} slide{count === 1 ? '' : 's'}</span>
+      </div>
+      <div className="relative overflow-hidden">
+        {children}
+        {showArrows && (
+          <CarouselArrows count={count} onPrev={() => goTo(safeIndex - 1)} onNext={() => goTo(safeIndex + 1)} stopPropagation />
+        )}
+        {showDots && <CarouselDots slideIds={slideIds} activeIndex={safeIndex} onSelect={goTo} stopPropagation />}
+      </div>
     </div>
   )
 }

@@ -22,13 +22,22 @@ describe('NODE_REGISTRY shape', () => {
     })
   })
 
-  // 'column' is deliberately excluded from BLOCK_GROUPS — it's never
-  // inserted directly from the sidebar, only auto-spawned as a child via
-  // columns.createExtras(). So it's the one registry type expected to be
-  // "orphaned" from BLOCK_GROUPS by design.
+  // These registry types are deliberately excluded from BLOCK_GROUPS — none
+  // of them is ever inserted directly from the sidebar's block picker:
+  //   - 'column' only ever comes into existence via columns.createExtras()
+  //     when a Columns block is inserted.
+  //   - 'tabpane' only ever comes into existence via tabs.createExtras()
+  //     when a Tabs block is inserted, or via its own "+ Add tab" action
+  //     (TabsPanel / TabsEditor's empty-state button) — see registry.tsx's
+  //     tabpane entry for the full reasoning (a bare tabpane with no Tabs
+  //     parent would just be an unlabeled Column with no header to click).
+  //   - 'slide' is the same story for Carousel — only ever spawned via
+  //     carousel.createExtras() or its own "+ Add slide" action.
+  // So all three are the registry types expected to be "orphaned" from
+  // BLOCK_GROUPS by design, not by omission.
   it('every directly-insertable registry type is placed in a BLOCK_GROUP', () => {
     const groupedTypes = new Set(BLOCK_GROUPS.flatMap(g => g.types))
-    const NOT_DIRECTLY_INSERTABLE = new Set(['column'])
+    const NOT_DIRECTLY_INSERTABLE = new Set(['column', 'tabpane', 'slide'])
     ALL_TYPES
       .filter(type => !NOT_DIRECTLY_INSERTABLE.has(type))
       .forEach(type => {
@@ -58,8 +67,48 @@ describe('columns.createExtras', () => {
   })
 })
 
+describe('tabs.createExtras', () => {
+  it('produces exactly 2 tabpane children with fresh unique ids and correct parentId', () => {
+    const parentId = 'parent_tabs_1'
+    const extras = NODE_REGISTRY.tabs.createExtras!(parentId)
+    expect(extras).toHaveLength(2)
+    extras.forEach(child => {
+      expect(child.type).toBe('tabpane')
+      expect(child.parentId).toBe(parentId)
+      expect(child.children).toEqual([])
+      expect(child.props.label).toBeTruthy()
+    })
+    expect(extras[0].id).not.toBe(extras[1].id)
+  })
+})
+
+describe('carousel.createExtras', () => {
+  it('produces exactly 2 slide children with fresh unique ids and correct parentId', () => {
+    const parentId = 'parent_carousel_1'
+    const extras = NODE_REGISTRY.carousel.createExtras!(parentId)
+    expect(extras).toHaveLength(2)
+    extras.forEach(child => {
+      expect(child.type).toBe('slide')
+      expect(child.parentId).toBe(parentId)
+      expect(child.children).toEqual([])
+    })
+    expect(extras[0].id).not.toBe(extras[1].id)
+  })
+})
+
 describe('defaultFullWidth flag — must match the documented hardcoded-w-full node types', () => {
-  const shouldBeFullWidth: NodeType[] = ['section', 'columns', 'image', 'divider', 'accordion']
+  // Grid/Tabs/Tab Pane/Carousel/Slide all hardcode 'w-full' in their own
+  // Editor/Preview render (see the defaultFullWidth doc comment on each
+  // entry in registry.tsx) — same pattern as the original five, so they
+  // belong in this list too. Missing a type here isn't a style nitpick:
+  // without defaultFullWidth, SelectableShell's canvas wrapper doesn't
+  // know to mirror the child's own forced full width, and the selection
+  // outline/resize handles visibly detach from the actual rendered block
+  // whenever it sits in a non-stretch-aligned flex parent.
+  const shouldBeFullWidth: NodeType[] = [
+    'section', 'columns', 'image', 'divider', 'accordion',
+    'grid', 'tabs', 'tabpane', 'carousel', 'slide',
+  ]
 
   it.each(shouldBeFullWidth)('%s has defaultFullWidth: true', (type) => {
     expect(NODE_REGISTRY[type].defaultFullWidth).toBe(true)
@@ -83,5 +132,18 @@ describe('defaultFlexFill flag — only Column hardcodes flex-1', () => {
 it('section defaults to a flex column with maxWidth full and centerContent', () => {
   expect(NODE_REGISTRY.section.defaultProps.style).toMatchObject({
     display: 'flex', flexDir: 'col', maxWidth: 'full', centerContent: true,
+  })
+})
+
+it('grid defaults to a 3x2 grid with dense-friendly row height and stretch alignment', () => {
+  expect(NODE_REGISTRY.grid.defaultProps.style).toMatchObject({
+    display: 'grid', gridCols: 3, gridRows: 2,
+    justifyItems: 'stretch', align: 'stretch',
+  })
+})
+
+it('carousel defaults to autoplay off, looping, with arrows and dots shown', () => {
+  expect(NODE_REGISTRY.carousel.defaultProps).toMatchObject({
+    autoplay: false, loop: true, showArrows: true, showDots: true,
   })
 })
