@@ -8,11 +8,30 @@ import type { PageNode } from './types'
 import { useNodeAnimation, patchNodeAnimation, hasAnimationOverrideAt, clearNodeAnimationOverride } from './responsive'
 import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { sanitizeElementId } from './elementId'
+import { useT, useDirection } from './i18n'
 // ─── Section wrapper ──────────────────────────────────────────────────────────
-
+// Sets `dir={direction}` from useDirection() — this is the ONE place that
+// cascades RTL to nearly every panel in this file, since almost every
+// exported component here renders through FieldGroup as its outermost or a
+// direct child element. `dir` is inherited by descendants in the DOM, so
+// nested elements (labels, inputs, buttons, notes) automatically pick up
+// the right reading direction and text-align without needing their own dir
+// attribute.
+//
+// IMPORTANT EXCEPTION: a handful of controls INSIDE some FieldGroups
+// represent literal physical/spatial directions or numeric magnitude —
+// the Position pin buttons (AlignField), the Padding/Margin Top-Right-
+// Bottom-Left grid (BoxSpacingField), and the range sliders (Width,
+// Opacity, Duration, Delay, Gap). Those must NOT mirror just because the
+// panel language changed — "right" still means right, and a slider's
+// track still goes low-to-high left-to-right, regardless of locale. Each
+// of those components pins its own interactive row back to dir="ltr"
+// locally (see the comments at each one below) while its labels still
+// translate normally through the inherited direction.
 export function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  const direction = useDirection()
   return (
-    <div>
+    <div dir={direction} className='px-2 pb-4'>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-2 px-1">{label}</p>
       <div className="space-y-2">{children}</div>
     </div>
@@ -63,6 +82,7 @@ export function BoxSpacingField({
   values: BoxSides
   onChange: (next: BoxSides) => void
 }) {
+  const t = useT()
   const nums = [values.top, values.right, values.bottom, values.left]
   const [linked, setLinked] = useState(nums.every(v => v === nums[0]) && nums[0] !== undefined)
 
@@ -77,19 +97,19 @@ export function BoxSpacingField({
   }
 
   const display = (v: SideValue) => (v === undefined || v === 'auto') ? '' : String(v * 4)
-  const placeholderFor = (v: SideValue) => (v === 'auto' ? 'auto' : '0')
+  const placeholderFor = (v: SideValue) => (v === 'auto' ? t('autoPlaceholder') : '0')
 
   const SIDES: [keyof BoxSides, string][] = [
-    ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left'],
+    ['top', t('sideTop')], ['right', t('sideRight')], ['bottom', t('sideBottom')], ['left', t('sideLeft')],
   ]
 
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs text-neutral-500">{label} (px)</span>
+        <span className="text-xs text-neutral-500">{label} ({t('pxUnit')})</span>
         <button
           type="button"
-          title={linked ? 'Sides linked — click to edit independently' : 'Sides independent — click to link'}
+          title={linked ? t('linkedTooltip') : t('unlinkedTooltip')}
           onClick={() => setLinked(v => !v)}
           className={[
             'w-6 h-6 flex items-center justify-center rounded text-sm transition-colors',
@@ -99,7 +119,12 @@ export function BoxSpacingField({
           {linked ? '🔗' : '⛓'}
         </button>
       </div>
-      <div className="grid grid-cols-4 gap-1.5">
+      {/* dir="ltr" pinned here: this grid's 4 cells are laid out in a fixed
+          physical Top/Right/Bottom/Left order (matching the CSS box model
+          itself) — it must not visually reverse to Left/Bottom/Right/Top
+          just because the panel is in Farsi. Only the sideLabel TEXT
+          inside each cell is translated; the grid's cell order stays put. */}
+      <div className="grid grid-cols-4 gap-1.5" dir="ltr">
         {SIDES.map(([side, sideLabel]) => (
           <div key={side} className="flex flex-col items-center gap-0.5">
             <input
@@ -131,7 +156,11 @@ export function SpacingField({
   const idx = SCALE.indexOf(value ?? 0)
   const safeIdx = idx < 0 ? 0 : idx
   return (
-    <div className="flex items-center gap-2">
+    // dir="ltr" pinned: this is a numeric range slider (low value on the
+    // left, high value on the right) — that low-to-high direction is a
+    // magnitude convention, not text, so it stays fixed regardless of
+    // locale. Only the label text before it is translated by the caller.
+    <div className="flex items-center gap-2" dir="ltr">
       <span className="text-xs text-neutral-500 w-20 shrink-0">{label}</span>
       <input
         type="range" min={0} max={SCALE.length - 1} step={1} value={safeIdx}
@@ -152,28 +181,34 @@ export function AlignField({
   onChange: (partial: Partial<StyleProps>) => void
   axis?: 'x' | 'y' | 'both'
 }) {
+  const t = useT()
   const currentX = getBoxAlign(style)
   const currentY = getBoxAlignY(style)
 
   const X_OPTIONS: { v: BoxAlign; icon: string; title: string }[] = [
-    { v: 'none',   icon: '·', title: "No override — follow the parent's Justify/Align" },
-    { v: 'left',   icon: '⇤', title: 'Pin left' },
-    { v: 'center', icon: '↔', title: 'Center horizontally' },
-    { v: 'right',  icon: '⇥', title: 'Pin right' },
+    { v: 'none',   icon: '·', title: t('alignNoneTitle') },
+    { v: 'left',   icon: '⇤', title: t('alignPinLeftTitle') },
+    { v: 'center', icon: '↔', title: t('alignCenterXTitle') },
+    { v: 'right',  icon: '⇥', title: t('alignPinRightTitle') },
   ]
   const Y_OPTIONS: { v: BoxAlignY; icon: string; title: string }[] = [
-    { v: 'none',   icon: '·', title: "No override — follow the parent's Justify/Align" },
-    { v: 'top',    icon: '⇡', title: 'Pin top' },
-    { v: 'middle', icon: '↕', title: 'Center vertically' },
-    { v: 'bottom', icon: '⇣', title: 'Pin bottom' },
+    { v: 'none',   icon: '·', title: t('alignNoneTitle') },
+    { v: 'top',    icon: '⇡', title: t('alignPinTopTitle') },
+    { v: 'middle', icon: '↕', title: t('alignCenterYTitle') },
+    { v: 'bottom', icon: '⇣', title: t('alignPinBottomTitle') },
   ]
 
   return (
     <div className="space-y-2">
       {(axis === 'both' || axis === 'x') && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500 w-20 shrink-0">Horizontal</span>
-          <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">{t('alignHorizontal')}</span>
+          {/* dir="ltr" pinned: these 4 buttons are ⇤ left / ↔ center /
+              ⇥ right, in that literal physical order. In RTL that row
+              would otherwise visually reverse to right/center/left, which
+              would make the "Pin left" button sit physically on the right
+              — exactly backwards from what it does. Left stays left. */}
+          <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden" dir="ltr">
             {X_OPTIONS.map(o => (
               <button
                 key={o.v}
@@ -192,8 +227,11 @@ export function AlignField({
       )}
       {(axis === 'both' || axis === 'y') && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500 w-20 shrink-0">Vertical</span>
-          <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">{t('alignVertical')}</span>
+          {/* Vertical pins (top/middle/bottom) aren't affected by text
+              direction anyway, but pinned to ltr too for consistency with
+              the horizontal row and so its order never depends on locale. */}
+          <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden" dir="ltr">
             {Y_OPTIONS.map(o => (
               <button
                 key={o.v}
@@ -212,7 +250,7 @@ export function AlignField({
       )}
       {axis === 'both' && (
         <p className="text-[10px] text-neutral-400">
-          Pinning an item here overrides its parent's Justify/Align for THIS item specifically (like CSS align-self). Pick "·" to let the parent's own layout control it instead — useful when you want the container's Justify/Align to actually apply.
+          {t('alignNote')}
         </p>
       )}
     </div>
@@ -234,15 +272,16 @@ export function GridCellSpanField({
   style: StyleProps
   onChange: (partial: Partial<StyleProps>) => void
 }) {
+  const t = useT()
   const colSpan = style.gridColSpan ?? 1
   const rowSpan = style.gridRowSpan ?? 1
   const SPANS = [1, 2, 3, 4] as const
 
   return (
-    <FieldGroup label="Cell span">
+    <FieldGroup label={t('sectionCellSpan')}>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-neutral-500 w-20 shrink-0">Columns</span>
-        <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+        <span className="text-xs text-neutral-500 w-20 shrink-0">{t('cellSpanColumns')}</span>
+        <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden" dir="ltr">
           {SPANS.map(n => (
             <button
               key={n}
@@ -259,8 +298,8 @@ export function GridCellSpanField({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-neutral-500 w-20 shrink-0">Rows</span>
-        <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden">
+        <span className="text-xs text-neutral-500 w-20 shrink-0">{t('cellSpanRows')}</span>
+        <div className="flex-1 flex rounded-md border border-neutral-200 overflow-hidden" dir="ltr">
           {SPANS.map(n => (
             <button
               key={n}
@@ -277,7 +316,7 @@ export function GridCellSpanField({
         </div>
       </div>
       <p className="text-[10px] text-neutral-400 -mt-1">
-        How many of the parent Grid's cells this block spans. A spanning block leaves a gap that later, smaller siblings automatically fill in — rearrange with drag-and-drop to control which sibling fills which gap.
+        {t('cellSpanNote')}
       </p>
     </FieldGroup>
   )
@@ -318,6 +357,7 @@ export function ColorField({
   // color, Quote/Avatar, Gradient swatches, etc.) needs zero changes.
   hoverAdornment?: React.ReactNode
 }) {
+  const t = useT()
   // Live subscription (not the module-cache resolveColor uses internally
   // for rendering — see styleMapper.ts) so this panel's OWN swatch preview
   // and "which global is this bound to" lookup are always exactly in sync
@@ -341,7 +381,7 @@ export function ColorField({
               onClick={() => onChange('')}
               className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
             >
-              Clear
+              {t('clearLabel')}
             </button>
           )}
           {hoverAdornment}
@@ -360,14 +400,14 @@ export function ColorField({
             style={{ backgroundColor: swatchHex }}
           />
           <span className="flex-1 text-xs font-medium text-violet-700 truncate">
-            🔗 {boundGlobal?.name ?? 'Deleted global color'}
+            🔗 {boundGlobal?.name ?? t('deletedGlobalColor')}
           </span>
           <button
             onClick={() => onChange(swatchHex)}
             className="text-[10px] font-medium text-violet-500 hover:text-violet-700 transition-colors shrink-0"
-            title="Detach from the global color — keeps this exact color as a fixed, one-off value"
+            title={t('unlinkTitle')}
           >
-            Unlink
+            {t('unlinkLabel')}
           </button>
         </div>
       ) : (
@@ -377,13 +417,13 @@ export function ColorField({
             value={swatchHex}
             onChange={e => onChange(e.target.value)}
             className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
-            title="Pick a color"
+            title={t('pickColorTitle')}
           />
           <input
             type="text"
             value={value ?? ''}
             onChange={e => onChange(e.target.value)}
-            placeholder="#ffffff or transparent"
+            placeholder={t('colorPlaceholder')}
             spellCheck={false}
             className="flex-1 border border-neutral-200 rounded-md text-xs p-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
@@ -392,12 +432,12 @@ export function ColorField({
 
       {globalColors.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
-          <span className="text-[9px] text-neutral-400 mr-0.5">Global:</span>
+          <span className="text-[9px] text-neutral-400 mr-0.5">{t('globalColorsLabel')}</span>
           {globalColors.map(c => (
             <button
               key={c.id}
               onClick={() => onChange(makeGlobalColorRef(c.id))}
-              title={`${c.name} (global — stays linked)`}
+              title={t('globalColorStaysLinkedTitle', c.name)}
               className={[
                 'w-5 h-5 rounded-full transition-transform hover:scale-110',
                 isGlobal && boundGlobal?.id === c.id
@@ -425,7 +465,7 @@ export function ColorField({
         ))}
         <button
           onClick={() => onChange('transparent')}
-          title="Transparent"
+          title={t('transparentLabel')}
           className={[
             'w-5 h-5 rounded-full border bg-[conic-gradient(#e5e5e5_90deg,white_90deg_180deg,#e5e5e5_180deg_270deg,white_270deg)] bg-[length:6px_6px] transition-transform hover:scale-110',
             isTransparent ? 'ring-2 ring-offset-1 ring-violet-500 border-transparent' : 'border-neutral-200',
@@ -438,16 +478,19 @@ export function ColorField({
 
 // ─── Gradient picker ──────────────────────────────────────────────────────────
 
-const GRADIENT_DIRECTIONS: { label: string; value: string }[] = [
-  { label: '→ Left to right', value: 'to right' },
-  { label: '← Right to left', value: 'to left' },
-  { label: '↓ Top to bottom', value: 'to bottom' },
-  { label: '↑ Bottom to top', value: 'to top' },
-  { label: '↘ Diagonal',      value: 'to bottom right' },
-  { label: '↙ Diagonal',      value: 'to bottom left' },
-  { label: '↗ Diagonal',      value: 'to top right' },
-  { label: '↖ Diagonal',      value: 'to top left' },
-]
+function useGradientDirections(): { label: string; value: string }[] {
+  const t = useT()
+  return [
+    { label: t('dirLeftRight'), value: 'to right' },
+    { label: t('dirRightLeft'), value: 'to left' },
+    { label: t('dirTopBottom'), value: 'to bottom' },
+    { label: t('dirBottomTop'), value: 'to top' },
+    { label: t('dirDiagBR'),    value: 'to bottom right' },
+    { label: t('dirDiagBL'),    value: 'to bottom left' },
+    { label: t('dirDiagTR'),    value: 'to top right' },
+    { label: t('dirDiagTL'),    value: 'to top left' },
+  ]
+}
 
 interface ParsedGradient { direction: string; from: string; to: string }
 
@@ -461,7 +504,7 @@ function parseGradient(css?: string): ParsedGradient | null {
 const DEFAULT_GRADIENT: ParsedGradient = { direction: 'to right', from: '#7c3aed', to: '#4f46e5' }
 
 export function GradientField({
-  value, onChange, label = 'Gradient', hoverAdornment,
+  value, onChange, label, hoverAdornment,
 }: {
   value?: string
   onChange: (v: string) => void
@@ -471,7 +514,10 @@ export function GradientField({
   // pattern as ColorField.
   hoverAdornment?: React.ReactNode
 }) {
+  const t = useT()
+  const GRADIENT_DIRECTIONS = useGradientDirections()
   const parsed = parseGradient(value) ?? DEFAULT_GRADIENT
+  const displayLabel = label ?? t('gradientLabel')
 
   function build(partial: Partial<ParsedGradient>) {
     const next = { ...parsed, ...partial }
@@ -481,14 +527,14 @@ export function GradientField({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-neutral-500">{label}</span>
+        <span className="text-xs text-neutral-500">{displayLabel}</span>
         <div className="flex items-center gap-2">
           {value && (
             <button
               onClick={() => onChange('')}
               className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
             >
-              Clear
+              {t('clearLabel')}
             </button>
           )}
           {hoverAdornment}
@@ -500,13 +546,17 @@ export function GradientField({
         style={value ? { backgroundImage: value } : { backgroundColor: '#f5f5f5' }}
       />
 
-      <div className="flex items-center gap-2 mb-1.5">
+      {/* dir="ltr" pinned: the from→to swatch order and the direction
+          <select>'s arrows (→ ← ↓ ↑ etc.) describe an actual visual
+          gradient direction on the canvas — that meaning is fixed and
+          must not mirror with the panel's language. */}
+      <div className="flex items-center gap-2 mb-1.5" dir="ltr">
         <input
           type="color"
           value={HEX_RE.test(parsed.from) ? parsed.from : '#7c3aed'}
           onChange={e => build({ from: e.target.value })}
           className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
-          title="Start color"
+          title={t('startColorTitle')}
         />
         <span className="text-xs text-neutral-400 shrink-0">→</span>
         <input
@@ -514,7 +564,7 @@ export function GradientField({
           value={HEX_RE.test(parsed.to) ? parsed.to : '#4f46e5'}
           onChange={e => build({ to: e.target.value })}
           className="w-8 h-8 rounded-md border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
-          title="End color"
+          title={t('endColorTitle')}
         />
         <select
           value={parsed.direction}
@@ -558,16 +608,17 @@ export function HoverToggle({
   hasValue: boolean
   onToggle: () => void
 }) {
+  const t = useT()
   return (
     <button
       type="button"
       onClick={onToggle}
       title={
         active
-          ? 'Editing the hover value — click to go back to the normal value'
+          ? t('hoverActiveTooltip')
           : hasValue
-            ? 'A hover value is set here — click to edit it'
-            : 'Click to set a different value for when the mouse hovers over this block'
+            ? t('hoverSetTooltip')
+            : t('hoverUnsetTooltip')
       }
       className={[
         'shrink-0 w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold transition-colors',
@@ -607,16 +658,17 @@ function TypographyPresetPicker({
 }: {
   onApply: (partial: Partial<StyleProps>) => void
 }) {
+  const t = useT()
   const presets = useBuilderStore(s => s.globalTypography)
   if (!presets.length) return null
 
   return (
     <div>
       <SelectField
-        label="Preset"
+        label={t('presetLabel')}
         value=""
         options={[
-          { label: 'Apply a saved style…', value: '' },
+          { label: t('applySavedStyle'), value: '' },
           ...presets.map(p => ({ label: p.name, value: p.id })),
         ]}
         onChange={id => {
@@ -631,7 +683,7 @@ function TypographyPresetPicker({
         }}
       />
       <p className="text-[9px] text-neutral-400 mt-0.5">
-        Copies that style's values onto this block once — editing the preset later in the Theme tab won't retroactively change blocks that already used it.
+        {t('presetNote')}
       </p>
     </div>
   )
@@ -711,32 +763,37 @@ export function StylePanel({
       ? patchHover({ shadow: v as HoverStyleProps['shadow'] })
       : onChange({ shadow: v as StyleProps['shadow'] })
 
+  const t = useT()
+
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Visibility">
+      <FieldGroup label={t('sectionVisibility')}>
         <CheckField
-          label={`Hide on ${breakpointLabel}`}
+          label={t('hideOnBreakpoint', breakpointLabel)}
           value={!!style.hidden}
           onChange={checked => onChange({ hidden: checked ? true : undefined })}
         />
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Only hides this block while viewing/editing at {breakpointLabel} — it stays visible at every other breakpoint unless hidden there too.
+          {t('hideOnlyThisBreakpointNote', breakpointLabel)}
         </p>
       </FieldGroup>
 
       {!hideBoxModel && (
-        <FieldGroup label="Position">
+        <FieldGroup label={t('sectionPosition')}>
           <AlignField style={style} onChange={onChange} />
-          <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width/height is smaller than its container</p>
+          <p className="text-[10px] text-neutral-400 -mt-1">{t('positionVisibleNote')}</p>
         </FieldGroup>
       )}
 
       {!hideSize && (
-        <FieldGroup label="Size">
+        <FieldGroup label={t('sectionSize')}>
           {!hideWidth && (
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-neutral-500 w-20 shrink-0">Width</span>
+              {/* dir="ltr" pinned: a percentage-width range slider — track
+                  runs low(5%)-to-high(100%) left-to-right as a magnitude,
+                  not as text, so it doesn't reverse in Farsi mode. */}
+              <div className="flex items-center gap-2" dir="ltr">
+                <span className="text-xs text-neutral-500 w-20 shrink-0">{t('sizeWidth')}</span>
                 <input
                   type="range" min={5} max={100} step={1}
                   className="flex-1 accent-violet-600"
@@ -752,20 +809,20 @@ export function StylePanel({
                   onClick={() => onChange({ width: undefined, widthUnit: undefined })}
                   className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors mt-1"
                 >
-                  Reset to fill container
+                  {t('resetToFillContainer')}
                 </button>
               )}
               <p className="text-[10px] text-neutral-400 mt-1">
-                Percentage of this block's immediate parent — the same thing dragging the resize handle on the canvas does, so it stays proportionally correct across every breakpoint and Preview width. (Deliberately percentage-only here, not pixels — a fixed pixel width from this panel would look right in the editor canvas but could break at a very different Preview/live width, since everything else in this layout is relative.)
+                {t('widthNote')}
               </p>
             </div>
           )}
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500 w-20 shrink-0">Height</span>
+            <span className="text-xs text-neutral-500 w-20 shrink-0">{t('sizeHeight')}</span>
             <input
               type="number" min={0} step={4}
-              placeholder="Auto"
+              placeholder={t('autoPlaceholder')}
               className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
               value={
                 isContainer
@@ -782,20 +839,18 @@ export function StylePanel({
                 onChange(isContainer ? { minHeight: px, height: undefined } : { height: px })
               }}
             />
-            <span className="text-xs text-neutral-400 shrink-0">px</span>
+            <span className="text-xs text-neutral-400 shrink-0">{t('pxUnit')}</span>
           </div>
           <p className="text-[10px] text-neutral-400 -mt-1">
-            {isContainer
-              ? 'Minimum height — this container can still grow taller to fit its content. Matches dragging the bottom resize handle on the canvas.'
-              : 'Fixed pixel height. Matches dragging the bottom resize handle on the canvas.'}
+            {isContainer ? t('heightNoteContainer') : t('heightNoteFixed')}
           </p>
         </FieldGroup>
       )}
 
       {!hideBoxModel && (
-        <FieldGroup label="Padding">
+        <FieldGroup label={t('sectionPadding')}>
           <BoxSpacingField
-            label="Padding"
+            label={t('fieldPadding')}
             values={{
               top: style.pt ?? style.py, right: style.pr ?? style.px,
               bottom: style.pb ?? style.py, left: style.pl ?? style.px,
@@ -805,14 +860,14 @@ export function StylePanel({
               pb: next.bottom as number | undefined, pl: next.left as number | undefined,
             })}
           />
-          <SpacingField label="Gap" value={style.gap} onChange={v => onChange({ gap: v })} />
+          <SpacingField label={t('fieldGap')} value={style.gap} onChange={v => onChange({ gap: v })} />
         </FieldGroup>
       )}
 
       {!hideBoxModel && (
-        <FieldGroup label="Margin">
+        <FieldGroup label={t('sectionMargin')}>
           <BoxSpacingField
-            label="Margin"
+            label={t('fieldMargin')}
             values={{
               top: style.mt ?? style.my, right: style.mr ?? style.mx,
               bottom: style.mb ?? style.my, left: style.ml ?? style.mx,
@@ -823,15 +878,15 @@ export function StylePanel({
             })}
           />
           <p className="text-[10px] text-neutral-400 -mt-1">
-            Margin here is overridden by the Position control above whenever Position is set to anything other than "·" (None) on the matching axis
+            {t('marginNote')}
           </p>
         </FieldGroup>
       )}
 
       {!hideBackground && (
-        <FieldGroup label="Background">
+        <FieldGroup label={t('sectionBackground')}>
           <ColorField
-            label={bgIsHover ? 'Color (hover)' : 'Color'}
+            label={bgIsHover ? t('colorLabelHover') : t('colorLabel')}
             value={bgColorValue}
             onChange={setBgColor}
             hoverAdornment={enableHover && (
@@ -839,7 +894,7 @@ export function StylePanel({
             )}
           />
           <GradientField
-            label={gradientIsHover ? 'Gradient (hover)' : 'Gradient'}
+            label={gradientIsHover ? t('gradientLabelHover') : t('gradientLabel')}
             value={gradientValue}
             onChange={setGradient}
             hoverAdornment={enableHover && (
@@ -849,25 +904,25 @@ export function StylePanel({
         </FieldGroup>
       )}
 
-      <FieldGroup label="Typography">
+      <FieldGroup label={t('sectionTypography')}>
         <TypographyPresetPicker onApply={onChange} />
         <SelectField
-          label="Size" value={style.fontSize ?? ''}
+          label={t('typoSize')} value={style.fontSize ?? ''}
           options={[{label:'—',value:''}, 'xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl']}
           onChange={v => onChange({ fontSize: v as StyleProps['fontSize'] || undefined })}
         />
         <SelectField
-          label="Weight" value={style.fontWeight ?? ''}
+          label={t('typoWeight')} value={style.fontWeight ?? ''}
           options={[{label:'—',value:''}, 'light','normal','medium','semibold','bold','extrabold']}
           onChange={v => onChange({ fontWeight: v as StyleProps['fontWeight'] || undefined })}
         />
         <SelectField
-          label="Text align" value={style.textAlign ?? ''}
+          label={t('typoTextAlign')} value={style.textAlign ?? ''}
           options={[{label:'—',value:''}, 'left','center','right','justify']}
           onChange={v => onChange({ textAlign: v as StyleProps['textAlign'] || undefined })}
         />
         <ColorField
-          label={textIsHover ? 'Text color (hover)' : 'Text color'}
+          label={textIsHover ? t('textColorLabelHover') : t('textColorLabel')}
           value={textColorValue}
           onChange={setTextColor}
           hoverAdornment={enableHover && (
@@ -876,17 +931,17 @@ export function StylePanel({
         />
       </FieldGroup>
 
-      <FieldGroup label="Border">
+      <FieldGroup label={t('sectionBorder')}>
         <SelectField
-          label="Radius" value={style.rounded ?? 'none'}
+          label={t('borderRadiusLabel')} value={style.rounded ?? 'none'}
           options={['none','sm','md','lg','xl','2xl','full']}
           onChange={v => onChange({ rounded: v as StyleProps['rounded'] })}
         />
         <SelectField
-          label="Width"
+          label={t('borderWidthLabel')}
           value={String(style.borderWidth ?? 0)}
           options={[
-            { label: 'None', value: '0' },
+            { label: t('borderWidthNone'), value: '0' },
             { label: '1px',  value: '1' },
             { label: '2px',  value: '2' },
             { label: '4px',  value: '4' },
@@ -895,7 +950,7 @@ export function StylePanel({
           onChange={v => onChange({ borderWidth: (+v) as StyleProps['borderWidth'] })}
         />
         <ColorField
-          label={borderIsHover ? 'Border color (hover)' : 'Border color'}
+          label={borderIsHover ? t('borderColorLabelHover') : t('borderColorLabel')}
           value={borderColorValue}
           onChange={setBorderColor}
           hoverAdornment={enableHover && (
@@ -903,14 +958,16 @@ export function StylePanel({
           )}
         />
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Sets the color of this block's border. Width defaults to None (invisible) — pick 1–8px above to actually show it.
+          {t('borderNote')}
         </p>
       </FieldGroup>
 
-      <FieldGroup label="Effects">
-        <div className="flex items-center gap-2">
+      <FieldGroup label={t('sectionEffects')}>
+        {/* dir="ltr" pinned: 0%-to-100% opacity slider is a magnitude,
+            same reasoning as Width above. */}
+        <div className="flex items-center gap-2" dir="ltr">
           <span className="text-xs text-neutral-500 w-20 shrink-0">
-            Opacity{opacityIsHover ? ' (hover)' : ''}
+            {opacityIsHover ? t('opacityLabelHover') : t('opacityLabel')}
           </span>
           <input
             type="range" min={0} max={100} step={5}
@@ -924,7 +981,7 @@ export function StylePanel({
           )}
         </div>
         <SelectField
-          label={shadowIsHover ? 'Shadow (hover)' : 'Shadow'}
+          label={shadowIsHover ? t('shadowLabelHover') : t('shadowLabel')}
           value={shadowValue}
           options={['none','sm','md','lg','xl','2xl']}
           onChange={setShadow}
@@ -944,6 +1001,7 @@ export function StylePanel({
 // ─── Animation demo swatch ──────────────────────────────────────────────────
 
 function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
+  const t = useT()
   const [playKey, setPlayKey] = useState(0)
   const effect   = animation.effect ?? 'none'
   const duration = animation.duration ?? 600
@@ -955,7 +1013,7 @@ function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
   if (effect === 'none') {
     return (
       <div className="h-16 rounded-md border border-dashed border-neutral-200 flex items-center justify-center text-xs text-neutral-300">
-        Pick an effect to preview it here
+        {t('effectPlaceholder')}
       </div>
     )
   }
@@ -978,7 +1036,7 @@ function AnimationDemoBox({ animation }: { animation: AnimationProps }) {
         onClick={() => setPlayKey(k => k + 1)}
         className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-100 transition-colors shrink-0"
       >
-        ↻ Replay
+        ↻ {t('replayLabel')}
       </button>
     </div>
   )
@@ -1005,32 +1063,33 @@ export function AnimationPanel({
 
   const a = { ...DEFAULT_ANIMATION, ...value }
   const isNone = (a.effect ?? 'none') === 'none'
+  const t = useT()
 
   function patch(partial: Partial<AnimationProps>) {
     patchNodeAnimation(node, onChange, partial)
   }
 
   return (
-    <FieldGroup label="Animation">
+    <FieldGroup label={t('sectionAnimation')}>
       {isOverrideBreakpoint && (
         <div className="flex items-center justify-between -mt-1 mb-1">
           <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
-            {PREVIEW_WIDTHS[editingBreakpoint].icon} Editing {PREVIEW_WIDTHS[editingBreakpoint].label} animation
+            {PREVIEW_WIDTHS[editingBreakpoint].icon} {t('editingAnimationAt', PREVIEW_WIDTHS[editingBreakpoint].label)}
           </span>
           {hasOverride && (
             <button
               onClick={() => clearNodeAnimationOverride(node, onChange, editingBreakpoint)}
               className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
-              title="Remove this breakpoint's animation override"
+              title={t('removeAnimationOverrideTitle')}
             >
-              Reset to Desktop
+              {t('resetToDesktop')}
             </button>
           )}
         </div>
       )}
 
       <SelectField
-        label="Effect"
+        label={t('effectLabel')}
         value={a.effect ?? 'none'}
         options={ANIMATION_EFFECTS}
         onChange={v => patch({ effect: v as AnimationProps['effect'] })}
@@ -1041,17 +1100,20 @@ export function AnimationPanel({
       {!isNone && (
         <>
           <SelectField
-            label="Trigger"
+            label={t('triggerLabel')}
             value={a.trigger ?? 'onScroll'}
             options={[
-              { label: 'On scroll into view', value: 'onScroll' },
-              { label: 'On page load',        value: 'onLoad' },
+              { label: t('triggerOnScroll'), value: 'onScroll' },
+              { label: t('triggerOnLoad'),   value: 'onLoad' },
             ]}
             onChange={v => patch({ trigger: v as AnimationProps['trigger'] })}
           />
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500 w-20 shrink-0">Duration</span>
+          {/* dir="ltr" pinned: Duration/Delay sliders are magnitude ranges
+              (0ms on the left, max ms on the right), same reasoning as
+              Width/Opacity above — not affected by reading direction. */}
+          <div className="flex items-center gap-2" dir="ltr">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">{t('durationLabel')}</span>
             <input
               type="range" min={100} max={2000} step={50}
               className="flex-1 accent-violet-600"
@@ -1061,8 +1123,8 @@ export function AnimationPanel({
             <span className="text-xs text-neutral-400 w-12 text-right">{a.duration ?? 600}ms</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500 w-20 shrink-0">Delay</span>
+          <div className="flex items-center gap-2" dir="ltr">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">{t('delayLabel')}</span>
             <input
               type="range" min={0} max={2000} step={50}
               className="flex-1 accent-violet-600"
@@ -1073,7 +1135,7 @@ export function AnimationPanel({
           </div>
 
           <SelectField
-            label="Easing"
+            label={t('easingLabel')}
             value={a.easing ?? 'ease-out'}
             options={['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out']}
             onChange={v => patch({ easing: v as AnimationProps['easing'] })}
@@ -1081,18 +1143,18 @@ export function AnimationPanel({
 
           {a.trigger !== 'onLoad' && (
             <CheckField
-              label="Play only once"
+              label={t('playOnce')}
               value={a.once ?? true}
               onChange={v => patch({ once: v })}
             />
           )}
 
           <p className="text-[10px] text-neutral-400 -mt-1">
-            The swatch above previews this exact effect instantly. The editor canvas itself never animates (it always shows blocks in their final static state, so drag/resize/text-editing stay predictable) — see the real thing in Preview, and use the Replay button in the top bar to re-trigger it there.
+            {t('animationNote1')}
           </p>
           {isOverrideBreakpoint && (
             <p className="text-[10px] text-neutral-400 -mt-1">
-              This animation applies only while viewing/editing at {PREVIEW_WIDTHS[editingBreakpoint].label} — Desktop keeps its own settings above unless you also override them here.
+              {t('animationNote2', PREVIEW_WIDTHS[editingBreakpoint].label)}
             </p>
           )}
         </>
@@ -1109,8 +1171,9 @@ export function CustomCssField({
   value?: string
   onChange: (css: string) => void
 }) {
+  const t = useT()
   return (
-    <FieldGroup label="Custom CSS">
+    <FieldGroup label={t('sectionCustomCss')}>
       <textarea
         className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 resize-y min-h-24 focus:outline-none focus:ring-1 focus:ring-violet-400"
         placeholder={'{{WRAPPER}} {\n  /* your CSS here */\n}'}
@@ -1119,7 +1182,7 @@ export function CustomCssField({
         spellCheck={false}
       />
       <p className="text-[10px] text-neutral-400 -mt-1">
-        Use <code className="font-mono">{'{{WRAPPER}}'}</code> in place of a selector to target just this block — e.g. <code className="font-mono">{'{{WRAPPER}}:hover { opacity: 0.8; }'}</code>. Supports anything real CSS supports (hover states, animations, media queries) that the panel controls above can't reach.
+        {t('customCssNoteBefore')} <code className="font-mono">{'{{WRAPPER}}'}</code> {t('customCssNoteMid')} <code className="font-mono">{'{{WRAPPER}}:hover { opacity: 0.8; }'}</code>. {t('customCssNoteAfter')}
       </p>
     </FieldGroup>
   )
@@ -1138,11 +1201,12 @@ export function GlobalColorManager() {
   const addGlobalColor     = useBuilderStore(s => s.addGlobalColor)
   const updateGlobalColor  = useBuilderStore(s => s.updateGlobalColor)
   const deleteGlobalColor  = useBuilderStore(s => s.deleteGlobalColor)
+  const t                  = useT()
 
   return (
-    <FieldGroup label="Color palette">
+    <FieldGroup label={t('sectionColorPalette')}>
       <p className="text-[10px] text-neutral-400 -mt-1">
-        Shared, LIVE colors. Bind any color field on any block to one (via the small "Global:" swatches above every color picker) and changing it here updates every bound block instantly, page-wide.
+        {t('globalColorNote')}
       </p>
       <div className="space-y-2">
         {colors.map(c => (
@@ -1152,14 +1216,14 @@ export function GlobalColorManager() {
               value={HEX_RE.test(c.value) ? c.value : '#ffffff'}
               onChange={e => updateGlobalColor(c.id, { value: e.target.value })}
               className="w-7 h-7 rounded border border-neutral-200 cursor-pointer p-0 bg-transparent shrink-0"
-              title="Pick a color"
+              title={t('pickColorTitle')}
             />
             <input
               type="text"
               value={c.name}
               onChange={e => updateGlobalColor(c.id, { name: e.target.value })}
               className="flex-1 min-w-0 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
-              placeholder="Name"
+              placeholder={t('namePlaceholder')}
             />
             <input
               type="text"
@@ -1171,7 +1235,7 @@ export function GlobalColorManager() {
             <button
               onClick={() => deleteGlobalColor(c.id)}
               className="shrink-0 w-6 h-6 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-xs"
-              title="Delete — blocks bound to this fall back to no color, they don't break"
+              title={t('deleteColorTooltip')}
             >
               ✕
             </button>
@@ -1182,7 +1246,7 @@ export function GlobalColorManager() {
         onClick={() => addGlobalColor('New color', '#7c3aed')}
         className="w-full text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
       >
-        + Add global color
+        {t('addGlobalColor')}
       </button>
     </FieldGroup>
   )
@@ -1198,11 +1262,16 @@ export function GlobalTypographyManager() {
   const addGlobalTypography     = useBuilderStore(s => s.addGlobalTypography)
   const updateGlobalTypography  = useBuilderStore(s => s.updateGlobalTypography)
   const deleteGlobalTypography  = useBuilderStore(s => s.deleteGlobalTypography)
+  // Named `tr`, not `t` — this function's own .map(t => ...) below already
+  // uses `t` as the loop variable for each GlobalTypographyStyle item, and
+  // shadowing it with the translation function would break every `t.id`/
+  // `t.name`/etc reference inside that callback.
+  const tr                      = useT()
 
   return (
-    <FieldGroup label="Typography styles">
+    <FieldGroup label={tr('sectionTypographyStyles')}>
       <p className="text-[10px] text-neutral-400 -mt-1">
-        Reusable text presets (size, weight, line height, alignment). Applying one from a block's Style tab COPIES these values onto it once — it's not a live link, so editing a preset here won't retroactively change blocks that already used it.
+        {tr('globalTypoNote')}
       </p>
       <div className="space-y-3">
         {styles.map(t => (
@@ -1217,28 +1286,28 @@ export function GlobalTypographyManager() {
               <button
                 onClick={() => deleteGlobalTypography(t.id)}
                 className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm"
-                aria-label="Delete style"
+                aria-label={tr('deleteStyleAriaLabel')}
               >
                 ✕
               </button>
             </div>
             <SelectField
-              label="Size" value={t.fontSize ?? 'base'}
+              label={tr('typoSize')} value={t.fontSize ?? 'base'}
               options={['xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl']}
               onChange={v => updateGlobalTypography(t.id, { fontSize: v as StyleProps['fontSize'] })}
             />
             <SelectField
-              label="Weight" value={t.fontWeight ?? 'normal'}
+              label={tr('typoWeight')} value={t.fontWeight ?? 'normal'}
               options={['light','normal','medium','semibold','bold','extrabold']}
               onChange={v => updateGlobalTypography(t.id, { fontWeight: v as StyleProps['fontWeight'] })}
             />
             <SelectField
-              label="Line height" value={t.leading ?? 'normal'}
+              label={tr('lineHeightLabel')} value={t.leading ?? 'normal'}
               options={['none','tight','snug','normal','relaxed','loose']}
               onChange={v => updateGlobalTypography(t.id, { leading: v as StyleProps['leading'] })}
             />
             <SelectField
-              label="Align" value={t.textAlign ?? ''}
+              label={tr('alignLabelGeneric')} value={t.textAlign ?? ''}
               options={[{label:'—',value:''}, 'left','center','right','justify']}
               onChange={v => updateGlobalTypography(t.id, { textAlign: (v || undefined) as StyleProps['textAlign'] })}
             />
@@ -1249,7 +1318,7 @@ export function GlobalTypographyManager() {
         onClick={() => addGlobalTypography('New style')}
         className="w-full text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
       >
-        + Add typography style
+        {tr('addTypographyStyle')}
       </button>
     </FieldGroup>
   )
@@ -1278,92 +1347,93 @@ export function SeoPanel() {
   const seo             = useBuilderStore(s => s.seo)
   const updateSeo       = useBuilderStore(s => s.updateSeo)
   const openMediaPicker = useBuilderStore(s => s.openMediaPicker)
+  const t               = useT()
 
   const title       = seo.title ?? ''
   const description = seo.description ?? ''
 
   return (
     <div className="space-y-6">
-      <FieldGroup label="Search appearance">
+      <FieldGroup label={t('seoSearchAppearance')}>
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-neutral-500">Page title</span>
+            <span className="text-xs text-neutral-500">{t('seoPageTitle')}</span>
             <CharCount value={title} ideal={[40, 60]} />
           </div>
           <input
             type="text"
             value={title}
             onChange={e => updateSeo({ title: e.target.value })}
-            placeholder="A short, descriptive page title"
+            placeholder={t('seoPageTitlePlaceholder')}
             className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-neutral-500">Meta description</span>
+            <span className="text-xs text-neutral-500">{t('seoMetaDescription')}</span>
             <CharCount value={description} ideal={[120, 160]} />
           </div>
           <textarea
             value={description}
             onChange={e => updateSeo({ description: e.target.value })}
-            placeholder="One or two sentences describing this page for search results"
+            placeholder={t('seoMetaDescPlaceholder')}
             className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
         </div>
 
         <div>
-          <span className="text-xs text-neutral-500 mb-1 block">Keywords (optional, comma-separated)</span>
+          <span className="text-xs text-neutral-500 mb-1 block">{t('seoKeywordsLabel')}</span>
           <input
             type="text"
             value={seo.keywords ?? ''}
             onChange={e => updateSeo({ keywords: e.target.value })}
-            placeholder="landing page, page builder, no-code"
+            placeholder={t('seoKeywordsPlaceholder')}
             className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
           <p className="text-[10px] text-neutral-400 mt-1">
-            Most search engines ignore this now, but some site-search tools and older crawlers still read it.
+            {t('seoKeywordsNote')}
           </p>
         </div>
 
         <div className="border border-neutral-200 rounded-md p-3 bg-white">
-          <p className="text-[10px] text-neutral-400 mb-1.5 uppercase tracking-wide">Search result preview</p>
+          <p className="text-[10px] text-neutral-400 mb-1.5 uppercase tracking-wide">{t('seoPreviewLabel')}</p>
           <p className="text-[13px] text-neutral-500 truncate">yoursite.com</p>
-          <p className="text-lg text-blue-700 truncate leading-snug">{title || 'Untitled Page'}</p>
+          <p className="text-lg text-blue-700 truncate leading-snug">{title || t('seoUntitledPage')}</p>
           <p className="text-sm text-neutral-600 line-clamp-2">
-            {description || 'No meta description set yet — search engines may generate one automatically from the page content instead.'}
+            {description || t('seoNoDescYet')}
           </p>
         </div>
       </FieldGroup>
 
-      <FieldGroup label="Social sharing (Open Graph)">
+      <FieldGroup label={t('seoSocialSharing')}>
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Controls how this page looks when shared on X, Facebook, LinkedIn, Slack, etc. Leave a field blank to fall back to the matching field above.
+          {t('seoOgNote')}
         </p>
 
         <div>
-          <span className="text-xs text-neutral-500 mb-1 block">OG title</span>
+          <span className="text-xs text-neutral-500 mb-1 block">{t('seoOgTitle')}</span>
           <input
             type="text"
             value={seo.ogTitle ?? ''}
             onChange={e => updateSeo({ ogTitle: e.target.value })}
-            placeholder={title || 'Falls back to page title'}
+            placeholder={title || t('seoFallbackTitle')}
             className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
         </div>
 
         <div>
-          <span className="text-xs text-neutral-500 mb-1 block">OG description</span>
+          <span className="text-xs text-neutral-500 mb-1 block">{t('seoOgDescription')}</span>
           <textarea
             value={seo.ogDescription ?? ''}
             onChange={e => updateSeo({ ogDescription: e.target.value })}
-            placeholder={description || 'Falls back to meta description'}
+            placeholder={description || t('seoFallbackDesc')}
             className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-16 focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
         </div>
 
         <div>
-          <span className="text-xs text-neutral-500 mb-1 block">OG image</span>
+          <span className="text-xs text-neutral-500 mb-1 block">{t('seoOgImage')}</span>
           <button
             onClick={() => openMediaPicker(item => updateSeo({ ogImage: item.url }))}
             className="w-full rounded-lg border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden"
@@ -1375,7 +1445,7 @@ export function SeoPanel() {
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-neutral-400">
                 <span className="text-lg">🖼️</span>
-                <span className="text-xs font-medium">Choose share image (1200×630 recommended)</span>
+                <span className="text-xs font-medium">{t('seoChooseImage')}</span>
               </div>
             )}
           </button>
@@ -1385,22 +1455,22 @@ export function SeoPanel() {
                 onClick={() => openMediaPicker(item => updateSeo({ ogImage: item.url }))}
                 className="flex-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1 rounded-md hover:bg-violet-50 transition-colors"
               >
-                Replace
+                {t('seoReplace')}
               </button>
               <button
                 onClick={() => updateSeo({ ogImage: undefined })}
                 className="flex-1 text-xs font-medium text-neutral-400 hover:text-red-500 py-1 rounded-md hover:bg-red-50 transition-colors"
               >
-                Remove
+                {t('seoRemove')}
               </button>
             </div>
           )}
         </div>
       </FieldGroup>
 
-      <FieldGroup label="Advanced">
+      <FieldGroup label={t('seoAdvanced')}>
         <div>
-          <span className="text-xs text-neutral-500 mb-1 block">Canonical URL (optional)</span>
+          <span className="text-xs text-neutral-500 mb-1 block">{t('seoCanonicalUrl')}</span>
           <input
             type="text"
             value={seo.canonicalUrl ?? ''}
@@ -1410,18 +1480,18 @@ export function SeoPanel() {
             className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
           />
           <p className="text-[10px] text-neutral-400 mt-1">
-            Set this if the same content is also published at another URL, so search engines credit the right one.
+            {t('seoCanonicalNote')}
           </p>
         </div>
 
         <CheckField
-          label="Hide this page from search engines (noindex)"
+          label={t('seoNoIndex')}
           value={!!seo.noIndex}
           onChange={v => updateSeo({ noIndex: v })}
         />
 
         <div>
-          <span className="text-xs text-neutral-500 mb-1 block">Favicon</span>
+          <span className="text-xs text-neutral-500 mb-1 block">{t('seoFavicon')}</span>
           <button
             onClick={() => openMediaPicker(item => updateSeo({ favicon: item.url }))}
             className="flex items-center gap-2 border border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors rounded-md p-2"
@@ -1432,7 +1502,7 @@ export function SeoPanel() {
             ) : (
               <span className="w-6 h-6 rounded bg-neutral-100 flex items-center justify-center text-xs text-neutral-400">?</span>
             )}
-            <span className="text-xs font-medium text-violet-600">{seo.favicon ? 'Replace favicon' : 'Choose favicon'}</span>
+            <span className="text-xs font-medium text-violet-600">{seo.favicon ? t('seoReplaceFavicon') : t('seoChooseFavicon')}</span>
           </button>
         </div>
       </FieldGroup>
@@ -1454,18 +1524,19 @@ export function ElementIdField({
   value?: string
   onChange: (id: string) => void
 }) {
+  const t = useT()
   return (
-    <FieldGroup label="Element ID">
+    <FieldGroup label={t('sectionElementId')}>
       <input
         type="text"
         value={value ?? ''}
         onChange={e => onChange(sanitizeElementId(e.target.value))}
-        placeholder="e.g. pricing-section"
+        placeholder={t('elementIdPlaceholder')}
         spellCheck={false}
         className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
       />
       <p className="text-[10px] text-neutral-400 -mt-1">
-        Optional. Lets a Button/link elsewhere jump straight to this block using <code className="font-mono">#{value || 'this-id'}</code> as its link target, and gives you a stable hook for Custom CSS or your own scripts. Letters, numbers, hyphens, and underscores only.
+        {t('elementIdNote', value || 'this-id')}
       </p>
     </FieldGroup>
   )

@@ -18,6 +18,7 @@ import DOMPurify from 'dompurify'
 import { useState } from 'react'
 import { useBuilderStore } from './store'
 import { PageNode } from './types'
+import { directionForLocale } from './i18n'
 
 // ─── Font Family choices for the toolbar dropdown ──────────────────────────
 export const FONT_FAMILIES: { label: string; value: string }[] = [
@@ -199,10 +200,21 @@ export function buildHeadingExtensions(): AnyExtension[] {
 // when focus is leaving the wrapper for good (relatedTarget is null, or
 // outside the wrapper entirely — clicking elsewhere on the canvas, a panel
 // field, etc.).
+//
+// NEW: dir attribute on the underlying ProseMirror contenteditable, kept in
+// sync with the current locale (see directionForLocale in i18n.ts) via a
+// plain imperative DOM update in an effect — NOT via editorProps.attributes
+// at editor-creation time, since useEditor's own deps array below is `[]`
+// (the editor is intentionally created once and never recreated, to avoid
+// losing undo history/selection every time something re-renders). Setting
+// it imperatively lets the caret/selection behavior correctly follow
+// whichever direction is active right now without ever tearing down and
+// rebuilding the whole editor instance.
 export function useRichTextEdit(node: PageNode, prop: string, extensions: AnyExtension[]) {
   const updateProps    = useBuilderStore(s => s.updateProps)
   const selectedId     = useBuilderStore(s => s.selectedId)
   const setRichEditing = useBuilderStore(s => s.setRichEditing)
+  const locale         = useBuilderStore(s => s.locale)
   const [isRichEditing, setIsRichEditing] = useState(false)
 
   const editor = useEditor({
@@ -223,6 +235,14 @@ export function useRichTextEdit(node: PageNode, prop: string, extensions: AnyExt
       },
     },
   }, [])
+
+  // Keeps the editable DOM element's dir attribute in sync with the current
+  // locale — see the NEW comment above useRichTextEdit for why this is
+  // imperative rather than part of the editorProps passed to useEditor.
+  useEffect(() => {
+    if (!editor) return
+    editor.view.dom.setAttribute('dir', directionForLocale(locale))
+  }, [editor, locale])
 
   const commitAndClose = useCallback((ed: Editor) => {
     const html = sanitizeRichText(ed.getHTML())

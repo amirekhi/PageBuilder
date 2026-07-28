@@ -7,6 +7,7 @@ import { NodeMap, PageNode } from './types'
 import { StylePanel, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel, GridCellSpanField } from './panelComponents'
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 import type { HoverStyleProps } from './customCss'
+import { useT, nodeLabel, type DictKey } from './i18n'
 
 // Only these three ever get a button in THIS component's own tab bar.
 // Theme and SEO are still perfectly valid values of controlPanelTab (see
@@ -14,11 +15,22 @@ import type { HoverStyleProps } from './customCss'
 // switched TO from TopBar's own buttons now instead of from a button here.
 const VISIBLE_TABS: ControlPanelTab[] = ['layers', 'style', 'content']
 
+// Maps each visible tab id to its dictionary key — the tab id itself
+// ('layers'/'style'/'content') used to just get capitalize()'d and shown
+// directly as the label; that trick only works for English.
+const TAB_LABEL_KEY: Record<ControlPanelTab, DictKey> = {
+  layers: 'tabLayers', style: 'tabStyle', content: 'tabContent',
+  theme: 'tabLayers', seo: 'tabLayers', // never actually shown (not in VISIBLE_TABS) — placeholder to satisfy the Record type
+}
+
 export function ControlPanel() {
   const tab            = useBuilderStore(s => s.controlPanelTab)
   const setTab          = useBuilderStore(s => s.setControlPanelTab)
   const selectedNode    = useBuilderStore(s => s.selectedNode())
   const updateProps     = useBuilderStore(s => s.updateProps)
+  // Named `tt`, not `t` — the tab bar's own .map(t => ...) below already
+  // uses `t` as the loop variable for each ControlPanelTab id.
+  const tt              = useT()
 
   return (
     <aside className="w-72 h-full flex flex-col bg-white border-l border-neutral-200 shrink-0 overflow-hidden">
@@ -38,7 +50,7 @@ export function ControlPanel() {
                 : 'text-neutral-400 hover:text-neutral-600',
             ].join(' ')}
           >
-            {t}
+            {tt(TAB_LABEL_KEY[t])}
           </button>
         ))}
       </div>
@@ -64,10 +76,11 @@ export function ControlPanel() {
 // why those two behave differently).
 
 function ThemeTab() {
+  const t = useT()
   return (
     <div className="p-4 space-y-6">
       <p className="text-neutral-400 text-sm">
-        Colors and typography styles here apply across the whole page. Manage them below, then reuse them from any block's Style tab.
+        {t('themeTabIntro')}
       </p>
       <GlobalColorManager />
       <GlobalTypographyManager />
@@ -83,10 +96,11 @@ function LayersTab() {
   const selectedId = useBuilderStore(s => s.selectedId)
   const selectNode = useBuilderStore(s => s.selectNode)
   const deleteNode = useBuilderStore(s => s.deleteNode)
+  const t          = useT()
 
   return (
     <div className="p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-2 px-1">Page tree</p>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-2 px-1">{t('pageTree')}</p>
       <LayerNode
         nodeId={rootId} nodes={nodes}
         selectedId={selectedId} rootId={rootId}
@@ -103,7 +117,8 @@ function LayerNode({
   nodeId: string; nodes: NodeMap; selectedId: string | null; rootId: string
   onSelect: (id: string) => void; onDelete: (id: string) => void; depth: number
 }) {
-  const node = nodes[nodeId]
+  const node   = nodes[nodeId]
+  const locale = useBuilderStore(s => s.locale)
   if (!node) return null
   const def        = NODE_REGISTRY[node.type]
   const isSelected = selectedId === nodeId
@@ -119,7 +134,7 @@ function LayerNode({
         ].join(' ')}
       >
         <span className="shrink-0 w-4 text-center text-[11px]" aria-hidden>{def?.icon ?? '?'}</span>
-        <span className="flex-1 truncate font-medium">{def?.label ?? node.type}</span>
+        <span className="flex-1 truncate font-medium">{nodeLabel(locale, node.type, def?.label ?? node.type)}</span>
         {nodeId !== rootId && (
           <button
             onClick={e => { e.stopPropagation(); onDelete(nodeId) }}
@@ -154,11 +169,12 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
   const style             = useNodeStyle(node)
   const globalCustomCss    = useBuilderStore(s => s.globalCustomCss)
   const setGlobalCustomCss = useBuilderStore(s => s.setGlobalCustomCss)
+  const t                  = useT()
 
   if (!node) {
     return (
       <div className="p-4 space-y-4">
-        <p className="text-neutral-400 text-sm">Select a block to edit its style — or set page-wide CSS below, applied everywhere regardless of what's selected.</p>
+        <p className="text-neutral-400 text-sm">{t('selectBlockForStyle')}</p>
         <CustomCssField value={globalCustomCss} onChange={setGlobalCustomCss} />
       </div>
     )
@@ -181,22 +197,22 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
       {isOverrideBreakpoint && (
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
           <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
-            {PREVIEW_WIDTHS[editingBreakpoint].icon} Editing {PREVIEW_WIDTHS[editingBreakpoint].label} style
+            {PREVIEW_WIDTHS[editingBreakpoint].icon} {t('editingStyleAt', PREVIEW_WIDTHS[editingBreakpoint].label)}
           </span>
           {hasOverride && (
             <button
               onClick={() => clearNodeStyleOverride(node, p => onUpdate(node.id, p), editingBreakpoint)}
               className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
-              title="Remove all overrides for this block at this breakpoint"
+              title={t('removeAllOverridesTitle')}
             >
-              Reset to Desktop
+              {t('resetToDesktop')}
             </button>
           )}
         </div>
       )}
       {isSection && (
         <p className="text-[10px] text-neutral-400 px-4 pt-3 -mb-1">
-          Position, spacing, and background for Sections are set in the Content tab, where the fuller controls live.
+          {t('positionSpacingNote')}
         </p>
       )}
       <StylePanel
@@ -222,13 +238,14 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 
 // ─── Content tab ──────────────────────────────────────────────────────────────
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
-  // Both hooks called unconditionally, BEFORE the early `if (!node)` return
+  // All hooks called unconditionally, BEFORE the early `if (!node)` return
   // below, per the rules of hooks — useNodeStyle already tolerates a null
   // node (see responsive.ts) for exactly this reason.
   const nodes = useBuilderStore(s => s.nodes)
   const style = useNodeStyle(node)
+  const t     = useT()
 
-  if (!node) return <Empty text="Select a block to edit its content" />
+  if (!node) return <Empty text={t('selectBlockForContent')} />
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
   const Panel = def.EditorPanel

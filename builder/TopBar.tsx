@@ -11,6 +11,16 @@ import {
   parseImportedJSON,
   readFileAsText,
 } from './exportImport'
+import { LanguageToggle } from './LanguageToggle'
+import { useT, directionForLocale, type DictKey } from './i18n'
+
+// Maps a PreviewWidth key to its translated dictionary key — PREVIEW_WIDTHS
+// itself (in store.ts) only stores an English label, since it's also used
+// as a plain data source elsewhere; the translation lookup lives here
+// instead of hardcoding cfg.label in JSX below.
+const BP_LABEL_KEY: Record<PreviewWidth, DictKey> = {
+  desktop: 'bpDesktop', tablet: 'bpTablet', mobile: 'bpMobile',
+}
 
 export function TopBar() {
   const mode                = useBuilderStore(s => s.mode)
@@ -27,6 +37,9 @@ export function TopBar() {
   const dup                  = useBuilderStore(s => s.duplicateNode)
   const controlPanelTab      = useBuilderStore(s => s.controlPanelTab)
   const setControlPanelTab   = useBuilderStore(s => s.setControlPanelTab)
+  const locale                = useBuilderStore(s => s.locale)
+  const dir                   = directionForLocale(locale)
+  const t                     = useT()
 
   const [toast, setToast]         = useState<string | null>(null)
   const [menuOpen, setMenuOpen]   = useState(false)
@@ -97,13 +110,13 @@ export function TopBar() {
     const { nodes, rootId } = useBuilderStore.getState()
     const ok = saveToLocalStorage(nodes, rootId)
     setHasSave(true)
-    showToast(ok ? '✓ Saved to browser' : '✗ Save failed (storage full?)')
+    showToast(ok ? t('toastSaved') : t('toastSaveFailed'))
     setMenuOpen(false)
   }
 
   function handleLoadLocal() {
     const saved = loadFromLocalStorage()
-    if (!saved) { showToast('No saved page found'); return }
+    if (!saved) { showToast(t('toastNoSavedPage')); return }
     useBuilderStore.setState(prev => ({
       nodes:      saved.nodes,
       rootId:     saved.rootId,
@@ -111,7 +124,7 @@ export function TopBar() {
       past:       [JSON.parse(JSON.stringify(prev.nodes))],
       future:     [],
     }))
-    showToast('✓ Page loaded')
+    showToast(t('toastPageLoaded'))
     setMenuOpen(false)
   }
 
@@ -162,7 +175,7 @@ function handleExportHTML() {
       const text   = await readFileAsText(file)
       const result = parseImportedJSON(text)
       if (!result.success || !result.nodes || !result.rootId) {
-        showToast(`✗ ${result.error}`)
+        showToast(t('toastImportError', result.error))
         return
       }
       useBuilderStore.setState(prev => ({
@@ -172,9 +185,9 @@ function handleExportHTML() {
         past:       [JSON.parse(JSON.stringify(prev.nodes))],
         future:     [],
       }))
-      showToast('✓ Page imported')
+      showToast(t('toastPageImported'))
     } catch {
-      showToast('✗ Could not read file')
+      showToast(t('toastCouldNotRead'))
     } finally {
       // Reset so the same file can be re-imported if needed
       if (importRef.current) importRef.current.value = ''
@@ -183,19 +196,27 @@ function handleExportHTML() {
   }
 
   return (
-    <header className="h-12 flex items-center justify-between px-4 bg-white border-b border-neutral-200 shrink-0 z-50 gap-4">
+    <header dir={dir} className="h-12 flex items-center justify-between px-4 bg-white border-b border-neutral-200 shrink-0 z-50 gap-4">
       {/* Logo */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="w-6 h-6 rounded-md bg-violet-600 flex items-center justify-center">
           <span className="text-white text-xs font-bold">B</span>
         </div>
-        <span className="text-sm font-semibold text-neutral-800 hidden sm:block">Page Builder</span>
+        <span className="text-sm font-semibold text-neutral-800 hidden sm:block">{t('appName')}</span>
       </div>
 
-      {/* Undo / redo */}
-      <div className="flex items-center gap-1 shrink-0">
-        <TopBtn onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">↩</TopBtn>
-        <TopBtn onClick={redo} disabled={!canRedo} title="Redo (⌘Y)">↪</TopBtn>
+      {/* Undo / redo — pinned to ltr regardless of page direction. These
+          curved arrows encode a TIME relationship (back/forward through
+          history), not a reading-direction one — letting the ambient
+          dir="rtl" mirror this cluster would swap which side each button
+          sits on, but the ↩/↪ glyphs themselves never mirror, so the two
+          arrows would end up pointing at each other instead of both
+          "forward" in the same rotational sense. Keeping this one cluster
+          fixed-LTR is the standard fix (same convention as most editors'
+          undo/redo controls, which don't mirror under RTL either). */}
+      <div dir="ltr" className="flex items-center gap-1 shrink-0">
+        <TopBtn onClick={undo} disabled={!canUndo} title={t('undoTitle')}>↩</TopBtn>
+        <TopBtn onClick={redo} disabled={!canRedo} title={t('redoTitle')}>↪</TopBtn>
       </div>
 
       {/* Theme / SEO — these switch the sidebar's ControlPanel to its Theme
@@ -206,31 +227,31 @@ function handleExportHTML() {
       <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5 shrink-0">
         <button
           onClick={() => setControlPanelTab('theme')}
-          title="Theme — global colors & typography"
+          title={t('themeTabTitle')}
           className={[
             'px-3 py-1 rounded-md text-xs font-medium transition-colors',
             controlPanelTab === 'theme' ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-500 hover:text-neutral-700',
           ].join(' ')}
         >
-          🎨 Theme
+          {t('themeTabLabel')}
         </button>
         <button
           onClick={() => setControlPanelTab('seo')}
-          title="SEO — search & social metadata"
+          title={t('seoTabTitle')}
           className={[
             'px-3 py-1 rounded-md text-xs font-medium transition-colors',
             controlPanelTab === 'seo' ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-500 hover:text-neutral-700',
           ].join(' ')}
         >
-          🔍 SEO
+          {t('seoTabLabel')}
         </button>
       </div>
 
       {/* Centre: mode + responsive width */}
       <div className="flex items-center gap-2 flex-1 justify-center">
         <div className="flex bg-neutral-100 rounded-lg p-0.5">
-          <ModeBtn active={mode === 'edit'}    onClick={() => handleSetMode('edit')}>Edit</ModeBtn>
-          <ModeBtn active={mode === 'preview'} onClick={() => handleSetMode('preview')}>Preview</ModeBtn>
+          <ModeBtn active={mode === 'edit'}    onClick={() => handleSetMode('edit')}>{t('editModeLabel')}</ModeBtn>
+          <ModeBtn active={mode === 'preview'} onClick={() => handleSetMode('preview')}>{t('previewModeLabel')}</ModeBtn>
         </div>
 
         {/* Edit mode: which breakpoint's styles you're currently authoring.
@@ -243,7 +264,7 @@ function handleExportHTML() {
             {(Object.entries(PREVIEW_WIDTHS) as [PreviewWidth, typeof PREVIEW_WIDTHS[PreviewWidth]][]).map(([key, cfg]) => (
               <button
                 key={key}
-                title={`Edit ${cfg.label} styles (${cfg.px}px)`}
+                title={t('editBreakpointTitle', t(BP_LABEL_KEY[key]), cfg.px)}
                 onClick={() => setEditingBreakpoint(key)}
                 className={[
                   'w-8 h-7 flex items-center justify-center rounded-md text-sm transition-colors',
@@ -261,7 +282,7 @@ function handleExportHTML() {
 {mode === 'preview' && (
   <button
     onClick={replayAnimations}
-    title="Replay animations"
+    title={t('replayTitle')}
     className="w-8 h-7 flex items-center justify-center rounded-md text-sm text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition-colors"
   >
     ↻
@@ -270,7 +291,7 @@ function handleExportHTML() {
 
         {mode === 'edit' && editingBreakpoint !== 'desktop' && (
           <span className="text-xs text-violet-500 font-medium hidden md:block">
-            Editing {PREVIEW_WIDTHS[editingBreakpoint].label}
+            {t('editingBreakpointLabel', t(BP_LABEL_KEY[editingBreakpoint]))}
           </span>
         )}
 
@@ -279,7 +300,7 @@ function handleExportHTML() {
             {(Object.entries(PREVIEW_WIDTHS) as [PreviewWidth, typeof PREVIEW_WIDTHS[PreviewWidth]][]).map(([key, cfg]) => (
               <button
                 key={key}
-                title={`${cfg.label} (${cfg.px}px)`}
+                title={t('previewWidthTitle', t(BP_LABEL_KEY[key]), cfg.px)}
                 onClick={() => setPreviewWidth(key)}
                 className={[
                   'w-8 h-7 flex items-center justify-center rounded-md text-sm transition-colors',
@@ -299,12 +320,22 @@ function handleExportHTML() {
         )}
       </div>
 
-      {/* Right: save menu + publish */}
+      {/* Right: language + save menu + publish */}
       <div className="flex items-center gap-2 shrink-0 relative" ref={menuRef}>
+        {/* Language toggle — the one switch that cascades direction
+            (dir="rtl"/"ltr" on the Editor canvas and every Preview root,
+            see Renderer.tsx), the builder's own UI strings (useT(), see
+            panelComponents.tsx/ControlPanel.tsx/DropSlot.tsx/
+            TemplatePicker.tsx/TopBar.tsx), and which language's content
+            pack the Farsi-enabled templates render in (templates.ts's
+            getTemplates(locale)). See LanguageToggle.tsx for the full
+            rundown of what flipping it actually touches. */}
+        <LanguageToggle />
+
         {/* Save/export menu */}
         <button
           onClick={() => setMenuOpen(v => !v)}
-          title="Save / Export"
+          title={t('saveExportTitle')}
           className={[
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
             menuOpen
@@ -313,52 +344,55 @@ function handleExportHTML() {
           ].join(' ')}
         >
           <span>💾</span>
-          <span className="hidden sm:inline">Save</span>
+          <span className="hidden sm:inline">{t('saveLabel')}</span>
           <span className="text-neutral-400">▾</span>
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-10 w-56 bg-white rounded-xl border border-neutral-200 shadow-xl py-1.5 z-50">
+          <div
+            dir={dir}
+            className="absolute end-0 top-10 w-56 bg-white rounded-xl border border-neutral-200 shadow-xl py-1.5 z-50"
+          >
             {/* Browser save */}
-            <MenuSection label="Browser storage" />
+            <MenuSection label={t('browserStorageSection')} />
             <MenuItem
               icon="💾"
-              label="Save to browser"
-              sublabel="⌘S · survives refresh"
+              label={t('saveToBrowserLabel')}
+              sublabel={t('saveToBrowserSub')}
               onClick={handleSave}
             />
             {hasSave && (
               <MenuItem
                 icon="📂"
-                label="Load from browser"
-                sublabel="Restore last auto-save"
+                label={t('loadFromBrowserLabel')}
+                sublabel={t('loadFromBrowserSub')}
                 onClick={handleLoadLocal}
               />
             )}
             <div className="my-1 border-t border-neutral-100" />
 
             {/* JSON */}
-            <MenuSection label="JSON file" />
+            <MenuSection label={t('jsonFileSection')} />
             <MenuItem
               icon="⬇"
-              label="Export as JSON"
-              sublabel="Download page.json"
+              label={t('exportJsonLabel')}
+              sublabel={t('exportJsonSub')}
               onClick={handleExportJSON}
             />
             <MenuItem
               icon="⬆"
-              label="Import JSON"
-              sublabel="Open a page.json file"
+              label={t('importJsonLabel')}
+              sublabel={t('importJsonSub')}
               onClick={() => importRef.current?.click()}
             />
             <div className="my-1 border-t border-neutral-100" />
 
             {/* HTML */}
-            <MenuSection label="Static HTML" />
+            <MenuSection label={t('staticHtmlSection')} />
             <MenuItem
               icon="🌐"
-              label="Export as HTML"
-              sublabel="Works in any browser"
+              label={t('exportHtmlLabel')}
+              sublabel={t('exportHtmlSub')}
               onClick={handleExportHTML}
             />
           </div>
@@ -374,7 +408,7 @@ function handleExportHTML() {
         />
 
         <button className="px-4 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
-          Publish
+          {t('publishLabel')}
         </button>
       </div>
 
@@ -417,7 +451,7 @@ function ModeBtn({ children, active, onClick }: { children: React.ReactNode; act
 
 function MenuSection({ label }: { label: string }) {
   return (
-    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">
+    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-neutral-400 text-start">
       {label}
     </p>
   )
@@ -429,7 +463,7 @@ function MenuItem({ icon, label, sublabel, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-violet-50 transition-colors"
+      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-violet-50 transition-colors text-start"
     >
       <span className="shrink-0 w-5 text-center text-sm">{icon}</span>
       <div className="min-w-0">

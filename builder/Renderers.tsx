@@ -22,6 +22,7 @@ import { AnimationStyleSheet, useAnimationProps } from './animations'
 import { CustomCssStyleSheet } from './CustomCssStyleSheet'
 import { useNodeStyle, useNodeAnimation } from './responsive'
 import { setGlobalColorPalette } from './styleMapper'
+import { directionForLocale } from './i18n'
 
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
@@ -55,6 +56,8 @@ export function EditorRenderer() {
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
   const setCanvasScale    = useBuilderStore(s => s.setCanvasScale)
   const globalColors      = useBuilderStore(s => s.globalColors)
+  const locale            = useBuilderStore(s => s.locale)
+  const dir               = directionForLocale(locale)
 
   // Refreshes styleMapper's module-level color-resolution cache with the
   // latest palette on every render, AND (just by subscribing here at all)
@@ -160,6 +163,7 @@ export function EditorRenderer() {
           >
             <div
               ref={canvasRef}
+              dir={dir}
               className="bg-white"
               style={{
                 position:        'absolute',
@@ -436,6 +440,8 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
   const cfg           = PREVIEW_WIDTHS[previewWidth]
   const replayNonce   = useBuilderStore(s => s.previewReplayNonce)
   const globalColors  = useBuilderStore(s => s.globalColors)
+  const locale        = useBuilderStore(s => s.locale)
+  const dir           = directionForLocale(locale)
 
   // Same reasoning as EditorRenderer above — Preview is a separate render
   // root, so it needs its own subscription/cache-refresh rather than
@@ -458,6 +464,7 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
       <CustomCssStyleSheet />
       {previewWidth !== 'desktop' ? (
         <div
+          dir={dir}
           style={{
             width:        cfg.px,
             maxWidth:     '100%',
@@ -479,7 +486,7 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
           <RenderPreviewNode key={replayNonce} nodeId={rootId} nodes={nodes} />
         </div>
       ) : (
-        <div style={{ width: '100%', background: 'white', minHeight: '100vh' }}>
+        <div dir={dir} style={{ width: '100%', background: 'white', minHeight: '100vh' }}>
           <RenderPreviewNode key={replayNonce} nodeId={rootId} nodes={nodes} />
         </div>
       )}

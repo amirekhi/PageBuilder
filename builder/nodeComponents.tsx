@@ -17,6 +17,7 @@ import { customCssClass, buildHoverTransitionStyle } from './customCss'
 import type { HoverStyleProps } from './customCss'
 import { elementId } from './elementId'
 import { resolveHref, type LinkType } from './links'
+import { useT } from './i18n'
 
 
 
@@ -130,6 +131,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const display = s.display ?? 'flex'
+  const t = useT()
 
   // Section's flat background color AND gradient each get their own
   // hover toggle here (image backgrounds are left Custom-CSS-only for
@@ -152,50 +154,50 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Layout">
-        <SelectField label="Display"   value={display} options={['flex','block','grid']} onChange={v => patchStyle(node, onChange, { display: v as StyleProps['display'] })} />
+      <FieldGroup label={t('fgLayout')}>
+        <SelectField label={t('displayLabel')}   value={display} options={['flex','block','grid']} onChange={v => patchStyle(node, onChange, { display: v as StyleProps['display'] })} />
 
         {display === 'grid' ? (
           <>
             <SelectField
-              label="Columns"
+              label={t('cellSpanColumns')}
               value={String(s.gridCols ?? 2)}
               options={['1','2','3','4','5','6']}
               onChange={v => patchStyle(node, onChange, { gridCols: (+v) as StyleProps['gridCols'] })}
             />
             <SelectField
-              label="Rows"
+              label={t('cellSpanRows')}
               value={String(s.gridRows ?? 'auto')}
-              options={[{ label: 'Auto (as needed)', value: 'auto' }, '1','2','3','4','5','6']}
+              options={[{ label: t('autoAsNeeded'), value: 'auto' }, '1','2','3','4','5','6']}
               onChange={v => patchStyle(node, onChange, { gridRows: (v === 'auto' ? 'auto' : +v) as StyleProps['gridRows'] })}
             />
           </>
         ) : display === 'flex' && (
-          <SelectField label="Direction" value={s.flexDir ?? 'col'}  options={['col','row','row-reverse','col-reverse']} onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })} />
+          <SelectField label={t('directionLabel')} value={s.flexDir ?? 'col'}  options={['col','row','row-reverse','col-reverse']} onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })} />
         )}
 
         {display !== 'block' && (
           <>
             {display === 'grid' ? (
               <SelectField
-                label="Justify items"
+                label={t('justifyItemsLabel')}
                 value={s.justifyItems ?? 'stretch'}
                 options={['start','center','end','stretch']}
                 onChange={v => patchStyle(node, onChange, { justifyItems: v as StyleProps['justifyItems'] })}
               />
             ) : (
-              <SelectField label="Justify" value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+              <SelectField label={t('justifyLabel')} value={s.justify ?? 'start'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
             )}
-            <SelectField label="Align children" value={s.align ?? 'start'}  options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+            <SelectField label={t('alignChildrenLabel')} value={s.align ?? 'start'}  options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
           </>
         )}
 
-        <SpacingField label="Gap"      value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
+        <SpacingField label={t('fieldGap')}      value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
       </FieldGroup>
 
-      <FieldGroup label="Padding">
+      <FieldGroup label={t('sectionPadding')}>
         <BoxSpacingField
-          label="Padding"
+          label={t('fieldPadding')}
           values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
           onChange={next => patchStyle(node, onChange, {
             pt: next.top as number | undefined, pr: next.right as number | undefined,
@@ -204,9 +206,9 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         />
       </FieldGroup>
 
-      <FieldGroup label="Margin">
+      <FieldGroup label={t('sectionMargin')}>
         <BoxSpacingField
-          label="Margin"
+          label={t('fieldMargin')}
           values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
           onChange={next => patchStyle(node, onChange, {
             mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
@@ -215,18 +217,18 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         />
       </FieldGroup>
 
-      <FieldGroup label="Width">
-        <SelectField label="Max Width" value={s.maxWidth as string ?? ''} options={[{label:'—',value:''},'sm','md','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','full']} onChange={v => patchStyle(node, onChange, { maxWidth: (v || undefined) as StyleProps['maxWidth'] })} />
+      <FieldGroup label={t('sizeWidth')}>
+        <SelectField label={t('maxWidthLabel')} value={s.maxWidth as string ?? ''} options={[{label:'—',value:''},'sm','md','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','full']} onChange={v => patchStyle(node, onChange, { maxWidth: (v || undefined) as StyleProps['maxWidth'] })} />
       </FieldGroup>
 
-      <FieldGroup label="Position">
+      <FieldGroup label={t('sectionPosition')}>
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Vertical Position defaults to "·" (None), which stretches this Section's content to fill the full box so Justify/Align actually has room to space children apart. Pick Top/Middle/Bottom instead to shrink-wrap the content and position it within extra room (e.g. minHeight taller than the content).</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">{t('secPositionNote')}</p>
       </FieldGroup>
 
-      <FieldGroup label="Background">
+      <FieldGroup label={t('sectionBackground')}>
         <ColorField
-          label={bgHover ? 'Flat color (hover)' : 'Flat color'}
+          label={bgHover ? t('flatColorLabelHover') : t('flatColorLabel')}
           value={bgColorValue}
           onChange={setBgColor}
           hoverAdornment={
@@ -235,12 +237,12 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         />
         {bgHover && (
           <p className="text-[10px] text-neutral-400 -mt-1">
-            Editing the hover color.
+            {t('editingHoverColorNote')}
           </p>
         )}
 
         <GradientField
-          label={gradientHover ? 'Gradient (hover)' : 'Gradient'}
+          label={gradientHover ? t('gradientLabelHover') : t('gradientLabel')}
           value={gradientValue}
           onChange={setGradient}
           hoverAdornment={
@@ -249,12 +251,12 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         />
         {gradientHover && (
           <p className="text-[10px] text-neutral-400 -mt-1">
-            Editing the hover gradient. Image backgrounds below still don&apos;t have a hover variant — use Custom CSS for those.
+            {t('editingHoverGradientNote')}
           </p>
         )}
 
         <div>
-          <label className="block text-xs text-neutral-500 mb-1">Image</label>
+          <label className="block text-xs text-neutral-500 mb-1">{t('fgImage')}</label>
           <button
             onClick={() => openMediaPicker(item => patchStyle(node, onChange, { bgImage: item.url }))}
             className="w-full rounded-lg border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden"
@@ -266,7 +268,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-neutral-400">
                 <span className="text-lg">🖼️</span>
-                <span className="text-xs font-medium">Choose background image</span>
+                <span className="text-xs font-medium">{t('chooseBgImage')}</span>
               </div>
             )}
           </button>
@@ -276,13 +278,13 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
                 onClick={() => openMediaPicker(item => patchStyle(node, onChange, { bgImage: item.url }))}
                 className="flex-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1 rounded-md hover:bg-violet-50 transition-colors"
               >
-                Replace
+                {t('seoReplace')}
               </button>
               <button
                 onClick={() => patchStyle(node, onChange, { bgImage: undefined })}
                 className="flex-1 text-xs font-medium text-neutral-400 hover:text-red-500 py-1 rounded-md hover:bg-red-50 transition-colors"
               >
-                Remove
+                {t('seoRemove')}
               </button>
             </div>
           )}
@@ -291,23 +293,23 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
         {s.bgImage && (
           <>
             <SelectField
-              label="Size"
+              label={t('sectionSize')}
               value={s.bgSize ?? 'cover'}
               options={[
-                { label: 'Cover (fill)',  value: 'cover' },
-                { label: 'Contain',       value: 'contain' },
-                { label: 'Auto',          value: 'auto' },
+                { label: t('bgSizeCover'),    value: 'cover' },
+                { label: t('bgSizeContain'),  value: 'contain' },
+                { label: t('autoPlaceholder'), value: 'auto' },
               ]}
               onChange={v => patchStyle(node, onChange, { bgSize: v as StyleProps['bgSize'] })}
             />
             <SelectField
-              label="Position"
+              label={t('sectionPosition')}
               value={s.bgPos ?? 'center'}
               options={['center','top','bottom','left','right']}
               onChange={v => patchStyle(node, onChange, { bgPos: v as StyleProps['bgPos'] })}
             />
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500 w-20 shrink-0">Overlay</span>
+            <div className="flex items-center gap-2" dir="ltr">
+              <span className="text-xs text-neutral-500 w-20 shrink-0">{t('overlayLabel')}</span>
               <input
                 type="range" min={0} max={80} step={5}
                 className="flex-1 accent-violet-600"
@@ -316,7 +318,7 @@ export const SectionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
               />
               <span className="text-xs text-neutral-400 w-8 text-right">{s.bgOverlay ?? 0}%</span>
             </div>
-            <p className="text-[10px] text-neutral-400 -mt-1">Overlay darkens the image so text stays readable</p>
+            <p className="text-[10px] text-neutral-400 -mt-1">{t('overlayNote')}</p>
           </>
         )}
       </FieldGroup>
@@ -370,23 +372,24 @@ export const AvatarPreview: React.FC<NodeComponentProps> = ({ node, animationRef
 export const AvatarPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const src = (node.props.src as string) ?? ''
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Image">
+      <FieldGroup label={t('fgImage')}>
         <button onClick={() => openMediaPicker(item => onChange({ src: item.url, alt: item.alt }))} className="w-32 h-32 mx-auto block rounded-full border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden">
           {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-neutral-400 text-xl">🙂</div>}
         </button>
-        {src && <button onClick={() => onChange({ src: '' })} className="w-full mt-2 text-xs font-medium text-neutral-400 hover:text-red-500 py-1.5 rounded-md hover:bg-red-50 transition-colors">Remove photo (use initials)</button>}
+        {src && <button onClick={() => onChange({ src: '' })} className="w-full mt-2 text-xs font-medium text-neutral-400 hover:text-red-500 py-1.5 rounded-md hover:bg-red-50 transition-colors">{t('removePhotoBtn')}</button>}
 
-        <label className="block text-xs text-neutral-500 mt-3 mb-1">Initials (shown if no image)</label>
+        <label className="block text-xs text-neutral-500 mt-3 mb-1">{t('initialsLabel')}</label>
         <input maxLength={2} className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.initials as string) ?? ''} onChange={e => onChange({ initials: e.target.value.toUpperCase() })} />
       </FieldGroup>
-      <FieldGroup label="Size">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500 w-20 shrink-0">Diameter (px)</span>
+      <FieldGroup label={t('sectionSize')}>
+        <div className="flex items-center gap-2" dir="ltr">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">{t('diameterLabel')}</span>
           <input type="number" min={24} max={200} step={4} className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.size as number) ?? 56} onChange={e => onChange({ size: +e.target.value || 56 })} />
         </div>
-        <p className="text-[10px] text-neutral-400">Tip: drag the corner handle on the canvas to resize instead</p>
+        <p className="text-[10px] text-neutral-400">{t('avatarResizeTip')}</p>
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -437,17 +440,18 @@ export const QuotePreview: React.FC<NodeComponentProps> = ({ node, animationRef,
 
 export const QuotePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Content">
-        <label className="block text-xs text-neutral-500 mb-1">Quote</label>
+      <FieldGroup label={t('tabContent')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('quoteLabel')}</label>
         <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.quote as string) ?? ''} onChange={e => onChange({ quote: e.target.value })} />
-        <label className="block text-xs text-neutral-500 mt-2 mb-1">Name</label>
+        <label className="block text-xs text-neutral-500 mt-2 mb-1">{t('namePlaceholder')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.name as string) ?? ''} onChange={e => onChange({ name: e.target.value })} />
-        <label className="block text-xs text-neutral-500 mt-2 mb-1">Role / company</label>
+        <label className="block text-xs text-neutral-500 mt-2 mb-1">{t('roleLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.role as string) ?? ''} onChange={e => onChange({ role: e.target.value })} />
       </FieldGroup>
-      <FieldGroup label="Avatar">
+      <FieldGroup label={t('fgAvatar')}>
         <button onClick={() => openMediaPicker(item => onChange({ avatarSrc: item.url }))} className="w-16 h-16 rounded-full border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden">
           {node.props.avatarSrc
             ? <img src={node.props.avatarSrc as string} alt="" className="w-full h-full object-cover" />
@@ -483,6 +487,7 @@ function VideoRender({
   animationStyle?: React.CSSProperties
 }) {
   const s     = useNodeStyle(node)
+  const t     = useT()
   const raw   = (node.props.url as string) || ''
   const embed = toEmbedUrl(raw)
   const ratio = (s.aspectRatio && s.aspectRatio !== 'auto') ? s.aspectRatio : '16/9'
@@ -494,7 +499,7 @@ function VideoRender({
       style={{ ...buildInlineStyle(s, { skipSizing }), aspectRatio: ratio, minHeight: 160, ...animationStyle }}
     >
       <span className="text-xl">▶</span>
-      <span className="text-xs font-medium">Paste a YouTube or Vimeo link</span>
+      <span className="text-xs font-medium">{t('pasteVideoLink')}</span>
     </div>
   )
   return (
@@ -515,21 +520,22 @@ export const VideoPreview: React.FC<NodeComponentProps> = ({ node, animationRef,
 
 export const VideoPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Source">
-        <label className="block text-xs text-neutral-500 mb-1">YouTube / Vimeo URL</label>
+      <FieldGroup label={t('fgSource')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('videoUrlLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="https://youtube.com/watch?v=…" value={(node.props.url as string) ?? ''} onChange={e => onChange({ url: e.target.value })} />
-        <p className="text-[10px] text-neutral-400 mt-1">Paste any YouTube or Vimeo link — it&apos;s converted to an embed automatically.</p>
+        <p className="text-[10px] text-neutral-400 mt-1">{t('videoUrlNote')}</p>
       </FieldGroup>
-      <FieldGroup label="Frame">
-        <SelectField label="Aspect ratio" value={s.aspectRatio ?? '16/9'} options={[{ label:'Wide 16:9',value:'16/9' },{ label:'Standard 4:3',value:'4/3' },{ label:'Square 1:1',value:'1/1' },{ label:'Ultra 21:9',value:'21/9' }]} onChange={v => patchStyle(node, onChange, { aspectRatio: v as StyleProps['aspectRatio'] })} />
-        <SelectField label="Rounded" value={s.rounded ?? 'lg'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
-        <SelectField label="Shadow"  value={s.shadow ?? 'none'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { shadow: v as StyleProps['shadow'] })} />
+      <FieldGroup label={t('fgFrame')}>
+        <SelectField label={t('aspectRatioLabel')} value={s.aspectRatio ?? '16/9'} options={[{ label: t('ratioWide169'), value:'16/9' },{ label: t('ratioStandard43'), value:'4/3' },{ label: t('ratioSquare11'), value:'1/1' },{ label: t('ratioUltra219'), value:'21/9' }]} onChange={v => patchStyle(node, onChange, { aspectRatio: v as StyleProps['aspectRatio'] })} />
+        <SelectField label={t('roundedLabel')} value={s.rounded ?? 'lg'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
+        <SelectField label={t('shadowLabel')}  value={s.shadow ?? 'none'} options={['none','sm','md','lg','xl','2xl']} onChange={v => patchStyle(node, onChange, { shadow: v as StyleProps['shadow'] })} />
       </FieldGroup>
-      <FieldGroup label="Position">
+      <FieldGroup label={t('sectionPosition')}>
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's width/height is smaller than its container</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">{t('positionVisibleNote')}</p>
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -594,6 +600,7 @@ export const AccordionPreview: React.FC<NodeComponentProps> = ({ node, animation
 
 export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const items = accordionItems(node)
+  const t = useT()
   function updateItem(i: number, partial: Partial<AccordionItem>) {
     onChange({ items: items.map((it, idx) => idx === i ? { ...it, ...partial } : it) })
   }
@@ -601,19 +608,19 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   function removeItem(i: number) { onChange({ items: items.filter((_, idx) => idx !== i) }) }
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Items">
+      <FieldGroup label={t('fgItems')}>
         <div className="space-y-3">
           {items.map((item, i) => (
             <div key={i} className="border border-neutral-200 rounded-lg p-2.5 space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <input className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="Question" value={item.q} onChange={e => updateItem(i, { q: e.target.value })} />
-                <button onClick={() => removeItem(i)} className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm" aria-label="Remove item">✕</button>
+                <input className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder={t('questionPlaceholder')} value={item.q} onChange={e => updateItem(i, { q: e.target.value })} />
+                <button onClick={() => removeItem(i)} className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm" aria-label={t('removeItemAria')}>✕</button>
               </div>
-              <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-14 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="Answer" value={item.a} onChange={e => updateItem(i, { a: e.target.value })} />
+              <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-14 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder={t('answerPlaceholder')} value={item.a} onChange={e => updateItem(i, { a: e.target.value })} />
             </div>
           ))}
         </div>
-        <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">+ Add question</button>
+        <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">{t('addQuestionBtn')}</button>
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -641,9 +648,9 @@ export const AccordionPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // back into an ordered, indexable array so panes[i] lines up 1:1 with
 // node.children[i] and this component can pick which one to show.
 
-function tabLabel(nodes: Record<string, PageNode>, paneId: string, index: number): string {
+function tabLabel(nodes: Record<string, PageNode>, paneId: string, index: number, fallback: string): string {
   const pane = nodes[paneId]
-  return (pane?.props.label as string) || `Tab ${index + 1}`
+  return (pane?.props.label as string) || `${fallback} ${index + 1}`
 }
 
 function TabHeaderRow({
@@ -654,6 +661,7 @@ function TabHeaderRow({
   onSelect: (i: number) => void
 }) {
   const nodes = useBuilderStore(st => st.nodes)
+  const t = useT()
   return (
     <div className="flex border-b border-neutral-200 mb-4 gap-1 overflow-x-auto">
       {paneIds.map((paneId, i) => {
@@ -668,7 +676,7 @@ function TabHeaderRow({
               isActive ? 'border-violet-600 text-violet-700' : 'border-transparent text-neutral-500 hover:text-neutral-700',
             ].join(' ')}
           >
-            {tabLabel(nodes, paneId, i)}
+            {tabLabel(nodes, paneId, i, t('tabWordFallback'))}
           </button>
         )
       })}
@@ -679,6 +687,7 @@ function TabHeaderRow({
 export const TabsEditor: React.FC<NodeComponentProps> = ({ node, children, activeIndex, onActiveIndexChange }) => {
   const s       = useNodeStyle(node)
   const addNode = useBuilderStore(st => st.addNode)
+  const t       = useT()
   const paneIds = node.children
   const safeIndex = paneIds.length > 0 ? Math.min(activeIndex ?? 0, paneIds.length - 1) : 0
 
@@ -690,7 +699,7 @@ export const TabsEditor: React.FC<NodeComponentProps> = ({ node, children, activ
           onClick={e => { e.stopPropagation(); addNode('tabpane', node.id, 0) }}
           className="w-full py-6 rounded-lg border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 text-neutral-400 hover:text-violet-500 text-sm transition-colors"
         >
-          + Add a tab
+          {t('addATabBtn')}
         </button>
       </div>
     )
@@ -744,25 +753,26 @@ export const TabsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const deleteNode = useBuilderStore(st => st.deleteNode)
   const updateProps = useBuilderStore(st => st.updateProps)
   const paneIds    = node.children
+  const t          = useT()
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Tabs">
+      <FieldGroup label={t('fgTabsLabel')}>
         <div className="space-y-1.5">
           {paneIds.map((paneId, i) => (
             <div key={paneId} className="flex items-center gap-1.5">
               <input
                 className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
                 value={(nodes[paneId]?.props.label as string) ?? ''}
-                placeholder={`Tab ${i + 1}`}
+                placeholder={`${t('tabWordFallback')} ${i + 1}`}
                 onChange={e => updateProps(paneId, { label: e.target.value })}
               />
               <button
                 onClick={() => deleteNode(paneId)}
                 disabled={paneIds.length <= 1}
-                title={paneIds.length <= 1 ? 'Tabs needs at least one tab' : 'Remove this tab'}
+                title={paneIds.length <= 1 ? t('tabsNeedOneTitle') : t('removeThisTabTitle')}
                 className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-400"
-                aria-label="Remove tab"
+                aria-label={t('removeTabAria')}
               >
                 ✕
               </button>
@@ -773,15 +783,15 @@ export const TabsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           onClick={() => addNode('tabpane', node.id, paneIds.length)}
           className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
         >
-          + Add tab
+          {t('addTabBtn')}
         </button>
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Click a tab's header on the canvas to switch to it and edit its contents — each tab can hold any blocks, nested as deeply as you like, exactly like a Column.
+          {t('tabsClickNote')}
         </p>
       </FieldGroup>
 
-      <FieldGroup label="Layout">
-        <SpacingField label="Gap" value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
+      <FieldGroup label={t('fgLayout')}>
+        <SpacingField label={t('fieldGap')} value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
       </FieldGroup>
 
       <AnimationPanel
@@ -826,20 +836,21 @@ export const TabPanePreview: React.FC<NodeComponentProps> = ({ node, children, a
 
 export const TabPanePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Tab">
-        <label className="block text-xs text-neutral-500 mb-1">Tab label</label>
+      <FieldGroup label={t('fgTabLabel')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('tabLabelField')}</label>
         <input
           className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
           value={(node.props.label as string) ?? ''}
           onChange={e => onChange({ label: e.target.value })}
         />
-        <p className="text-[10px] text-neutral-400 -mt-1">Shown on this tab's header button in the parent Tabs block.</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">{t('tabLabelNote')}</p>
       </FieldGroup>
-      <FieldGroup label="Padding">
+      <FieldGroup label={t('sectionPadding')}>
         <BoxSpacingField
-          label="Padding"
+          label={t('fieldPadding')}
           values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
           onChange={next => patchStyle(node, onChange, {
             pt: next.top as number | undefined, pr: next.right as number | undefined,
@@ -847,8 +858,8 @@ export const TabPanePanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
       </FieldGroup>
-      <FieldGroup label="Background">
-        <ColorField label="Color" value={s.bgColor} onChange={v => patchStyle(node, onChange, { bgColor: v || undefined })} />
+      <FieldGroup label={t('sectionBackground')}>
+        <ColorField label={t('colorLabel')} value={s.bgColor} onChange={v => patchStyle(node, onChange, { bgColor: v || undefined })} />
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -887,6 +898,7 @@ function CarouselArrows({
   onNext: () => void
   stopPropagation?: boolean
 }) {
+  const t = useT()
   if (count <= 1) return null
   function handle(fn: () => void) {
     return (e: React.MouseEvent) => { if (stopPropagation) e.stopPropagation(); fn() }
@@ -896,7 +908,7 @@ function CarouselArrows({
       <button
         type="button"
         onClick={handle(onPrev)}
-        aria-label="Previous slide"
+        aria-label={t('prevSlideAria')}
         className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-neutral-700 text-sm transition-colors"
       >
         ‹
@@ -904,7 +916,7 @@ function CarouselArrows({
       <button
         type="button"
         onClick={handle(onNext)}
-        aria-label="Next slide"
+        aria-label={t('nextSlideAria')}
         className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-neutral-700 text-sm transition-colors"
       >
         ›
@@ -921,6 +933,7 @@ function CarouselDots({
   onSelect: (i: number) => void
   stopPropagation?: boolean
 }) {
+  const t = useT()
   if (slideIds.length <= 1) return null
   return (
     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
@@ -929,7 +942,7 @@ function CarouselDots({
           key={sid}
           type="button"
           onClick={e => { if (stopPropagation) e.stopPropagation(); onSelect(i) }}
-          aria-label={`Go to slide ${i + 1}`}
+          aria-label={t('goToSlideAria', i + 1)}
           className={[
             'w-2 h-2 rounded-full transition-colors',
             i === activeIndex ? 'bg-white' : 'bg-white/50 hover:bg-white/80',
@@ -944,6 +957,7 @@ export const CarouselEditor: React.FC<NodeComponentProps> = ({ node, children, a
   const s        = useNodeStyle(node)
   const addNode    = useBuilderStore(st => st.addNode)
   const selectNode = useBuilderStore(st => st.selectNode)
+  const t          = useT()
   const slideIds = node.children
   const count    = slideIds.length
   const safeIndex = count > 0 ? Math.min(activeIndex ?? 0, count - 1) : 0
@@ -958,7 +972,7 @@ export const CarouselEditor: React.FC<NodeComponentProps> = ({ node, children, a
           onClick={e => { e.stopPropagation(); addNode('slide', node.id, 0) }}
           className="w-full py-6 rounded-lg border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 text-neutral-400 hover:text-violet-500 text-sm transition-colors"
         >
-          + Add a slide
+          {t('addASlideBtn')}
         </button>
       </div>
     )
@@ -994,7 +1008,7 @@ export const CarouselEditor: React.FC<NodeComponentProps> = ({ node, children, a
         className="flex items-center gap-1.5 px-2 py-1 mb-1 rounded-md bg-neutral-50 border border-neutral-200 text-[10px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 cursor-pointer select-none w-fit"
       >
         <span aria-hidden>🎠</span>
-        <span>Carousel · {count} slide{count === 1 ? '' : 's'}</span>
+        <span>{t('carouselCaption', count)}</span>
       </div>
       <div className="relative overflow-hidden">
         {children}
@@ -1074,20 +1088,21 @@ export const CarouselPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const addNode    = useBuilderStore(st => st.addNode)
   const deleteNode = useBuilderStore(st => st.deleteNode)
   const slideIds   = node.children
+  const t          = useT()
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Slides">
+      <FieldGroup label={t('fgSlides')}>
         <div className="space-y-1.5">
           {slideIds.map((sid, i) => (
             <div key={sid} className="flex items-center justify-between border border-neutral-200 rounded-md px-2.5 py-1.5">
-              <span className="text-xs text-neutral-600">Slide {i + 1}</span>
+              <span className="text-xs text-neutral-600">{t('slideWordFallback')} {i + 1}</span>
               <button
                 onClick={() => deleteNode(sid)}
                 disabled={slideIds.length <= 1}
-                title={slideIds.length <= 1 ? 'Carousel needs at least one slide' : 'Remove this slide'}
+                title={slideIds.length <= 1 ? t('carouselNeedsOneTitle') : t('removeThisSlideTitle')}
                 className="shrink-0 w-6 h-6 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-xs disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-400"
-                aria-label="Remove slide"
+                aria-label={t('removeSlideAria')}
               >
                 ✕
               </button>
@@ -1098,18 +1113,18 @@ export const CarouselPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           onClick={() => addNode('slide', node.id, slideIds.length)}
           className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
         >
-          + Add slide
+          {t('addSlideBtn')}
         </button>
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Click a slide's dot or arrow on the canvas to switch to it and edit its contents — each slide can hold any blocks, exactly like a Column.
+          {t('slidesClickNote')}
         </p>
       </FieldGroup>
 
-      <FieldGroup label="Autoplay">
-        <CheckField label="Autoplay in Preview" value={!!node.props.autoplay} onChange={v => onChange({ autoplay: v })} />
+      <FieldGroup label={t('fgAutoplay')}>
+        <CheckField label={t('autoplayPreviewLabel')} value={!!node.props.autoplay} onChange={v => onChange({ autoplay: v })} />
         {!!node.props.autoplay && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500 w-20 shrink-0">Speed</span>
+          <div className="flex items-center gap-2" dir="ltr">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">{t('speedLabel')}</span>
             <input
               type="range" min={1500} max={10000} step={500}
               className="flex-1 accent-violet-600"
@@ -1119,23 +1134,23 @@ export const CarouselPanel: React.FC<PanelProps> = ({ node, onChange }) => {
             <span className="text-xs text-neutral-400 w-12 text-right">{(((node.props.autoplayInterval as number) ?? 4000) / 1000).toFixed(1)}s</span>
           </div>
         )}
-        <CheckField label="Loop back to first slide" value={node.props.loop !== false} onChange={v => onChange({ loop: v })} />
+        <CheckField label={t('loopLabel')} value={node.props.loop !== false} onChange={v => onChange({ loop: v })} />
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Autoplay only ever runs in Preview — the editor canvas never auto-advances on its own, so drag/selection/editing stay predictable. Automatically pauses while the mouse hovers the carousel in Preview.
+          {t('autoplayNote')}
         </p>
       </FieldGroup>
 
-      <FieldGroup label="Controls">
-        <CheckField label="Show arrows" value={node.props.showArrows !== false} onChange={v => onChange({ showArrows: v })} />
-        <CheckField label="Show dots" value={node.props.showDots !== false} onChange={v => onChange({ showDots: v })} />
+      <FieldGroup label={t('fgControls')}>
+        <CheckField label={t('showArrowsLabel')} value={node.props.showArrows !== false} onChange={v => onChange({ showArrows: v })} />
+        <CheckField label={t('showDotsLabel')} value={node.props.showDots !== false} onChange={v => onChange({ showDots: v })} />
       </FieldGroup>
 
-      <FieldGroup label="Layout">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500 w-20 shrink-0">Min height</span>
+      <FieldGroup label={t('fgLayout')}>
+        <div className="flex items-center gap-2" dir="ltr">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">{t('minHeightLabel')}</span>
           <input
             type="number" min={0} max={800} step={10}
-            placeholder="Auto"
+            placeholder={t('autoPlaceholder')}
             className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
             value={typeof s.minHeight === 'number' ? s.minHeight : ''}
             onChange={e => {
@@ -1143,10 +1158,10 @@ export const CarouselPanel: React.FC<PanelProps> = ({ node, onChange }) => {
               patchStyle(node, onChange, { minHeight: raw === '' ? undefined : Math.max(0, +raw || 0) })
             }}
           />
-          <span className="text-xs text-neutral-400 shrink-0">px</span>
+          <span className="text-xs text-neutral-400 shrink-0">{t('pxUnit')}</span>
         </div>
         <p className="text-[10px] text-neutral-400 -mt-1">
-          Keeps the carousel a stable height across slides of different content lengths — leave blank to size to each slide's own content instead.
+          {t('minHeightNote')}
         </p>
       </FieldGroup>
 
@@ -1194,11 +1209,12 @@ export const SlidePreview: React.FC<NodeComponentProps> = ({ node, children, ani
 
 export const SlidePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Padding">
+      <FieldGroup label={t('sectionPadding')}>
         <BoxSpacingField
-          label="Padding"
+          label={t('fieldPadding')}
           values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
           onChange={next => patchStyle(node, onChange, {
             pt: next.top as number | undefined, pr: next.right as number | undefined,
@@ -1258,22 +1274,23 @@ export const ListPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
 
 export const ListPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const items = listItems(node)
+  const t = useT()
   function updateItem(i: number, value: string) { const next = [...items]; next[i] = value; onChange({ items: next }) }
   function addItem()    { onChange({ items: [...items, 'New item'] }) }
   function removeItem(i: number) { onChange({ items: items.filter((_, idx) => idx !== i) }) }
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Items">
+      <FieldGroup label={t('fgItems')}>
         <div className="space-y-1.5">
           {items.map((text, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <input className="flex-1 border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={text} onChange={e => updateItem(i, e.target.value)} />
-              <button onClick={() => removeItem(i)} className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm" aria-label="Remove item">✕</button>
+              <button onClick={() => removeItem(i)} className="shrink-0 w-7 h-7 rounded-md text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors text-sm" aria-label={t('removeItemAria')}>✕</button>
             </div>
           ))}
         </div>
-        <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">+ Add item</button>
-        <SelectField label="Marker" value={(node.props.markerType as string) ?? 'bullet'} options={[{ label:'Bullet',value:'bullet' },{ label:'Check',value:'check' },{ label:'Arrow',value:'arrow' },{ label:'Number',value:'number' }]} onChange={v => onChange({ markerType: v })} />
+        <button onClick={addItem} className="w-full mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">{t('addItemBtn')}</button>
+        <SelectField label={t('markerLabel')} value={(node.props.markerType as string) ?? 'bullet'} options={[{ label: t('markerBullet'),value:'bullet' },{ label: t('markerCheck'),value:'check' },{ label: t('markerArrow'),value:'arrow' },{ label: t('markerNumber'),value:'number' }]} onChange={v => onChange({ markerType: v })} />
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -1321,16 +1338,17 @@ export const BadgePreview: React.FC<NodeComponentProps> = ({ node, animationRef,
 
 export const BadgePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Content">
-        <label className="block text-xs text-neutral-500 mb-1">Label</label>
+      <FieldGroup label={t('tabContent')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('labelFieldLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
       </FieldGroup>
-      <FieldGroup label="Style">
-        <SelectField label="Variant" value={(node.props.variant as string) ?? 'soft'} options={['solid','soft','outline']} onChange={v => onChange({ variant: v })} />
+      <FieldGroup label={t('tabStyle')}>
+        <SelectField label={t('variantLabel')} value={(node.props.variant as string) ?? 'soft'} options={['solid','soft','outline']} onChange={v => onChange({ variant: v })} />
       </FieldGroup>
-      <FieldGroup label="Position">
+      <FieldGroup label={t('sectionPosition')}>
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
       <AnimationPanel
@@ -1366,13 +1384,14 @@ export const ColumnsPreview: React.FC<NodeComponentProps> = ({ node, children, a
 
 export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Layout">
-        <SpacingField label="Gap"          value={s.gap}    onChange={v => patchStyle(node, onChange, { gap: v })} />
-        <SelectField  label="Align items"  value={s.align ?? 'stretch'} options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
-        <SelectField  label="Justify"      value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Justify only has room to act once at least one Column below is set to something other than its default "Fill evenly" width — otherwise every Column grows to fill the row and there's no leftover space to distribute.</p>
+      <FieldGroup label={t('fgLayout')}>
+        <SpacingField label={t('fieldGap')}          value={s.gap}    onChange={v => patchStyle(node, onChange, { gap: v })} />
+        <SelectField  label={t('alignItemsLabel')}   value={s.align ?? 'stretch'} options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
+        <SelectField  label={t('justifyLabel')}      value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
+        <p className="text-[10px] text-neutral-400 -mt-1">{t('columnsJustifyNote')}</p>
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -1407,6 +1426,7 @@ export const ColumnPreview: React.FC<NodeComponentProps> = ({ node, children, an
 
 export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   const widthMode = typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'fill'
 
   // Same pattern as SectionPanel: Column's background lives here in the
@@ -1430,18 +1450,18 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Width">
+      <FieldGroup label={t('sizeWidth')}>
         <SelectField
-          label="Mode"
+          label={t('widthModeLabel')}
           value={widthMode}
           options={[
-            { label: 'Fill evenly (default)', value: 'fill' },
-            { label: 'Fixed pixels',          value: 'fixed' },
-            { label: 'Half',                  value: '1/2' },
-            { label: 'Third',                 value: '1/3' },
-            { label: 'Two thirds',            value: '2/3' },
-            { label: 'Quarter',               value: '1/4' },
-            { label: 'Three quarters',        value: '3/4' },
+            { label: t('modeFillEvenly'),       value: 'fill' },
+            { label: t('modeFixedPixels'),      value: 'fixed' },
+            { label: t('modeHalf'),             value: '1/2' },
+            { label: t('modeThird'),            value: '1/3' },
+            { label: t('modeTwoThirds'),        value: '2/3' },
+            { label: t('modeQuarter'),          value: '1/4' },
+            { label: t('modeThreeQuarters'),    value: '3/4' },
           ]}
           onChange={v => {
             if (v === 'fill') {
@@ -1454,8 +1474,8 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           }}
         />
         {widthMode === 'fixed' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500 w-20 shrink-0">Width (px)</span>
+          <div className="flex items-center gap-2" dir="ltr">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">{t('widthPxLabel')}</span>
             <input
               type="number" min={40} max={1000} step={10}
               className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
@@ -1464,13 +1484,13 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           </div>
         )}
         <p className="text-[10px] text-neutral-400">
-          "Fill evenly" makes every un-sized Column in this row share the space equally. Set a Column to anything else here to give the Columns block's own Justify option (in its own panel) room to actually distribute leftover space.
+          {t('columnWidthNote')}
         </p>
       </FieldGroup>
 
-      <FieldGroup label="Padding">
+      <FieldGroup label={t('sectionPadding')}>
         <BoxSpacingField
-          label="Padding"
+          label={t('fieldPadding')}
           values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
           onChange={next => patchStyle(node, onChange, {
             pt: next.top as number | undefined, pr: next.right as number | undefined,
@@ -1478,9 +1498,9 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
       </FieldGroup>
-      <FieldGroup label="Margin">
+      <FieldGroup label={t('sectionMargin')}>
         <BoxSpacingField
-          label="Margin"
+          label={t('fieldMargin')}
           values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
           onChange={next => patchStyle(node, onChange, {
             mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
@@ -1488,9 +1508,9 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
       </FieldGroup>
-      <FieldGroup label="Background">
+      <FieldGroup label={t('sectionBackground')}>
         <ColorField
-          label={bgHover ? 'Color (hover)' : 'Color'}
+          label={bgHover ? t('colorLabelHover') : t('colorLabel')}
           value={bgColorValue}
           onChange={setBgColor}
           hoverAdornment={
@@ -1498,7 +1518,7 @@ export const ColumnPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           }
         />
         <GradientField
-          label={gradientHover ? 'Gradient (hover)' : 'Gradient'}
+          label={gradientHover ? t('gradientLabelHover') : t('gradientLabel')}
           value={gradientValue}
           onChange={setGradient}
           hoverAdornment={
@@ -1550,6 +1570,7 @@ function GridSizePicker({
   onChange: (cols: number, rows: number) => void
 }) {
   const [hover, setHover] = useState<{ c: number; r: number } | null>(null)
+  const t = useT()
   const previewCols = hover?.c ?? cols
   const previewRows = hover?.r ?? rows
 
@@ -1561,6 +1582,7 @@ function GridSizePicker({
           gridTemplateColumns: `repeat(${GRID_PICKER_MAX}, 18px)`,
           gridTemplateRows: `repeat(${GRID_PICKER_MAX}, 18px)`,
         }}
+        dir="ltr"
         onMouseLeave={() => setHover(null)}
       >
         {Array.from({ length: GRID_PICKER_MAX * GRID_PICKER_MAX }).map((_, i) => {
@@ -1573,7 +1595,7 @@ function GridSizePicker({
               type="button"
               onMouseEnter={() => setHover({ c, r })}
               onClick={() => onChange(c, r)}
-              aria-label={`${c} columns by ${r} rows`}
+              aria-label={t('gridCellAria', c, r)}
               className={[
                 'rounded-sm transition-colors',
                 active ? 'bg-violet-500' : 'bg-white border border-neutral-200 hover:border-violet-300',
@@ -1582,7 +1604,7 @@ function GridSizePicker({
           )
         })}
       </div>
-      <p className="text-xs font-medium text-neutral-500 mt-1.5">{previewCols} × {previewRows} grid</p>
+      <p className="text-xs font-medium text-neutral-500 mt-1.5">{t('gridSizeCaption', previewCols, previewRows)}</p>
     </div>
   )
 }
@@ -1616,12 +1638,13 @@ export const GridPreview: React.FC<NodeComponentProps> = ({ node, children, anim
 
 export const GridPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s    = useNodeStyle(node)
+  const t    = useT()
   const cols = (s.gridCols as number) ?? 3
   const rows = typeof s.gridRows === 'number' ? s.gridRows : 2
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Grid size">
+      <FieldGroup label={t('fgGridSize')}>
         <GridSizePicker
           cols={cols}
           rows={rows}
@@ -1631,37 +1654,37 @@ export const GridPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
         <p className="text-[10px] text-neutral-400">
-          Click a cell above to set the column/row count. Blocks placed inside fill cells in order — select a block sitting in this Grid and use its "Cell span" control (its own Content tab) to make it take up more than one cell.
+          {t('gridSizeNote')}
         </p>
       </FieldGroup>
 
-      <FieldGroup label="Layout">
-        <SpacingField label="Gap" value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500 w-20 shrink-0">Row height</span>
+      <FieldGroup label={t('fgLayout')}>
+        <SpacingField label={t('fieldGap')} value={s.gap} onChange={v => patchStyle(node, onChange, { gap: v })} />
+        <div className="flex items-center gap-2" dir="ltr">
+          <span className="text-xs text-neutral-500 w-20 shrink-0">{t('rowHeightLabel')}</span>
           <input
             type="number" min={40} max={400} step={10}
             className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
             value={s.gridRowMinHeight ?? 100}
             onChange={e => patchStyle(node, onChange, { gridRowMinHeight: +e.target.value || 100 })}
           />
-          <span className="text-xs text-neutral-400 shrink-0">px min</span>
+          <span className="text-xs text-neutral-400 shrink-0">{t('pxMinLabel')}</span>
         </div>
         <SelectField
-          label="Justify items" value={s.justifyItems ?? 'stretch'}
+          label={t('justifyItemsLabel')} value={s.justifyItems ?? 'stretch'}
           options={['start','center','end','stretch']}
           onChange={v => patchStyle(node, onChange, { justifyItems: v as StyleProps['justifyItems'] })}
         />
         <SelectField
-          label="Align items" value={s.align ?? 'stretch'}
+          label={t('alignItemsLabel')} value={s.align ?? 'stretch'}
           options={['start','center','end','stretch','baseline']}
           onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })}
         />
       </FieldGroup>
 
-      <FieldGroup label="Padding">
+      <FieldGroup label={t('sectionPadding')}>
         <BoxSpacingField
-          label="Padding"
+          label={t('fieldPadding')}
           values={{ top: s.pt ?? s.py, right: s.pr ?? s.px, bottom: s.pb ?? s.py, left: s.pl ?? s.px }}
           onChange={next => patchStyle(node, onChange, {
             pt: next.top as number | undefined, pr: next.right as number | undefined,
@@ -1684,6 +1707,7 @@ export const GridPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
 export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   const selectedId = useBuilderStore(st => st.selectedId)
   const isSelected = selectedId === node.id
   const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getTextExtensions())
@@ -1707,7 +1731,7 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
       onDoubleClick={e => { e.stopPropagation(); startEditing() }}
       className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
-      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : 'Double-click to edit text…' }}
+      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : t('dblClickEditText') }}
     />
   )
 }
@@ -1726,12 +1750,13 @@ export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, 
 }
 
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Content">
-        <label className="block text-xs text-neutral-500 mb-1">Text</label>
+      <FieldGroup label={t('tabContent')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('textFieldLabel')}</label>
         <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
-        <p className="text-[10px] text-neutral-400 mt-1">Tip: double-click the text on the canvas for the full formatting toolbar (bold, links, lists, alignment…)</p>
+        <p className="text-[10px] text-neutral-400 mt-1">{t('textTip')}</p>
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -1749,6 +1774,7 @@ type HTag = 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'
 
 export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const s   = useNodeStyle(node)
+  const t   = useT()
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
   const selectedId = useBuilderStore(st => st.selectedId)
   const isSelected = selectedId === node.id
@@ -1773,7 +1799,7 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
       onDoubleClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing() }}
       className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
-      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : 'Double-click to edit heading…' }}
+      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : t('dblClickEditHeading') }}
     />
   )
 }
@@ -1793,13 +1819,14 @@ export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRe
 }
 
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Content">
-        <label className="block text-xs text-neutral-500 mb-1">Text</label>
+      <FieldGroup label={t('tabContent')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('textFieldLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
-        <SelectField label="Tag" value={(node.props.tag as string) ?? 'h2'} options={['h1','h2','h3','h4','h5','h6']} onChange={v => onChange({ tag: v })} />
-        <p className="text-[10px] text-neutral-400 mt-1">Tip: double-click the heading on the canvas for the full formatting toolbar</p>
+        <SelectField label={t('tagLabel')} value={(node.props.tag as string) ?? 'h2'} options={['h1','h2','h3','h4','h5','h6']} onChange={v => onChange({ tag: v })} />
+        <p className="text-[10px] text-neutral-400 mt-1">{t('headingTip')}</p>
       </FieldGroup>
       <AnimationPanel
         node={node}
@@ -1815,6 +1842,7 @@ export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
 export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const s               = useNodeStyle(node)
+  const t               = useT()
   const src             = node.props.src as string
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const updateProps     = useBuilderStore(st => st.updateProps)
@@ -1829,7 +1857,7 @@ export const ImageEditor: React.FC<NodeComponentProps> = ({ node }) => {
   if (!src) return (
     <div id={elementId(node)} onClick={handleEmptyClick} className={buildClassName(s, withCustomCss(node, 'bg-neutral-100 border-2 border-dashed border-neutral-300 hover:border-violet-300 hover:bg-violet-50/40 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm cursor-pointer transition-colors'))} style={{ ...buildInlineStyle(s, { skipSizing: true }), aspectRatio: s.aspectRatio && s.aspectRatio !== 'auto' ? s.aspectRatio : '16 / 9', minHeight: 128 }}>
       <span className="text-xl">🖼️</span>
-      <span className="text-xs font-medium">Click to choose an image</span>
+      <span className="text-xs font-medium">{t('clickChooseImage')}</span>
     </div>
   )
 
@@ -1855,6 +1883,7 @@ export const ImagePreview: React.FC<NodeComponentProps> = ({ node, animationRef,
 
 export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s               = useNodeStyle(node)
+  const t               = useT()
   const openMediaPicker = useBuilderStore(st => st.openMediaPicker)
   const src             = (node.props.src as string) ?? ''
 
@@ -1866,43 +1895,43 @@ export const ImagePanel: React.FC<PanelProps> = ({ node, onChange }) => {
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Source">
+      <FieldGroup label={t('fgSource')}>
         <button onClick={handleBrowse} className="w-full rounded-lg border-2 border-dashed border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
           {src
             ? <img src={src} alt="" className="w-full h-full object-cover" />
-            : <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-neutral-400"><span className="text-xl">🖼️</span><span className="text-xs font-medium">Browse media library</span></div>}
+            : <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-neutral-400"><span className="text-xl">🖼️</span><span className="text-xs font-medium">{t('browseMediaBtn')}</span></div>}
         </button>
-        {src && <button onClick={handleBrowse} className="w-full mt-2 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">Replace image</button>}
+        {src && <button onClick={handleBrowse} className="w-full mt-2 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors">{t('replaceImageBtn')}</button>}
         {src && (
           <button
             onClick={() => useBuilderStore.getState().openImageEditor(src, editedDataUrl => onChange({ src: editedDataUrl }))}
             className="w-full mt-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
           >
-            Edit image
+            {t('editImageBtn')}
           </button>
         )}
-        <label className="block text-xs text-neutral-500 mt-3 mb-1">URL (or paste a link)</label>
+        <label className="block text-xs text-neutral-500 mt-3 mb-1">{t('urlLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" placeholder="https://…" value={src} onChange={e => onChange({ src: e.target.value })} />
-        <label className="block text-xs text-neutral-500 mt-2 mb-1">Alt text</label>
+        <label className="block text-xs text-neutral-500 mt-2 mb-1">{t('altTextLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.alt as string) ?? ''} onChange={e => onChange({ alt: e.target.value })} />
       </FieldGroup>
-      <FieldGroup label="Size">
-        <SelectField label="Width mode" value={typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'full'} options={[{ label:'Fill container',value:'full' },{ label:'Fixed pixels',value:'fixed' },{ label:'Half',value:'1/2' },{ label:'Third',value:'1/3' },{ label:'Two thirds',value:'2/3' },{ label:'Quarter',value:'1/4' },{ label:'Three quarters',value:'3/4' },{ label:'Auto',value:'auto' }]}
+      <FieldGroup label={t('sectionSize')}>
+        <SelectField label={t('widthModeFieldLabel')} value={typeof s.width === 'number' ? 'fixed' : (s.width as string) || 'full'} options={[{ label: t('modeFillContainer'),value:'full' },{ label: t('modeFixedPixels'),value:'fixed' },{ label: t('modeHalf'),value:'1/2' },{ label: t('modeThird'),value:'1/3' },{ label: t('modeTwoThirds'),value:'2/3' },{ label: t('modeQuarter'),value:'1/4' },{ label: t('modeThreeQuarters'),value:'3/4' },{ label: t('autoPlaceholder'),value:'auto' }]}
           onChange={v => { if (v === 'fixed') { patchStyle(node, onChange, { width: typeof s.width === 'number' ? s.width : 320, widthUnit: 'px' }) } else { patchStyle(node, onChange, { width: v as StyleProps['width'], widthUnit: undefined }) } }}
         />
         {typeof s.width === 'number' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500 w-20 shrink-0">Width (px)</span>
+          <div className="flex items-center gap-2" dir="ltr">
+            <span className="text-xs text-neutral-500 w-20 shrink-0">{t('widthPxLabel')}</span>
             <input type="number" min={20} max={2000} step={10} className="flex-1 border border-neutral-200 rounded text-xs p-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400" value={s.width} onChange={e => patchStyle(node, onChange, { width: +e.target.value || 0, widthUnit: 'px' })} />
           </div>
         )}
-        <p className="text-[10px] text-neutral-400">Fixed pixels keeps this image the same size no matter what container it&apos;s placed in — combine with Position below to place it left/center/right in a wider container</p>
-        <SelectField label="Aspect ratio" value={s.aspectRatio ?? '4/3'} options={[{ label:'Original',value:'auto' },{ label:'Square 1:1',value:'1/1' },{ label:'Standard 4:3',value:'4/3' },{ label:'Wide 16:9',value:'16/9' },{ label:'Classic 3:2',value:'3/2' },{ label:'Ultra 21:9',value:'21/9' }]} onChange={v => patchStyle(node, onChange, { aspectRatio: v as StyleProps['aspectRatio'] })} />
-        <SelectField label="Fit" value={s.objectFit ?? 'cover'} options={[{ label:'Cover (fill & crop)',value:'cover' },{ label:'Contain (fit inside)',value:'contain' },{ label:'Fill (stretch)',value:'fill' },{ label:'None (original size)',value:'none' }]} onChange={v => patchStyle(node, onChange, { objectFit: v as StyleProps['objectFit'] })} />
-        {s.objectFit !== 'fill' && <SelectField label="Focal point" value={s.objectPosition ?? 'center'} options={['center','top','bottom','left','right','top left','top right','bottom left','bottom right']} onChange={v => patchStyle(node, onChange, { objectPosition: v as StyleProps['objectPosition'] })} />}
-        <SelectField label="Rounded" value={s.rounded ?? 'none'} options={['none','sm','md','lg','xl','2xl','full']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
+        <p className="text-[10px] text-neutral-400">{t('imageFixedPxNote')}</p>
+        <SelectField label={t('aspectRatioLabel')} value={s.aspectRatio ?? '4/3'} options={[{ label: t('ratioOriginal'),value:'auto' },{ label: t('ratioSquare11'),value:'1/1' },{ label: t('ratioStandard43'),value:'4/3' },{ label: t('ratioWide169'),value:'16/9' },{ label: t('ratioClassic32'),value:'3/2' },{ label: t('ratioUltra219'),value:'21/9' }]} onChange={v => patchStyle(node, onChange, { aspectRatio: v as StyleProps['aspectRatio'] })} />
+        <SelectField label={t('fitLabel')} value={s.objectFit ?? 'cover'} options={[{ label: t('fitCover'),value:'cover' },{ label: t('fitContain'),value:'contain' },{ label: t('fitFill'),value:'fill' },{ label: t('fitNone'),value:'none' }]} onChange={v => patchStyle(node, onChange, { objectFit: v as StyleProps['objectFit'] })} />
+        {s.objectFit !== 'fill' && <SelectField label={t('focalPointLabel')} value={s.objectPosition ?? 'center'} options={['center','top','bottom','left','right','top left','top right','bottom left','bottom right']} onChange={v => patchStyle(node, onChange, { objectPosition: v as StyleProps['objectPosition'] })} />}
+        <SelectField label={t('borderRadiusLabel')} value={s.rounded ?? 'none'} options={['none','sm','md','lg','xl','2xl','full']} onChange={v => patchStyle(node, onChange, { rounded: v as StyleProps['rounded'] })} />
       </FieldGroup>
-      <FieldGroup label="Position">
+      <FieldGroup label={t('sectionPosition')}>
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
       </FieldGroup>
       <AnimationPanel
@@ -2003,22 +2032,23 @@ export const ButtonPreview: React.FC<NodeComponentProps> = ({ node, animationRef
 
 export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   const linkType = ((node.props.linkType as LinkType) || 'relative')
 
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Content">
-        <label className="block text-xs text-neutral-500 mb-1">Label</label>
+      <FieldGroup label={t('tabContent')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('labelFieldLabel')}</label>
         <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.label as string) ?? ''} onChange={e => onChange({ label: e.target.value })} />
       </FieldGroup>
 
-      <FieldGroup label="Link">
+      <FieldGroup label={t('fgLink')}>
         <SelectField
-          label="Type"
+          label={t('linkTypeLabel')}
           value={linkType}
           options={[
-            { label: 'Relative (#anchor, /path)', value: 'relative' },
-            { label: 'Absolute (https://…)',      value: 'absolute' },
+            { label: t('linkTypeRelative'), value: 'relative' },
+            { label: t('linkTypeAbsolute'), value: 'absolute' },
           ]}
           onChange={v => onChange({ linkType: v as LinkType })}
         />
@@ -2029,23 +2059,21 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           onChange={e => onChange({ href: e.target.value })}
         />
         <p className="text-[10px] text-neutral-400 -mt-1">
-          {linkType === 'absolute'
-            ? 'https:// is added automatically if you leave it off.'
-            : 'Used exactly as typed — good for in-page anchors (an Element ID elsewhere on this page, e.g. "#pricing") or paths on this same site (e.g. "/pricing").'}
+          {linkType === 'absolute' ? t('linkAbsoluteNote') : t('linkRelativeNote')}
         </p>
         <CheckField
-          label="Open in new tab"
+          label={t('openNewTabLabel')}
           value={!!node.props.openInNewTab}
           onChange={v => onChange({ openInNewTab: v })}
         />
       </FieldGroup>
 
-      <FieldGroup label="Style">
-        <SelectField label="Variant" value={(node.props.variant as string) ?? 'solid'} options={['solid','outline','ghost']} onChange={v => onChange({ variant: v })} />
+      <FieldGroup label={t('tabStyle')}>
+        <SelectField label={t('variantLabel')} value={(node.props.variant as string) ?? 'solid'} options={['solid','outline','ghost']} onChange={v => onChange({ variant: v })} />
       </FieldGroup>
-      <FieldGroup label="Position">
+      <FieldGroup label={t('sectionPosition')}>
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only visible once this block's container is wider/taller than the button itself</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">{t('buttonPositionNote')}</p>
       </FieldGroup>
 
       <AnimationPanel
@@ -2060,11 +2088,14 @@ export const ButtonPanel: React.FC<PanelProps> = ({ node, onChange }) => {
 // SPACER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => (
-  <div id={elementId(node)} style={{ height: (node.props.height as number) ?? 40 }} className={withCustomCss(node, 'w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none')}>
-    spacer {(node.props.height as number) ?? 40}px
-  </div>
-)
+export const SpacerEditor: React.FC<NodeComponentProps> = ({ node }) => {
+  const t = useT()
+  return (
+    <div id={elementId(node)} style={{ height: (node.props.height as number) ?? 40 }} className={withCustomCss(node, 'w-full bg-violet-50 border border-dashed border-violet-200 flex items-center justify-center text-violet-300 text-xs select-none')}>
+      {t('spacerCanvasLabel', (node.props.height as number) ?? 40)}
+    </div>
+  )
+}
 
 export const SpacerPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => (
   <div
@@ -2075,19 +2106,22 @@ export const SpacerPreview: React.FC<NodeComponentProps> = ({ node, animationRef
   />
 )
 
-export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => (
-  <div className="space-y-4 p-4">
-    <FieldGroup label="Size">
-      <label className="block text-xs text-neutral-500 mb-1">Height (px)</label>
-      <input type="number" min={4} max={400} step={4} className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.height as number) ?? 40} onChange={e => onChange({ height: +e.target.value })} />
-      <p className="text-[10px] text-neutral-400">Tip: drag the bottom handle on the canvas to resize instead</p>
-    </FieldGroup>
-    <AnimationPanel
-      node={node}
-      onChange={onChange}
-    />
-  </div>
-)
+export const SpacerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
+  const t = useT()
+  return (
+    <div className="space-y-4 p-4">
+      <FieldGroup label={t('sectionSize')}>
+        <label className="block text-xs text-neutral-500 mb-1">{t('heightPxLabel')}</label>
+        <input type="number" min={4} max={400} step={4} className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.height as number) ?? 40} onChange={e => onChange({ height: +e.target.value })} />
+        <p className="text-[10px] text-neutral-400">{t('spacerTip')}</p>
+      </FieldGroup>
+      <AnimationPanel
+        node={node}
+        onChange={onChange}
+      />
+    </div>
+  )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DIVIDER
@@ -2110,15 +2144,16 @@ export const DividerPreview: React.FC<NodeComponentProps> = ({ node, animationRe
 }
 export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const s = useNodeStyle(node)
+  const t = useT()
   return (
     <div className="space-y-5 p-4">
-      <FieldGroup label="Style">
-        <SelectField label="Style" value={s.borderStyle ?? 'solid'} options={['solid','dashed','dotted']} onChange={v => patchStyle(node, onChange, { borderStyle: v as StyleProps['borderStyle'] })} />
-        <ColorField  label="Color" value={s.borderColor} onChange={v => patchStyle(node, onChange, { borderColor: v || undefined })} />
+      <FieldGroup label={t('tabStyle')}>
+        <SelectField label={t('tabStyle')} value={s.borderStyle ?? 'solid'} options={['solid','dashed','dotted']} onChange={v => patchStyle(node, onChange, { borderStyle: v as StyleProps['borderStyle'] })} />
+        <ColorField  label={t('colorLabel')} value={s.borderColor} onChange={v => patchStyle(node, onChange, { borderColor: v || undefined })} />
       </FieldGroup>
-      <FieldGroup label="Margin">
+      <FieldGroup label={t('sectionMargin')}>
         <BoxSpacingField
-          label="Margin"
+          label={t('fieldMargin')}
           values={{ top: s.mt ?? s.my, right: s.mr ?? s.mx, bottom: s.mb ?? s.my, left: s.ml ?? s.mx }}
           onChange={next => patchStyle(node, onChange, {
             mt: next.top as number | 'auto' | undefined, mr: next.right as number | 'auto' | undefined,
@@ -2126,9 +2161,9 @@ export const DividerPanel: React.FC<PanelProps> = ({ node, onChange }) => {
           })}
         />
       </FieldGroup>
-      <FieldGroup label="Position">
+      <FieldGroup label={t('sectionPosition')}>
         <AlignField style={s} onChange={partial => patchStyle(node, onChange, partial)} />
-        <p className="text-[10px] text-neutral-400 -mt-1">Only has a visible effect if this Divider's width/height has been resized smaller than its container</p>
+        <p className="text-[10px] text-neutral-400 -mt-1">{t('dividerPositionNote')}</p>
       </FieldGroup>
       <AnimationPanel
         node={node}

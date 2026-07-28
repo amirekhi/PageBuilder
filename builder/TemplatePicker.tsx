@@ -1,17 +1,23 @@
 'use client'
 
 import React, { useState } from 'react'
-import { TEMPLATES } from './templates'
+import { getTemplates, type Template } from './templates'
 import { useBuilderStore } from './store'
+import { useT, directionForLocale } from './i18n'
 import { NodeMap } from './types'
 
 // ─── Hook: insert a template's nodes under root ───────────────────────────────
+// Takes the CALLER's current, locale-resolved templates array (built via
+// getTemplates(locale) in the component below) rather than reading the
+// static TEMPLATES export directly. TEMPLATES is frozen to English at
+// module-load time (see the bottom of templates.ts) — reading it here meant
+// inserting a template always grafted its English build() onto the canvas,
+// regardless of which language the picker was actually showing. Same fix,
+// same reasoning, as what DropSlot.tsx's BlockPicker already does.
 
-function useInsertTemplate() {
-  const store = useBuilderStore()
-
+function useInsertTemplate(templates: Template[]) {
   return function insertTemplate(index: number) {
-    const template = TEMPLATES[index]
+    const template = templates[index]
     if (!template) return
 
     const { nodes: builtNodes, rootChildId } = template.build()
@@ -50,27 +56,31 @@ function useInsertTemplate() {
 // ─── TemplatePicker (full panel, used in sidebar) ────────────────────────────
 
 export function TemplatePicker() {
-  const insert = useInsertTemplate()
+  const locale    = useBuilderStore(s => s.locale)
+  const dir       = directionForLocale(locale)
+  const templates = getTemplates(locale)
+  const insert    = useInsertTemplate(templates)
+  const t         = useT()
 
   return (
-    <div className="p-4 space-y-3">
-      <p className="text-xs text-neutral-500 leading-relaxed">
-        Insert a pre-built section at the bottom of your page. You can rearrange and customise everything after.
+    <div className="p-4 space-y-3" dir={dir}>
+      <p className="text-xs text-neutral-500 leading-relaxed text-start">
+        {t('insertTemplateIntro')}
       </p>
       <div className="space-y-2">
-        {TEMPLATES.map((t, i) => (
+        {templates.map((tpl, i) => (
           <button
-            key={t.label}
+            key={tpl.label}
             onClick={() => insert(i)}
-            className="w-full text-left rounded-xl border border-neutral-200 hover:border-violet-300 hover:bg-violet-50 transition-colors p-3 group"
+            className="w-full text-start rounded-xl border border-neutral-200 hover:border-violet-300 hover:bg-violet-50 transition-colors p-3 group"
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl w-8 text-center shrink-0">{t.icon}</span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-neutral-800 group-hover:text-violet-700 leading-tight">{t.label}</p>
-                <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{t.thumbnail}</p>
+              <span className="text-2xl w-8 text-center shrink-0">{tpl.icon}</span>
+              <div className="min-w-0 flex-1 text-start">
+                <p className="text-sm font-medium text-neutral-800 group-hover:text-violet-700 leading-tight">{tpl.label}</p>
+                <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{tpl.thumbnail}</p>
               </div>
-              <span className="ml-auto text-neutral-300 group-hover:text-violet-400 text-base shrink-0">＋</span>
+              <span className="ms-auto text-neutral-300 group-hover:text-violet-400 text-base shrink-0">＋</span>
             </div>
           </button>
         ))}
@@ -83,39 +93,43 @@ export function TemplatePicker() {
 
 export function EmptyCanvasPrompt() {
   const [expanded, setExpanded] = useState(false)
-  const insert = useInsertTemplate()
-  const rootChildren = useBuilderStore(s => s.nodes[s.rootId]?.children ?? [])
+  const locale        = useBuilderStore(s => s.locale)
+  const dir           = directionForLocale(locale)
+  const templates     = getTemplates(locale)
+  const insert        = useInsertTemplate(templates)
+  const t             = useT()
+  const rootChildren  = useBuilderStore(s => s.nodes[s.rootId]?.children ?? [])
 
   if (rootChildren.length > 0) return null
 
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-8 text-center select-none">
+    <div className="flex flex-col items-center justify-center py-20 px-8 text-center select-none" dir={dir}>
       {/* Dashed bounding box */}
       <div className="w-full max-w-md border-2 border-dashed border-neutral-200 rounded-2xl p-10 space-y-5">
         <div className="text-4xl">🏗️</div>
         <div>
-          <p className="text-base font-semibold text-neutral-700">Your canvas is empty</p>
-          <p className="text-sm text-neutral-400 mt-1">Start with a template or add blocks from the sidebar.</p>
+          <p className="text-base font-semibold text-neutral-700">{t('emptyCanvasTitle')}</p>
+          <p className="text-sm text-neutral-400 mt-1">{t('emptyCanvasSubtitle')}</p>
         </div>
 
         {/* Template grid */}
         {expanded ? (
-          <div className="space-y-2 text-left w-full">
-            {TEMPLATES.map((t, i) => (
+          <div className="space-y-2 w-full">
+            {templates.map((tpl, i) => (
               <button
-                key={t.label}
+                key={tpl.label}
                 onClick={() => { insert(i); setExpanded(false) }}
-                className="w-full text-left rounded-xl border border-neutral-200 hover:border-violet-300 hover:bg-violet-50 transition-colors p-3 group flex items-center gap-3"
+                className="w-full rounded-xl border border-neutral-200 hover:border-violet-300 hover:bg-violet-50 transition-colors p-3 group flex items-center gap-3"
               >
-                <span className="text-xl shrink-0">{t.icon}</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-neutral-700 group-hover:text-violet-700 leading-tight">{t.label}</p>
-                  <p className="text-[11px] text-neutral-400 truncate">{t.thumbnail}</p>
+                <span className="text-xl shrink-0">{tpl.icon}</span>
+                <div className="min-w-0 flex-1 text-start">
+                  <p className="text-sm font-medium text-neutral-700 group-hover:text-violet-700 leading-tight">{tpl.label}</p>
+                  <p className="text-[11px] text-neutral-400 truncate">{tpl.thumbnail}</p>
                 </div>
               </button>
             ))}
             <button onClick={() => setExpanded(false)} className="w-full text-xs text-neutral-400 hover:text-neutral-600 py-1">
-              Dismiss
+              {t('dismiss')}
             </button>
           </div>
         ) : (
@@ -123,7 +137,7 @@ export function EmptyCanvasPrompt() {
             onClick={() => setExpanded(true)}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors"
           >
-            <span>＋</span> Choose a template
+            <span>＋</span> {t('chooseTemplate').replace(/^\+\s*/, '')}
           </button>
         )}
       </div>

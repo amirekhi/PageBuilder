@@ -89,6 +89,19 @@ export const PREVIEW_WIDTHS: Record<PreviewWidth, { px: number; label: string; i
   mobile:  { px: 390,  label: 'Mobile',  icon: '📱' },
 }
 
+// ─── Locale (language + direction) ─────────────────────────────────────────
+// Page-wide, like seo/globalColors/globalCustomCss below — NOT per-node,
+// NOT undo-tracked (pushHistory only ever snapshots `nodes`; a language
+// toggle isn't a content edit any more than switching Desktop/Tablet/Mobile
+// is). Only two locales exist right now, so `direction` is deliberately
+// NOT its own separate field — it's derived from locale wherever it's
+// needed (see directionForLocale in i18n.ts) rather than stored twice and
+// risking the two disagreeing. The language toggle is meant to flip both
+// together as one unit: switching to Persian switches the builder's own UI
+// strings AND the page's writing direction (dir="rtl" on both the Editor
+// canvas and Preview — see Renderer.tsx) in the same action.
+export type Locale = 'en' | 'fa'
+
 // ─── Control panel tab ──────────────────────────────────────────────────────
 // Lifted into the store (rather than local useState inside ControlPanel)
 // specifically so TopBar — a completely separate component — can switch to
@@ -199,6 +212,10 @@ interface BuilderStore {
   richEditingId: string | null
   globalCustomCss: string
 
+  // Page-wide language/direction — see the doc comment on Locale above.
+  locale:    Locale
+  setLocale: (locale: Locale) => void
+
   controlPanelTab:    ControlPanelTab
   setControlPanelTab: (tab: ControlPanelTab) => void
 
@@ -280,6 +297,8 @@ export const useBuilderStore = create<BuilderStore>()(
       richEditingId: null,
       globalCustomCss: '',
 
+      locale: 'en',
+
       controlPanelTab: 'layers',
 
       globalColors:     DEFAULT_GLOBAL_COLORS,
@@ -311,6 +330,7 @@ export const useBuilderStore = create<BuilderStore>()(
       replayAnimations:     () => set(s => { s.previewReplayNonce += 1 }),
       setRichEditing:       (id) => set(s => { s.richEditingId = id }),
       setGlobalCustomCss:   (css) => set(s => { s.globalCustomCss = css }),
+      setLocale:            (locale) => set(s => { s.locale = locale }),
       setControlPanelTab:   (tab) => set(s => { s.controlPanelTab = tab }),
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
