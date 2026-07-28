@@ -6,7 +6,8 @@ import { useDroppable } from '@dnd-kit/core'
 import { useBuilderStore } from './store'
 import { NODE_REGISTRY, BLOCK_GROUPS } from './registry'
 import { NodeType, NodeMap } from './types'
-import { TEMPLATES } from './templates'
+import { getTemplates } from './templates'
+import { useT, nodeLabel, directionForLocale } from './i18n'
 
 function slotId(parentId: string, index: number) {
   return `slot::${parentId}::${index}`
@@ -42,6 +43,7 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
   const addNode         = useBuilderStore(s => s.addNode)
   const draggingId      = useBuilderStore(s => s.draggingId)
   const isDragging      = draggingId !== null
+  const t               = useT()
 
   const { setNodeRef, isOver } = useDroppable({
     id:   slotId(parentId, index),
@@ -53,9 +55,7 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
     setOpen(false)
   }
 
-  function handleSelectTemplate(templateIndex: number) {
-    const template = TEMPLATES[templateIndex]
-    if (!template) return
+  function handleSelectTemplate(template: ReturnType<typeof getTemplates>[number]) {
     const { nodes: builtNodes, rootChildId } = template.build()
     useBuilderStore.setState(prev => {
       const next: NodeMap = JSON.parse(JSON.stringify(prev.nodes))
@@ -85,7 +85,7 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
           ].join(' ')}
         >
           <span className="text-base font-light leading-none">+</span>
-          Add block
+          {t('addBlockPersistent')}
         </div>
         {open && !isDragging && (
           <BlockPicker
@@ -120,7 +120,7 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
             <div className={['h-0.5 rounded-full transition-all', isOver ? 'bg-violet-500 w-16' : 'bg-violet-200 w-8'].join(' ')} />
           ) : (
             <span className="text-xs flex items-center gap-1.5">
-              <span className="text-base font-light">+</span> Add a block
+              <span className="text-base font-light">+</span> {t('addABlockShort').replace(/^\+\s*/, '')}
             </span>
           )}
         </div>
@@ -214,7 +214,7 @@ type PickerTab = 'blocks' | 'templates'
 interface BlockPickerProps {
   anchorRef:        React.RefObject<HTMLDivElement>
   onSelectBlock:    (type: NodeType) => void
-  onSelectTemplate: (index: number) => void
+  onSelectTemplate: (template: ReturnType<typeof getTemplates>[number]) => void
   onClose:          () => void
 }
 
@@ -222,6 +222,10 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
   const pickerRef         = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [tab, setTab]     = useState<PickerTab>('blocks')
+  const locale            = useBuilderStore(s => s.locale)
+  const dir               = directionForLocale(locale)
+  const t                 = useT()
+  const templates         = getTemplates(locale)
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -272,40 +276,43 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
   const filteredGroups = BLOCK_GROUPS
     .map(g => ({
       ...g,
-      types: g.types.filter(t =>
-        !query || NODE_REGISTRY[t]?.label.toLowerCase().includes(query.toLowerCase())
-      ),
+      types: g.types.filter(type => {
+        if (!query) return true
+        const label = nodeLabel(locale, type, NODE_REGISTRY[type]?.label ?? '')
+        return label.toLowerCase().includes(query.toLowerCase())
+      }),
     }))
     .filter(g => g.types.length > 0)
 
-  const filteredTemplates = TEMPLATES.filter(t =>
-    !query || t.label.toLowerCase().includes(query.toLowerCase())
+  const filteredTemplates = templates.filter(tpl =>
+    !query || tpl.label.toLowerCase().includes(query.toLowerCase())
   )
 
   const pickerContent = (
     <div
       ref={pickerRef}
+      dir={dir}
       style={{ position: 'fixed', top, left, zIndex: 9999 }}
       className="w-64 bg-white rounded-xl border border-neutral-200 shadow-xl p-3 max-h-[80vh] overflow-y-auto"
       onMouseDown={e => e.stopPropagation()}
     >
       <input
         autoFocus
-        placeholder={tab === 'blocks' ? 'Search blocks…' : 'Search templates…'}
+        placeholder={tab === 'blocks' ? t('searchBlocks') : t('searchTemplates')}
         value={query}
         onChange={e => setQuery(e.target.value)}
-        className="w-full text-sm border border-neutral-200 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+        className="w-full text-sm border border-neutral-200 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-1 focus:ring-violet-400 text-start"
       />
       <div className="flex rounded-lg bg-neutral-100 p-0.5 mb-3 gap-0.5">
-        <PickerTabBtn active={tab === 'blocks'}    onClick={() => { setTab('blocks');    setQuery('') }}>Blocks</PickerTabBtn>
-        <PickerTabBtn active={tab === 'templates'} onClick={() => { setTab('templates'); setQuery('') }}>Templates</PickerTabBtn>
+        <PickerTabBtn active={tab === 'blocks'}    onClick={() => { setTab('blocks');    setQuery('') }}>{t('blocksTab')}</PickerTabBtn>
+        <PickerTabBtn active={tab === 'templates'} onClick={() => { setTab('templates'); setQuery('') }}>{t('templatesTab')}</PickerTabBtn>
       </div>
 
       {tab === 'blocks' && (
         <div className="space-y-3 max-h-72 overflow-y-auto">
           {filteredGroups.map(group => (
             <div key={group.label}>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-1.5 px-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-1.5 px-1 text-start">
                 {group.label}
               </p>
               <div className="grid grid-cols-2 gap-1">
@@ -316,10 +323,10 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
                     <button
                       key={type}
                       onClick={() => onSelectBlock(type)}
-                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-sm text-neutral-700 hover:bg-violet-50 hover:text-violet-700 transition-colors"
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-neutral-700 hover:bg-violet-50 hover:text-violet-700 transition-colors text-start"
                     >
                       <span className="text-base shrink-0 w-5 text-center" aria-hidden>{def.icon}</span>
-                      <span className="truncate">{def.label}</span>
+                      <span className="truncate">{nodeLabel(locale, type, def.label)}</span>
                     </button>
                   )
                 })}
@@ -327,28 +334,31 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
             </div>
           ))}
           {filteredGroups.length === 0 && (
-            <p className="text-sm text-neutral-400 text-center py-4">No blocks found</p>
+            <p className="text-sm text-neutral-400 text-center py-4">{t('noBlocksFound')}</p>
           )}
         </div>
       )}
 
       {tab === 'templates' && (
         <div className="space-y-1.5 max-h-72 overflow-y-auto">
-          {filteredTemplates.map((t) => (
+          {filteredTemplates.map((tpl) => (
             <button
-              key={t.label}
-              onClick={() => onSelectTemplate(TEMPLATES.indexOf(t))}
-              className="w-full text-left flex items-center gap-3 px-2.5 py-2.5 rounded-lg hover:bg-violet-50 transition-colors group"
+              key={tpl.label}
+              onClick={() => onSelectTemplate(tpl)}
+              className={[
+                'w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg hover:bg-violet-50 transition-colors group',
+                dir === 'rtl' ? 'flex-row-reverse' : '',
+              ].join(' ')}
             >
-              <span className="text-xl shrink-0">{t.icon}</span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-neutral-700 group-hover:text-violet-700 leading-tight truncate">{t.label}</p>
-                <p className="text-[10px] text-neutral-400 truncate mt-0.5">{t.thumbnail}</p>
+              <span className="text-xl shrink-0">{tpl.icon}</span>
+              <div className={['min-w-0 flex-1', dir === 'rtl' ? 'text-right' : 'text-left'].join(' ')}>
+                <p className="text-sm font-medium text-neutral-700 group-hover:text-violet-700 leading-tight truncate">{tpl.label}</p>
+                <p className="text-[10px] text-neutral-400 truncate mt-0.5">{tpl.thumbnail}</p>
               </div>
             </button>
           ))}
           {filteredTemplates.length === 0 && (
-            <p className="text-sm text-neutral-400 text-center py-4">No templates found</p>
+            <p className="text-sm text-neutral-400 text-center py-4">{t('noTemplatesFound')}</p>
           )}
         </div>
       )}

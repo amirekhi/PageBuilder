@@ -1,6 +1,7 @@
 'use client'
 
 import { NodeMap, PageNode } from './types'
+import type { Locale } from './store'
 
 function id() {
   return `node_${Math.random().toString(36).slice(2, 8)}`
@@ -14,8 +15,23 @@ export interface Template {
 }
 
 // ─── Hero ────────────────────────────────────────────────────────────────────
+const HERO_COPY = {
+  en: {
+    heading: 'Build pages that convert.',
+    sub: 'A fast, visual way to design and ship landing pages without touching code. Drag blocks, customise everything, publish instantly.',
+    btn1: 'Get started free',
+    btn2: 'See examples',
+  },
+  fa: {
+    heading: 'صفحاتی بسازید که تبدیل ایجاد می‌کنند.',
+    sub: 'راهی سریع و بصری برای طراحی و انتشار صفحات فرود بدون نیاز به کدنویسی. بلوک‌ها را بکشید، همه‌چیز را سفارشی کنید، فوراً منتشر کنید.',
+    btn1: 'شروع رایگان',
+    btn2: 'مشاهده نمونه‌ها',
+  },
+}
 
-function buildHero(): { nodes: NodeMap; rootChildId: string } {
+function buildHero(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = HERO_COPY[locale] ?? HERO_COPY.en
   const sectionId  = id()
   const headingId  = id()
   const subId      = id()
@@ -31,12 +47,12 @@ function buildHero(): { nodes: NodeMap; rootChildId: string } {
     },
     [headingId]: {
       id: headingId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h1', content: 'Build pages that convert.', style: { fontSize: '5xl', fontWeight: 'bold', textAlign: 'center', color: undefined } },
+      props: { tag: 'h1', content: c.heading, style: { fontSize: '5xl', fontWeight: 'bold', textAlign: 'center', color: undefined } },
       children: [],
     },
     [subId]: {
       id: subId, type: 'text', parentId: sectionId,
-      props: { content: 'A fast, visual way to design and ship landing pages without touching code. Drag blocks, customise everything, publish instantly.', style: { fontSize: 'lg', textAlign: 'center', color: undefined } },
+      props: { content: c.sub, style: { fontSize: 'lg', textAlign: 'center', color: undefined } },
       children: [],
     },
     [btnRowId]: {
@@ -46,12 +62,12 @@ function buildHero(): { nodes: NodeMap; rootChildId: string } {
     },
     [btn1Id]: {
       id: btn1Id, type: 'button', parentId: btnRowId,
-      props: { label: 'Get started free', href: '#', variant: 'solid' },
+      props: { label: c.btn1, href: '#', variant: 'solid' },
       children: [],
     },
     [btn2Id]: {
       id: btn2Id, type: 'button', parentId: btnRowId,
-      props: { label: 'See examples', href: '#', variant: 'outline' },
+      props: { label: c.btn2, href: '#', variant: 'outline' },
       children: [],
     },
   }
@@ -61,7 +77,25 @@ function buildHero(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Feature two-column ───────────────────────────────────────────────────────
 
-function buildTwoColFeature(): { nodes: NodeMap; rootChildId: string } {
+const TWO_COL_FEATURE_COPY = {
+  en: {
+    imgAlt: 'Feature screenshot',
+    eyebrow: '✦ WHAT YOU GET',
+    heading: 'Everything you need to launch fast.',
+    body: 'Drag-and-drop blocks, live preview across breakpoints, one-click publish. No designer required.',
+    btn: 'Learn more →',
+  },
+  fa: {
+    imgAlt: 'تصویر ویژگی',
+    eyebrow: '✦ آنچه دریافت می‌کنید',
+    heading: 'هر آنچه برای انتشار سریع نیاز دارید.',
+    body: 'بلوک‌های کشیدنی-رهاشدنی، پیش‌نمایش زنده در همه اندازه‌ها، انتشار با یک کلیک. نیازی به طراح ندارید.',
+    btn: '← بیشتر بدانید',
+  },
+}
+
+function buildTwoColFeature(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = TWO_COL_FEATURE_COPY[locale] ?? TWO_COL_FEATURE_COPY.en
   const sectionId = id()
   const colsId    = id()
   const col1Id    = id()
@@ -95,27 +129,27 @@ function buildTwoColFeature(): { nodes: NodeMap; rootChildId: string } {
     },
     [imgId]: {
       id: imgId, type: 'image', parentId: col1Id,
-      props: { src: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=600&q=80', alt: 'Feature screenshot', style: { width: 'full', rounded: 'xl', aspectRatio: '4/3', objectFit: 'cover' } },
+      props: { src: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=600&q=80', alt: c.imgAlt, style: { width: 'full', rounded: 'xl', aspectRatio: '4/3', objectFit: 'cover' } },
       children: [],
     },
     [eyebrowId]: {
       id: eyebrowId, type: 'text', parentId: col2Id,
-      props: { content: '✦ WHAT YOU GET', style: { fontSize: 'xs', fontWeight: 'semibold', color: undefined } },
+      props: { content: c.eyebrow, style: { fontSize: 'xs', fontWeight: 'semibold', color: undefined } },
       children: [],
     },
     [headId]: {
       id: headId, type: 'heading', parentId: col2Id,
-      props: { tag: 'h2', content: 'Everything you need to launch fast.', style: { fontSize: '3xl', fontWeight: 'bold' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold' } },
       children: [],
     },
     [bodyId]: {
       id: bodyId, type: 'text', parentId: col2Id,
-      props: { content: 'Drag-and-drop blocks, live preview across breakpoints, one-click publish. No designer required.', style: { fontSize: 'base', color: undefined } },
+      props: { content: c.body, style: { fontSize: 'base', color: undefined } },
       children: [],
     },
     [btnId]: {
       id: btnId, type: 'button', parentId: col2Id,
-      props: { label: 'Learn more →', href: '#', variant: 'ghost' },
+      props: { label: c.btn, href: '#', variant: 'ghost' },
       children: [],
     },
   }
@@ -125,7 +159,19 @@ function buildTwoColFeature(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Testimonial ──────────────────────────────────────────────────────────────
 
-function buildTestimonial(): { nodes: NodeMap; rootChildId: string } {
+const TESTIMONIAL_COPY = {
+  en: {
+    quote: '"This builder cut our landing-page turnaround from two weeks to two hours. I can\'t imagine shipping without it now."',
+    author: 'Jordan Lee · Head of Growth, Acme Corp',
+  },
+  fa: {
+    quote: '«این ابزار زمان ساخت صفحه فرود ما را از دو هفته به دو ساعت کاهش داد. دیگر نمی‌توانم بدون آن کار کنم.»',
+    author: 'جردن لی · مدیر رشد، شرکت آکمی',
+  },
+}
+
+function buildTestimonial(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = TESTIMONIAL_COPY[locale] ?? TESTIMONIAL_COPY.en
   const sectionId = id()
   const quoteId   = id()
   const authorId  = id()
@@ -139,7 +185,7 @@ function buildTestimonial(): { nodes: NodeMap; rootChildId: string } {
     },
     [quoteId]: {
       id: quoteId, type: 'text', parentId: sectionId,
-      props: { content: '"This builder cut our landing-page turnaround from two weeks to two hours. I can\'t imagine shipping without it now."', style: { fontSize: '2xl', fontWeight: 'medium', textAlign: 'center', fontStyle: 'italic' } },
+      props: { content: c.quote, style: { fontSize: '2xl', fontWeight: 'medium', textAlign: 'center', fontStyle: 'italic' } },
       children: [],
     },
     [divId]: {
@@ -149,7 +195,7 @@ function buildTestimonial(): { nodes: NodeMap; rootChildId: string } {
     },
     [authorId]: {
       id: authorId, type: 'text', parentId: sectionId,
-      props: { content: 'Jordan Lee · Head of Growth, Acme Corp', style: { fontSize: 'sm', textAlign: 'center', color: undefined } },
+      props: { content: c.author, style: { fontSize: 'sm', textAlign: 'center', color: undefined } },
       children: [],
     },
   }
@@ -159,7 +205,27 @@ function buildTestimonial(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Three-column features ────────────────────────────────────────────────────
 
-function buildThreeColFeatures(): { nodes: NodeMap; rootChildId: string } {
+const THREE_COL_FEATURES_COPY = {
+  en: {
+    heading: 'Why teams love it.',
+    cards: [
+      { emoji: '⚡', title: 'Instant preview', body: 'See your changes live as you type. No refresh, no compile step.' },
+      { emoji: '🎨', title: 'Full style control', body: 'Spacing, colour, typography — all editable without writing a single line of CSS.' },
+      { emoji: '📱', title: 'Responsive out of the box', body: 'Switch between desktop, tablet, and mobile previews at any time.' },
+    ],
+  },
+  fa: {
+    heading: 'چرا تیم‌ها آن را دوست دارند.',
+    cards: [
+      { emoji: '⚡', title: 'پیش‌نمایش آنی', body: 'تغییرات خود را همان لحظه که تایپ می‌کنید ببینید. بدون رفرش، بدون کامپایل.' },
+      { emoji: '🎨', title: 'کنترل کامل استایل', body: 'فاصله‌گذاری، رنگ، تایپوگرافی — همه بدون نوشتن حتی یک خط CSS قابل ویرایش است.' },
+      { emoji: '📱', title: 'واکنش‌گرا از همان ابتدا', body: 'در هر زمان بین پیش‌نمایش دسکتاپ، تبلت و موبایل جابه‌جا شوید.' },
+    ],
+  },
+}
+
+function buildThreeColFeatures(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = THREE_COL_FEATURES_COPY[locale] ?? THREE_COL_FEATURES_COPY.en
   const sectionId = id()
   const headId    = id()
   const colsId    = id()
@@ -194,9 +260,9 @@ function buildThreeColFeatures(): { nodes: NodeMap; rootChildId: string } {
     return { colId, nodes }
   }
 
-  const c1 = makeCard(colsId, '⚡', 'Instant preview', 'See your changes live as you type. No refresh, no compile step.')
-  const c2 = makeCard(colsId, '🎨', 'Full style control', 'Spacing, colour, typography — all editable without writing a single line of CSS.')
-  const c3 = makeCard(colsId, '📱', 'Responsive out of the box', 'Switch between desktop, tablet, and mobile previews at any time.')
+  const c1 = makeCard(colsId, c.cards[0].emoji, c.cards[0].title, c.cards[0].body)
+  const c2 = makeCard(colsId, c.cards[1].emoji, c.cards[1].title, c.cards[1].body)
+  const c3 = makeCard(colsId, c.cards[2].emoji, c.cards[2].title, c.cards[2].body)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -206,7 +272,7 @@ function buildThreeColFeatures(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Why teams love it.', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [colsId]: {
@@ -224,7 +290,29 @@ function buildThreeColFeatures(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Pricing ──────────────────────────────────────────────────────────────────
 
-function buildPricing(): { nodes: NodeMap; rootChildId: string } {
+const PRICING_COPY = {
+  en: {
+    heading: 'Simple, transparent pricing',
+    chooseButton: 'Choose plan', mostPopular: 'Most popular',
+    tiers: [
+      { name: 'Starter',    price: '$9/mo',  features: ['1 project', 'Basic blocks', 'Community support'] },
+      { name: 'Pro',        price: '$29/mo', features: ['Unlimited projects', 'All blocks + templates', 'Priority support'] },
+      { name: 'Enterprise', price: '$99/mo', features: ['Everything in Pro', 'SSO & audit logs', 'Dedicated manager'] },
+    ],
+  },
+  fa: {
+    heading: 'قیمت‌گذاری ساده و شفاف',
+    chooseButton: 'انتخاب پلن', mostPopular: 'محبوب‌ترین',
+    tiers: [
+      { name: 'استارتر',  price: '۹ دلار در ماه',  features: ['۱ پروژه', 'بلوک‌های پایه', 'پشتیبانی انجمن'] },
+      { name: 'حرفه‌ای',  price: '۲۹ دلار در ماه', features: ['پروژه‌های نامحدود', 'همه بلوک‌ها و قالب‌ها', 'پشتیبانی اولویت‌دار'] },
+      { name: 'سازمانی',  price: '۹۹ دلار در ماه', features: ['همه امکانات پلن حرفه‌ای', 'SSO و لاگ حسابرسی', 'مدیر اختصاصی'] },
+    ],
+  },
+}
+
+function buildPricing(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = PRICING_COPY[locale] ?? PRICING_COPY.en
   const sectionId = id()
   const headId    = id()
   const colsId    = id()
@@ -264,23 +352,23 @@ function buildPricing(): { nodes: NodeMap; rootChildId: string } {
       },
       [btnId]: {
         id: btnId, type: 'button', parentId: colId,
-        props: { label: 'Choose plan', href: '#', variant: featured ? 'outline' : 'solid' },
+        props: { label: c.chooseButton, href: '#', variant: featured ? 'outline' : 'solid' },
         children: [],
       },
     }
     if (featured) {
       nodes[badgeId] = {
         id: badgeId, type: 'badge', parentId: colId,
-        props: { label: 'Most popular', variant: 'outline' },
+        props: { label: c.mostPopular, variant: 'outline' },
         children: [],
       }
     }
     return { colId, nodes }
   }
 
-  const t1 = makeTier(colsId, 'Starter',    '$9/mo',  false, ['1 project', 'Basic blocks', 'Community support'])
-  const t2 = makeTier(colsId, 'Pro',        '$29/mo', true,  ['Unlimited projects', 'All blocks + templates', 'Priority support'])
-  const t3 = makeTier(colsId, 'Enterprise', '$99/mo', false, ['Everything in Pro', 'SSO & audit logs', 'Dedicated manager'])
+  const t1 = makeTier(colsId, c.tiers[0].name, c.tiers[0].price, false, c.tiers[0].features)
+  const t2 = makeTier(colsId, c.tiers[1].name, c.tiers[1].price, true,  c.tiers[1].features)
+  const t3 = makeTier(colsId, c.tiers[2].name, c.tiers[2].price, false, c.tiers[2].features)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -290,7 +378,7 @@ function buildPricing(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Simple, transparent pricing', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [colsId]: {
@@ -306,7 +394,27 @@ function buildPricing(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── FAQ ────────────────────────────────────────────────────────────────────
 
-function buildFAQ(): { nodes: NodeMap; rootChildId: string } {
+const FAQ_COPY = {
+  en: {
+    heading: 'Frequently asked questions',
+    qa: [
+      { q: 'How long does setup take?', a: 'Most teams are publishing their first page within an hour — no code required.' },
+      { q: 'Can I use my own domain?',  a: 'Yes, connect any custom domain from your project settings in a few clicks.' },
+      { q: 'Is there a free plan?',     a: 'Yes, the Starter plan is free forever for a single project.' },
+    ],
+  },
+  fa: {
+    heading: 'سوالات متداول',
+    qa: [
+      { q: 'راه‌اندازی چقدر طول می‌کشد؟', a: 'اکثر تیم‌ها ظرف یک ساعت اولین صفحه خود را منتشر می‌کنند — بدون نیاز به کدنویسی.' },
+      { q: 'می‌توانم از دامنه اختصاصی خودم استفاده کنم؟', a: 'بله، با چند کلیک از تنظیمات پروژه هر دامنه دلخواهی را متصل کنید.' },
+      { q: 'پلن رایگان وجود دارد؟', a: 'بله، پلن استارتر برای یک پروژه همیشه رایگان است.' },
+    ],
+  },
+}
+
+function buildFAQ(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = FAQ_COPY[locale] ?? FAQ_COPY.en
   const sectionId = id()
   const headId    = id()
 
@@ -324,9 +432,9 @@ function buildFAQ(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const qa1 = makeQA(sectionId, 'How long does setup take?', 'Most teams are publishing their first page within an hour — no code required.')
-  const qa2 = makeQA(sectionId, 'Can I use my own domain?', 'Yes, connect any custom domain from your project settings in a few clicks.')
-  const qa3 = makeQA(sectionId, 'Is there a free plan?', 'Yes, the Starter plan is free forever for a single project.')
+  const qa1 = makeQA(sectionId, c.qa[0].q, c.qa[0].a)
+  const qa2 = makeQA(sectionId, c.qa[1].q, c.qa[1].a)
+  const qa3 = makeQA(sectionId, c.qa[2].q, c.qa[2].a)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -336,7 +444,7 @@ function buildFAQ(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Frequently asked questions', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     ...qa1.nodes, ...qa2.nodes, ...qa3.nodes,
@@ -346,8 +454,31 @@ function buildFAQ(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
+// Numbers themselves ('12k+', '99.9%', '4.9/5', '60+') are kept in Latin
+// numerals in BOTH locales — deliberately, same as the '%' figures in
+// buildBentoGrid below. Only the labels underneath translate.
 
-function buildStats(): { nodes: NodeMap; rootChildId: string } {
+const STATS_COPY = {
+  en: {
+    stats: [
+      { num: '12k+',  label: 'Pages published' },
+      { num: '99.9%', label: 'Uptime' },
+      { num: '4.9/5', label: 'Average rating' },
+      { num: '60+',   label: 'Countries' },
+    ],
+  },
+  fa: {
+    stats: [
+      { num: '12k+',  label: 'صفحه منتشر شده' },
+      { num: '99.9%', label: 'زمان فعالیت' },
+      { num: '4.9/5', label: 'میانگین امتیاز' },
+      { num: '60+',   label: 'کشور' },
+    ],
+  },
+}
+
+function buildStats(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = STATS_COPY[locale] ?? STATS_COPY.en
   const sectionId = id()
   const colsId    = id()
 
@@ -365,10 +496,10 @@ function buildStats(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const s1 = makeStat(colsId, '12k+', 'Pages published')
-  const s2 = makeStat(colsId, '99.9%', 'Uptime')
-  const s3 = makeStat(colsId, '4.9/5', 'Average rating')
-  const s4 = makeStat(colsId, '60+', 'Countries')
+  const s1 = makeStat(colsId, c.stats[0].num, c.stats[0].label)
+  const s2 = makeStat(colsId, c.stats[1].num, c.stats[1].label)
+  const s3 = makeStat(colsId, c.stats[2].num, c.stats[2].label)
+  const s4 = makeStat(colsId, c.stats[3].num, c.stats[3].label)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -389,7 +520,13 @@ function buildStats(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Header / Nav ───────────────────────────────────────────────────────────
 
-function buildHeader(): { nodes: NodeMap; rootChildId: string } {
+const HEADER_COPY = {
+  en: { logo: 'Brand', nav: 'Product   Pricing   Docs   About', btn: 'Sign up' },
+  fa: { logo: 'برند',  nav: 'محصول   قیمت‌گذاری   مستندات   درباره ما', btn: 'ثبت‌نام' },
+}
+
+function buildHeader(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = HEADER_COPY[locale] ?? HEADER_COPY.en
   const sectionId = id()
   const rowId     = id()
   const logoColId = id()
@@ -416,7 +553,7 @@ function buildHeader(): { nodes: NodeMap; rootChildId: string } {
     },
     [logoId]: {
       id: logoId, type: 'heading', parentId: logoColId,
-      props: { tag: 'h3', content: 'Brand', style: { fontSize: 'xl', fontWeight: 'bold' } },
+      props: { tag: 'h3', content: c.logo, style: { fontSize: 'xl', fontWeight: 'bold' } },
       children: [],
     },
     [navColId]: {
@@ -426,12 +563,12 @@ function buildHeader(): { nodes: NodeMap; rootChildId: string } {
     },
     [navListId]: {
       id: navListId, type: 'text', parentId: navColId,
-      props: { content: 'Product   Pricing   Docs   About', style: { fontSize: 'sm', textColor: 'neutral-600', fontWeight: 'medium' } },
+      props: { content: c.nav, style: { fontSize: 'sm', textColor: 'neutral-600', fontWeight: 'medium' } },
       children: [],
     },
     [btnId]: {
       id: btnId, type: 'button', parentId: navColId,
-      props: { label: 'Sign up', href: '#', variant: 'solid' },
+      props: { label: c.btn, href: '#', variant: 'solid' },
       children: [],
     },
   }
@@ -441,7 +578,21 @@ function buildHeader(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Video Hero ───────────────────────────────────────────────────────────────
 
-function buildVideoHero(): { nodes: NodeMap; rootChildId: string } {
+const VIDEO_HERO_COPY = {
+  en: {
+    badge: 'New release',
+    heading: 'Watch how it works',
+    sub: 'A two-minute walkthrough of building and publishing your first page.',
+  },
+  fa: {
+    badge: 'انتشار جدید',
+    heading: 'ببینید چگونه کار می‌کند',
+    sub: 'یک راهنمای دو دقیقه‌ای برای ساخت و انتشار اولین صفحه شما.',
+  },
+}
+
+function buildVideoHero(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = VIDEO_HERO_COPY[locale] ?? VIDEO_HERO_COPY.en
   const sectionId = id()
   const badgeId   = id()
   const headId    = id()
@@ -456,17 +607,17 @@ function buildVideoHero(): { nodes: NodeMap; rootChildId: string } {
     },
     [badgeId]: {
       id: badgeId, type: 'badge', parentId: sectionId,
-      props: { label: 'New release', variant: 'soft' },
+      props: { label: c.badge, variant: 'soft' },
       children: [],
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h1', content: 'Watch how it works', style: { fontSize: '4xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h1', content: c.heading, style: { fontSize: '4xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [subId]: {
       id: subId, type: 'text', parentId: sectionId,
-      props: { content: 'A two-minute walkthrough of building and publishing your first page.', style: { fontSize: 'lg', textAlign: 'center', textColor: 'neutral-500' } },
+      props: { content: c.sub, style: { fontSize: 'lg', textAlign: 'center', textColor: 'neutral-500' } },
       children: [],
     },
     [videoId]: {
@@ -480,8 +631,32 @@ function buildVideoHero(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Team Grid ──────────────────────────────────────────────────────────────
+// Names and initials are kept identical in both locales (proper names
+// aren't translated); only role titles switch.
 
-function buildTeam(): { nodes: NodeMap; rootChildId: string } {
+const TEAM_COPY = {
+  en: {
+    members: [
+      { name: 'Avery Chen',    role: 'Co-founder, CEO', initials: 'AC' },
+      { name: 'Priya Nair',    role: 'Co-founder, CTO', initials: 'PN' },
+      { name: 'Sam Okafor',    role: 'Head of Design',  initials: 'SO' },
+      { name: 'Mia Rodríguez', role: 'Head of Growth',  initials: 'MR' },
+    ],
+    heading: 'Meet the team',
+  },
+  fa: {
+    members: [
+      { name: 'Avery Chen',    role: 'هم‌بنیان‌گذار، مدیرعامل', initials: 'AC' },
+      { name: 'Priya Nair',    role: 'هم‌بنیان‌گذار، مدیر فنی', initials: 'PN' },
+      { name: 'Sam Okafor',    role: 'مدیر طراحی',             initials: 'SO' },
+      { name: 'Mia Rodríguez', role: 'مدیر رشد',               initials: 'MR' },
+    ],
+    heading: 'با تیم آشنا شوید',
+  },
+}
+
+function buildTeam(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = TEAM_COPY[locale] ?? TEAM_COPY.en
   const sectionId = id()
   const headId    = id()
   const colsId    = id()
@@ -502,10 +677,10 @@ function buildTeam(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const m1 = makeMember(colsId, 'Avery Chen',   'Co-founder, CEO', 'AC')
-  const m2 = makeMember(colsId, 'Priya Nair',   'Co-founder, CTO', 'PN')
-  const m3 = makeMember(colsId, 'Sam Okafor',   'Head of Design',  'SO')
-  const m4 = makeMember(colsId, 'Mia Rodríguez','Head of Growth',  'MR')
+  const m1 = makeMember(colsId, c.members[0].name, c.members[0].role, c.members[0].initials)
+  const m2 = makeMember(colsId, c.members[1].name, c.members[1].role, c.members[1].initials)
+  const m3 = makeMember(colsId, c.members[2].name, c.members[2].role, c.members[2].initials)
+  const m4 = makeMember(colsId, c.members[3].name, c.members[3].role, c.members[3].initials)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -515,7 +690,7 @@ function buildTeam(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Meet the team', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [colsId]: {
@@ -531,7 +706,23 @@ function buildTeam(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Newsletter Signup ────────────────────────────────────────────────────────
 
-function buildNewsletter(): { nodes: NodeMap; rootChildId: string } {
+const NEWSLETTER_COPY = {
+  en: {
+    heading: 'Get product updates',
+    sub: 'One email a month. New templates, blocks, and tips — no spam.',
+    btn: 'Subscribe',
+    note: 'Unsubscribe anytime.',
+  },
+  fa: {
+    heading: 'به‌روزرسانی‌های محصول را دریافت کنید',
+    sub: 'یک ایمیل در ماه. قالب‌ها، بلوک‌ها و نکات جدید — بدون اسپم.',
+    btn: 'عضویت',
+    note: 'هر زمان می‌توانید لغو عضویت کنید.',
+  },
+}
+
+function buildNewsletter(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = NEWSLETTER_COPY[locale] ?? NEWSLETTER_COPY.en
   const sectionId = id()
   const headId    = id()
   const subId     = id()
@@ -546,22 +737,22 @@ function buildNewsletter(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Get product updates', style: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [subId]: {
       id: subId, type: 'text', parentId: sectionId,
-      props: { content: 'One email a month. New templates, blocks, and tips — no spam.', style: { fontSize: 'base', textAlign: 'center', textColor: 'neutral-600' } },
+      props: { content: c.sub, style: { fontSize: 'base', textAlign: 'center', textColor: 'neutral-600' } },
       children: [],
     },
     [btnId]: {
       id: btnId, type: 'button', parentId: sectionId,
-      props: { label: 'Subscribe', href: '#', variant: 'solid' },
+      props: { label: c.btn, href: '#', variant: 'solid' },
       children: [],
     },
     [noteId]: {
       id: noteId, type: 'text', parentId: sectionId,
-      props: { content: 'Unsubscribe anytime.', style: { fontSize: 'xs', textAlign: 'center', textColor: 'neutral-400' } },
+      props: { content: c.note, style: { fontSize: 'xs', textAlign: 'center', textColor: 'neutral-400' } },
       children: [],
     },
   }
@@ -570,8 +761,17 @@ function buildNewsletter(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Logo Cloud ───────────────────────────────────────────────────────────────
+// Brand wordmarks (Acme, Globex, etc.) are kept in Latin script in both
+// locales — they're rendered as logotypes, the same reasoning a real logo
+// image wouldn't be transliterated. Only the caption above them translates.
 
-function buildLogoCloud(): { nodes: NodeMap; rootChildId: string } {
+const LOGO_CLOUD_COPY = {
+  en: { caption: 'TRUSTED BY TEAMS AT' },
+  fa: { caption: 'مورد اعتماد تیم‌ها در' },
+}
+
+function buildLogoCloud(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = LOGO_CLOUD_COPY[locale] ?? LOGO_CLOUD_COPY.en
   const sectionId = id()
   const captionId = id()
   const colsId    = id()
@@ -602,7 +802,7 @@ function buildLogoCloud(): { nodes: NodeMap; rootChildId: string } {
     },
     [captionId]: {
       id: captionId, type: 'text', parentId: sectionId,
-      props: { content: 'TRUSTED BY TEAMS AT', style: { fontSize: 'xs', fontWeight: 'semibold', textAlign: 'center', textColor: 'neutral-400' } },
+      props: { content: c.caption, style: { fontSize: 'xs', fontWeight: 'semibold', textAlign: 'center', textColor: 'neutral-400' } },
       children: [],
     },
     [colsId]: {
@@ -618,7 +818,27 @@ function buildLogoCloud(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Footer ───────────────────────────────────────────────────────────────────
 
-function buildFooter(): { nodes: NodeMap; rootChildId: string } {
+const FOOTER_COPY = {
+  en: {
+    columns: [
+      { title: 'Product',   items: ['Features', 'Pricing', 'Templates'] },
+      { title: 'Company',   items: ['About', 'Blog', 'Careers'] },
+      { title: 'Resources', items: ['Docs', 'Support', 'Community'] },
+    ],
+    copyright: '© 2026 Acme Inc. All rights reserved.',
+  },
+  fa: {
+    columns: [
+      { title: 'محصول', items: ['امکانات', 'قیمت‌گذاری', 'قالب‌ها'] },
+      { title: 'شرکت',  items: ['درباره ما', 'وبلاگ', 'فرصت‌های شغلی'] },
+      { title: 'منابع', items: ['مستندات', 'پشتیبانی', 'انجمن'] },
+    ],
+    copyright: '© 2026 شرکت آکمی. تمام حقوق محفوظ است.',
+  },
+}
+
+function buildFooter(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = FOOTER_COPY[locale] ?? FOOTER_COPY.en
   const sectionId = id()
   const colsId    = id()
   const divId     = id()
@@ -638,9 +858,9 @@ function buildFooter(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const c1 = makeCol(colsId, 'Product',  ['Features', 'Pricing', 'Templates'])
-  const c2 = makeCol(colsId, 'Company',  ['About', 'Blog', 'Careers'])
-  const c3 = makeCol(colsId, 'Resources',['Docs', 'Support', 'Community'])
+  const c1 = makeCol(colsId, c.columns[0].title, c.columns[0].items)
+  const c2 = makeCol(colsId, c.columns[1].title, c.columns[1].items)
+  const c3 = makeCol(colsId, c.columns[2].title, c.columns[2].items)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -660,7 +880,7 @@ function buildFooter(): { nodes: NodeMap; rootChildId: string } {
     },
     [bottomId]: {
       id: bottomId, type: 'text', parentId: sectionId,
-      props: { content: '© 2026 Acme Inc. All rights reserved.', style: { fontSize: 'xs', textAlign: 'center', textColor: 'neutral-400' } },
+      props: { content: c.copyright, style: { fontSize: 'xs', textAlign: 'center', textColor: 'neutral-400' } },
       children: [],
     },
     ...c1.nodes, ...c2.nodes, ...c3.nodes,
@@ -668,7 +888,24 @@ function buildFooter(): { nodes: NodeMap; rootChildId: string } {
 
   return { nodes, rootChildId: sectionId }
 }
-function buildComparison(): { nodes: NodeMap; rootChildId: string } {
+
+// ─── Comparison Table ───────────────────────────────────────────────────────
+
+const COMPARISON_COPY = {
+  en: {
+    heading: 'Compare plans',
+    plans: ['Free', 'Pro', 'Team'],
+    features: ['Unlimited pages', 'Custom domain', 'Remove branding', 'Team seats', 'Priority support'],
+  },
+  fa: {
+    heading: 'مقایسه پلن‌ها',
+    plans: ['رایگان', 'حرفه‌ای', 'تیمی'],
+    features: ['صفحات نامحدود', 'دامنه اختصاصی', 'حذف برندینگ', 'صندلی‌های تیمی', 'پشتیبانی اولویت‌دار'],
+  },
+}
+
+function buildComparison(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = COMPARISON_COPY[locale] ?? COMPARISON_COPY.en
   const sectionId = id()
   const headId    = id()
   const colsId    = id()
@@ -705,10 +942,10 @@ function buildComparison(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const features = ['Unlimited pages', 'Custom domain', 'Remove branding', 'Team seats', 'Priority support']
-  const free = makePlanCol(colsId, 'Free', false, features.map((f, i) => ({ label: f, included: i === 0 })))
-  const pro  = makePlanCol(colsId, 'Pro',  true,  features.map((f, i) => ({ label: f, included: i < 4 })))
-  const team = makePlanCol(colsId, 'Team', false, features.map(() => ({ label: '', included: true })).map((_, i) => ({ label: features[i], included: true })))
+  const features = c.features
+  const free = makePlanCol(colsId, c.plans[0], false, features.map((f, i) => ({ label: f, included: i === 0 })))
+  const pro  = makePlanCol(colsId, c.plans[1], true,  features.map((f, i) => ({ label: f, included: i < 4 })))
+  const team = makePlanCol(colsId, c.plans[2], false, features.map(f => ({ label: f, included: true })))
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -718,7 +955,7 @@ function buildComparison(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Compare plans', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [colsId]: {
@@ -733,8 +970,31 @@ function buildComparison(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Blog / Article Grid ───────────────────────────────────────────────────
+// Dates keep Latin numerals in both locales (day + year), only the month
+// name and post copy translate — matching how numeric figures are handled
+// elsewhere in this file (Stats, Bento Grid percentages).
 
-function buildBlogGrid(): { nodes: NodeMap; rootChildId: string } {
+const BLOG_GRID_COPY = {
+  en: {
+    heading: 'From the blog',
+    posts: [
+      { badge: 'Product',     title: 'Five tips for faster page builds', excerpt: 'Small habits that shave hours off every landing page you ship.', date: 'Jun 12, 2026' },
+      { badge: 'Design',      title: 'Why whitespace still wins',        excerpt: 'A look at why the simplest layouts convert best, with real examples.', date: 'Jun 3, 2026' },
+      { badge: 'Engineering', title: 'Under the hood: our new renderer', excerpt: 'How we rebuilt the canvas for instant drag-and-drop feedback.', date: 'May 22, 2026' },
+    ],
+  },
+  fa: {
+    heading: 'از وبلاگ',
+    posts: [
+      { badge: 'محصول',  title: 'پنج نکته برای ساخت سریع‌تر صفحه', excerpt: 'عادت‌های کوچکی که ساعت‌ها زمان ساخت هر صفحه فرود شما را کاهش می‌دهند.', date: '12 ژوئن 2026' },
+      { badge: 'طراحی', title: 'چرا فضای خالی هنوز برنده است',    excerpt: 'نگاهی به این‌که چرا ساده‌ترین چیدمان‌ها بهترین تبدیل را دارند، با مثال‌های واقعی.', date: '3 ژوئن 2026' },
+      { badge: 'مهندسی', title: 'زیر کاپوت: رندرر جدید ما',        excerpt: 'چگونه بوم را برای بازخورد آنی کشیدن‌ورهاکردن از نو ساختیم.', date: '22 مه 2026' },
+    ],
+  },
+}
+
+function buildBlogGrid(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = BLOG_GRID_COPY[locale] ?? BLOG_GRID_COPY.en
   const sectionId = id()
   const headId    = id()
   const colsId    = id()
@@ -761,13 +1021,13 @@ function buildBlogGrid(): { nodes: NodeMap; rootChildId: string } {
 
   const p1 = makePost(colsId,
     'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=600&q=80',
-    'Product', 'Five tips for faster page builds', 'Small habits that shave hours off every landing page you ship.', 'Jun 12, 2026')
+    c.posts[0].badge, c.posts[0].title, c.posts[0].excerpt, c.posts[0].date)
   const p2 = makePost(colsId,
     'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=600&q=80',
-    'Design', 'Why whitespace still wins', 'A look at why the simplest layouts convert best, with real examples.', 'Jun 3, 2026')
+    c.posts[1].badge, c.posts[1].title, c.posts[1].excerpt, c.posts[1].date)
   const p3 = makePost(colsId,
     'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&q=80',
-    'Engineering', 'Under the hood: our new renderer', 'How we rebuilt the canvas for instant drag-and-drop feedback.', 'May 22, 2026')
+    c.posts[2].badge, c.posts[2].title, c.posts[2].excerpt, c.posts[2].date)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -777,7 +1037,7 @@ function buildBlogGrid(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'From the blog', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [colsId]: {
@@ -792,11 +1052,30 @@ function buildBlogGrid(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── FAQ (accordion variant) ────────────────────────────────────────────────
-// Same purpose as buildFAQ but uses the interactive Accordion block instead
-// of static heading/text/divider triplets — kept as a separate template so
-// both styles remain available to users.
 
-function buildFAQAccordion(): { nodes: NodeMap; rootChildId: string } {
+const FAQ_ACCORDION_COPY = {
+  en: {
+    heading: 'Frequently asked questions',
+    items: [
+      { q: 'How long does setup take?', a: 'Most teams are publishing their first page within an hour — no code required.' },
+      { q: 'Can I use my own domain?',  a: 'Yes, connect any custom domain from your project settings in a few clicks.' },
+      { q: 'Is there a free plan?',     a: 'Yes, the Starter plan is free forever for a single project.' },
+      { q: 'Do you offer refunds?',     a: 'Full refunds within 14 days of any paid plan, no questions asked.' },
+    ],
+  },
+  fa: {
+    heading: 'سوالات متداول',
+    items: [
+      { q: 'راه‌اندازی چقدر طول می‌کشد؟', a: 'اکثر تیم‌ها ظرف یک ساعت اولین صفحه خود را منتشر می‌کنند — بدون نیاز به کدنویسی.' },
+      { q: 'می‌توانم از دامنه اختصاصی خودم استفاده کنم؟', a: 'بله، با چند کلیک از تنظیمات پروژه هر دامنه دلخواهی را متصل کنید.' },
+      { q: 'پلن رایگان وجود دارد؟', a: 'بله، پلن استارتر برای یک پروژه همیشه رایگان است.' },
+      { q: 'آیا امکان بازگشت وجه وجود دارد؟', a: 'بازگشت کامل وجه ظرف ۱۴ روز برای هر پلن پولی، بدون هیچ پرسشی.' },
+    ],
+  },
+}
+
+function buildFAQAccordion(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = FAQ_ACCORDION_COPY[locale] ?? FAQ_ACCORDION_COPY.en
   const sectionId = id()
   const headId    = id()
   const accId     = id()
@@ -809,17 +1088,12 @@ function buildFAQAccordion(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Frequently asked questions', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [accId]: {
       id: accId, type: 'accordion', parentId: sectionId,
-      props: { items: [
-        { q: 'How long does setup take?', a: 'Most teams are publishing their first page within an hour — no code required.' },
-        { q: 'Can I use my own domain?',  a: 'Yes, connect any custom domain from your project settings in a few clicks.' },
-        { q: 'Is there a free plan?',     a: 'Yes, the Starter plan is free forever for a single project.' },
-        { q: 'Do you offer refunds?',     a: 'Full refunds within 14 days of any paid plan, no questions asked.' },
-      ] },
+      props: { items: c.items },
       children: [],
     },
   }
@@ -828,16 +1102,33 @@ function buildFAQAccordion(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Bento Grid ─────────────────────────────────────────────────────────────
-// Demonstrates the Grid element (nodeComponents.tsx / registry.tsx): a
-// 3-column × 2-row grid where cells span different amounts (one 2×2 "hero"
-// cell plus three 1×1/2×1 cells) via gridColSpan/gridRowSpan on each cell's
-// own style. gridAutoFlow:'dense' (styleMapper.ts) is what lets the smaller
-// cells pack neatly around the big one instead of leaving a gap. Each cell
-// reuses the Column node type as its wrapper (padding, background, rounded
-// corners all already built in) — see the note on Column's registry entry
-// for why that's a safe, harmless reuse inside a grid parent.
+// The '99.9%' figure keeps Latin numerals in both locales, same as Stats.
 
-function buildBentoGrid(): { nodes: NodeMap; rootChildId: string } {
+const BENTO_GRID_COPY = {
+  en: {
+    heading: 'Everything, at a glance',
+    sub: 'A bento-style overview of what makes it work.',
+    cells: [
+      { title: 'Built for speed',  body: 'Live preview with zero lag, however complex the page gets.' },
+      { title: 'Any device',       body: 'Responsive by default, on every breakpoint.' },
+      { title: '99.9% uptime',     body: 'Rock-solid hosting, no surprises.' },
+      { title: 'Team-ready',       body: 'Invite your whole team — no seat limits, ever.' },
+    ],
+  },
+  fa: {
+    heading: 'همه‌چیز، در یک نگاه',
+    sub: 'مروری به سبک بنتو از آنچه آن را کارآمد می‌کند.',
+    cells: [
+      { title: 'ساخته‌شده برای سرعت', body: 'پیش‌نمایش زنده بدون تأخیر، هرچقدر هم صفحه پیچیده شود.' },
+      { title: 'هر دستگاهی',          body: 'واکنش‌گرا به‌طور پیش‌فرض، در هر اندازه صفحه.' },
+      { title: '99.9% زمان فعالیت',   body: 'میزبانی کاملاً پایدار، بدون هیچ غافلگیری.' },
+      { title: 'آماده برای تیم',      body: 'کل تیم خود را دعوت کنید — بدون محدودیت تعداد کاربر، هرگز.' },
+    ],
+  },
+}
+
+function buildBentoGrid(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = BENTO_GRID_COPY[locale] ?? BENTO_GRID_COPY.en
   const sectionId = id()
   const headId    = id()
   const subId     = id()
@@ -876,10 +1167,10 @@ function buildBentoGrid(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const c1 = makeCell(gridId, 2, 2, 'Built for speed',   'Live preview with zero lag, however complex the page gets.', 'violet-600', 'white')
-  const c2 = makeCell(gridId, 1, 1, 'Any device',        'Responsive by default, on every breakpoint.',                'neutral-800', 'white')
-  const c3 = makeCell(gridId, 1, 1, '99.9% uptime',      'Rock-solid hosting, no surprises.',                          'blue-600',   'white')
-  const c4 = makeCell(gridId, 2, 1, 'Team-ready',        'Invite your whole team — no seat limits, ever.',            'neutral-900', 'white')
+  const c1 = makeCell(gridId, 2, 2, c.cells[0].title, c.cells[0].body, 'violet-600',  'white')
+  const c2 = makeCell(gridId, 1, 1, c.cells[1].title, c.cells[1].body, 'neutral-800', 'white')
+  const c3 = makeCell(gridId, 1, 1, c.cells[2].title, c.cells[2].body, 'blue-600',    'white')
+  const c4 = makeCell(gridId, 2, 1, c.cells[3].title, c.cells[3].body, 'neutral-900', 'white')
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -889,12 +1180,12 @@ function buildBentoGrid(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Everything, at a glance', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [subId]: {
       id: subId, type: 'text', parentId: sectionId,
-      props: { content: 'A bento-style overview of what makes it work.', style: { fontSize: 'base', textAlign: 'center', textColor: 'neutral-500' } },
+      props: { content: c.sub, style: { fontSize: 'base', textAlign: 'center', textColor: 'neutral-500' } },
       children: [],
     },
     [gridId]: {
@@ -909,12 +1200,52 @@ function buildBentoGrid(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Feature Tabs ───────────────────────────────────────────────────────────
-// Demonstrates the Tabs element (nodeComponents.tsx / registry.tsx): three
-// tabs, each holding a genuinely nested block tree (heading + text + image),
-// not just plain strings — proving tabpane children really do support
-// arbitrary, independently-editable content the same as any other container.
 
-function buildFeatureTabs(): { nodes: NodeMap; rootChildId: string } {
+const FEATURE_TABS_COPY = {
+  en: {
+    heading: 'Everything you need, in one place',
+    tabs: [
+      {
+        label: 'Design', title: 'Design without limits',
+        body: 'Every spacing, color, and typography control an agency would charge you for — built in, and editable with a click.',
+        img: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=600&q=80',
+      },
+      {
+        label: 'Collaborate', title: 'Built for teams',
+        body: 'Real-time editing, comments, and shareable previews — everyone stays in sync without a single export/import round-trip.',
+        img: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&q=80',
+      },
+      {
+        label: 'Publish', title: 'Ship in one click',
+        body: 'Push straight to your domain with SSL, CDN caching, and SEO metadata already configured for you.',
+        img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&q=80',
+      },
+    ],
+  },
+  fa: {
+    heading: 'هر آنچه نیاز دارید، در یک مکان',
+    tabs: [
+      {
+        label: 'طراحی', title: 'طراحی بدون محدودیت',
+        body: 'هر کنترل فاصله‌گذاری، رنگ و تایپوگرافی که یک آژانس برایش از شما هزینه می‌گرفت — از پیش ساخته شده و با یک کلیک قابل ویرایش.',
+        img: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=600&q=80',
+      },
+      {
+        label: 'همکاری', title: 'ساخته‌شده برای تیم‌ها',
+        body: 'ویرایش هم‌زمان، نظرات و پیش‌نمایش‌های قابل اشتراک‌گذاری — همه بدون حتی یک چرخه خروجی/ورودی هماهنگ می‌مانند.',
+        img: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&q=80',
+      },
+      {
+        label: 'انتشار', title: 'با یک کلیک منتشر کنید',
+        body: 'مستقیم روی دامنه خود منتشر کنید، با SSL، کش CDN و متادیتای سئو که از قبل برایتان تنظیم شده است.',
+        img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&q=80',
+      },
+    ],
+  },
+}
+
+function buildFeatureTabs(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = FEATURE_TABS_COPY[locale] ?? FEATURE_TABS_COPY.en
   const sectionId = id()
   const headId     = id()
   const tabsId     = id()
@@ -971,21 +1302,9 @@ function buildFeatureTabs(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const t1 = makeTabPane(
-    tabsId, 'Design', 'Design without limits',
-    'Every spacing, color, and typography control an agency would charge you for — built in, and editable with a click.',
-    'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=600&q=80',
-  )
-  const t2 = makeTabPane(
-    tabsId, 'Collaborate', 'Built for teams',
-    'Real-time editing, comments, and shareable previews — everyone stays in sync without a single export/import round-trip.',
-    'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&q=80',
-  )
-  const t3 = makeTabPane(
-    tabsId, 'Publish', 'Ship in one click',
-    'Push straight to your domain with SSL, CDN caching, and SEO metadata already configured for you.',
-    'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&q=80',
-  )
+  const t1 = makeTabPane(tabsId, c.tabs[0].label, c.tabs[0].title, c.tabs[0].body, c.tabs[0].img)
+  const t2 = makeTabPane(tabsId, c.tabs[1].label, c.tabs[1].title, c.tabs[1].body, c.tabs[1].img)
+  const t3 = makeTabPane(tabsId, c.tabs[2].label, c.tabs[2].title, c.tabs[2].body, c.tabs[2].img)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -995,7 +1314,7 @@ function buildFeatureTabs(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Everything you need, in one place', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [tabsId]: {
@@ -1011,7 +1330,21 @@ function buildFeatureTabs(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── CTA Banner ───────────────────────────────────────────────────────────────
 
-function buildCTABanner(): { nodes: NodeMap; rootChildId: string } {
+const CTA_BANNER_COPY = {
+  en: {
+    heading: 'Ready to ship your next page?',
+    sub: 'Join thousands of teams who publish faster with Page Builder. Free to start, no credit card required.',
+    btn: 'Start building for free',
+  },
+  fa: {
+    heading: 'آماده انتشار صفحه بعدی خود هستید؟',
+    sub: 'به هزاران تیمی بپیوندید که با Page Builder سریع‌تر منتشر می‌کنند. شروع رایگان، بدون نیاز به کارت اعتباری.',
+    btn: 'رایگان شروع کنید',
+  },
+}
+
+function buildCTABanner(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = CTA_BANNER_COPY[locale] ?? CTA_BANNER_COPY.en
   const sectionId = id()
   const headId    = id()
   const subId     = id()
@@ -1025,17 +1358,17 @@ function buildCTABanner(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'Ready to ship your next page?', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [subId]: {
       id: subId, type: 'text', parentId: sectionId,
-      props: { content: 'Join thousands of teams who publish faster with Page Builder. Free to start, no credit card required.', style: { fontSize: 'lg', textAlign: 'center', color: undefined } },
+      props: { content: c.sub, style: { fontSize: 'lg', textAlign: 'center', color: undefined } },
       children: [],
     },
     [btnId]: {
       id: btnId, type: 'button', parentId: sectionId,
-      props: { label: 'Start building for free', href: '#', variant: 'solid' },
+      props: { label: c.btn, href: '#', variant: 'solid' },
       children: [],
     },
   }
@@ -1044,10 +1377,20 @@ function buildCTABanner(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Image Gallery (Carousel) ────────────────────────────────────────────────
-// Demonstrates the Carousel element (nodeComponents.tsx / registry.tsx) with
-// its simplest possible slide content — one full-bleed Image per slide.
 
-function buildImageGallery(): { nodes: NodeMap; rootChildId: string } {
+const IMAGE_GALLERY_COPY = {
+  en: {
+    heading: 'See it in action',
+    alts: ['Product screenshot one', 'Product screenshot two', 'Product screenshot three'],
+  },
+  fa: {
+    heading: 'آن را در عمل ببینید',
+    alts: ['تصویر محصول یک', 'تصویر محصول دو', 'تصویر محصول سه'],
+  },
+}
+
+function buildImageGallery(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = IMAGE_GALLERY_COPY[locale] ?? IMAGE_GALLERY_COPY.en
   const sectionId  = id()
   const headId     = id()
   const carouselId = id()
@@ -1064,9 +1407,9 @@ function buildImageGallery(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const s1 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=1200&q=80', 'Product screenshot one')
-  const s2 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=1200&q=80', 'Product screenshot two')
-  const s3 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&q=80', 'Product screenshot three')
+  const s1 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=1200&q=80', c.alts[0])
+  const s2 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=1200&q=80', c.alts[1])
+  const s3 = makeImageSlide(carouselId, 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&q=80', c.alts[2])
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -1076,7 +1419,7 @@ function buildImageGallery(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'See it in action', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [carouselId]: {
@@ -1091,11 +1434,16 @@ function buildImageGallery(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Logo Carousel (Carousel) ────────────────────────────────────────────────
-// Same Carousel element again, this time each slide holding a small row of
-// centered wordmark text instead of a single image — proving slide content
-// isn't locked to any one block type.
+// Brand wordmarks kept in Latin script, same reasoning as Logo Cloud above —
+// only the caption translates.
 
-function buildLogoCarousel(): { nodes: NodeMap; rootChildId: string } {
+const LOGO_CAROUSEL_COPY = {
+  en: { caption: 'TRUSTED BY TEAMS AT' },
+  fa: { caption: 'مورد اعتماد تیم‌ها در' },
+}
+
+function buildLogoCarousel(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = LOGO_CAROUSEL_COPY[locale] ?? LOGO_CAROUSEL_COPY.en
   const sectionId  = id()
   const captionId  = id()
   const carouselId = id()
@@ -1127,7 +1475,7 @@ function buildLogoCarousel(): { nodes: NodeMap; rootChildId: string } {
     },
     [captionId]: {
       id: captionId, type: 'text', parentId: sectionId,
-      props: { content: 'TRUSTED BY TEAMS AT', style: { fontSize: 'xs', fontWeight: 'semibold', textAlign: 'center', textColor: 'neutral-400' } },
+      props: { content: c.caption, style: { fontSize: 'xs', fontWeight: 'semibold', textAlign: 'center', textColor: 'neutral-400' } },
       children: [],
     },
     [carouselId]: {
@@ -1142,11 +1490,30 @@ function buildLogoCarousel(): { nodes: NodeMap; rootChildId: string } {
 }
 
 // ─── Testimonial Carousel (Carousel) ─────────────────────────────────────────
-// A third Carousel template, each slide holding a self-contained Quote card
-// (which already bundles quote + name + role + avatar, no further nesting
-// needed) — centered within the slide via the slide's own Align control.
+// Person names kept as-is; company names get the same transliteration
+// already established by TESTIMONIAL_COPY ("Acme Corp" → "شرکت آکمی").
 
-function buildTestimonialCarousel(): { nodes: NodeMap; rootChildId: string } {
+const TESTIMONIAL_CAROUSEL_COPY = {
+  en: {
+    heading: 'What teams are saying',
+    slides: [
+      { quote: 'This builder cut our landing-page turnaround from two weeks to two hours.', name: 'Jordan Lee', role: 'Head of Growth, Acme Corp' },
+      { quote: 'The Grid and Tabs elements alone replaced three separate plugins we used to pay for.', name: 'Priya Nair', role: 'CTO, Globex' },
+      { quote: 'Our whole team ships pages now, not just the one person who knew CSS.', name: 'Sam Okafor', role: 'Head of Design, Initech' },
+    ],
+  },
+  fa: {
+    heading: 'تیم‌ها چه می‌گویند',
+    slides: [
+      { quote: 'این ابزار زمان ساخت صفحه فرود ما را از دو هفته به دو ساعت کاهش داد.', name: 'Jordan Lee', role: 'مدیر رشد، شرکت آکمی' },
+      { quote: 'فقط عناصر Grid و Tabs جایگزین سه افزونه جداگانه‌ای شدند که قبلاً برایشان هزینه می‌پرداختیم.', name: 'Priya Nair', role: 'مدیر فنی، گلوبکس' },
+      { quote: 'حالا کل تیم ما صفحات را منتشر می‌کند، نه فقط همان یک نفری که CSS بلد بود.', name: 'Sam Okafor', role: 'مدیر طراحی، اینیتک' },
+    ],
+  },
+}
+
+function buildTestimonialCarousel(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string } {
+  const c = TESTIMONIAL_CAROUSEL_COPY[locale] ?? TESTIMONIAL_CAROUSEL_COPY.en
   const sectionId  = id()
   const headId     = id()
   const carouselId = id()
@@ -1174,9 +1541,9 @@ function buildTestimonialCarousel(): { nodes: NodeMap; rootChildId: string } {
     }
   }
 
-  const s1 = makeTestimonialSlide(carouselId, 'This builder cut our landing-page turnaround from two weeks to two hours.', 'Jordan Lee', 'Head of Growth, Acme Corp')
-  const s2 = makeTestimonialSlide(carouselId, 'The Grid and Tabs elements alone replaced three separate plugins we used to pay for.', 'Priya Nair', 'CTO, Globex')
-  const s3 = makeTestimonialSlide(carouselId, 'Our whole team ships pages now, not just the one person who knew CSS.', 'Sam Okafor', 'Head of Design, Initech')
+  const s1 = makeTestimonialSlide(carouselId, c.slides[0].quote, c.slides[0].name, c.slides[0].role)
+  const s2 = makeTestimonialSlide(carouselId, c.slides[1].quote, c.slides[1].name, c.slides[1].role)
+  const s3 = makeTestimonialSlide(carouselId, c.slides[2].quote, c.slides[2].name, c.slides[2].role)
 
   const nodes: NodeMap = {
     [sectionId]: {
@@ -1186,7 +1553,7 @@ function buildTestimonialCarousel(): { nodes: NodeMap; rootChildId: string } {
     },
     [headId]: {
       id: headId, type: 'heading', parentId: sectionId,
-      props: { tag: 'h2', content: 'What teams are saying', style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+      props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
       children: [],
     },
     [carouselId]: {
@@ -1202,52 +1569,72 @@ function buildTestimonialCarousel(): { nodes: NodeMap; rootChildId: string } {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-export const TEMPLATES: Template[] = [
-  {
-    label:     'Hero',
-    icon:      '🏔️',
-    thumbnail: 'Large headline, subtext, and two CTA buttons',
-    build:     buildHero,
-  },
-  {
-    label:     'Feature — Image + Text',
-    icon:      '🖼️',
-    thumbnail: 'Two-column: image left, eyebrow + heading + body right',
-    build:     buildTwoColFeature,
-  },
-  {
-    label:     'Testimonial',
-    icon:      '💬',
-    thumbnail: 'Large pull-quote with author credit',
-    build:     buildTestimonial,
-  },
-  {
-    label:     'Feature Grid',
-    icon:      '✦',
-    thumbnail: 'Three columns with icon, title, and description',
-    build:     buildThreeColFeatures,
-  },
-  {
-    label:     'CTA Banner',
-    icon:      '🚀',
-    thumbnail: 'Headline, subtitle, and single call-to-action button',
-    build:     buildCTABanner,
-  },
-  { label: 'Pricing',    icon: '💳', thumbnail: 'Three-tier pricing cards with a featured plan', build: buildPricing },
-  { label: 'FAQ',        icon: '❓', thumbnail: 'Question/answer pairs with dividers',            build: buildFAQ },
-  { label: 'Stats',      icon: '📊', thumbnail: 'Four-up row of big numbers and labels',           build: buildStats },
-  { label: 'Logo Cloud', icon: '🏢', thumbnail: 'Caption + row of trusted-by logos/wordmarks',     build: buildLogoCloud },
-  { label: 'Footer',     icon: '📐', thumbnail: 'Three link columns + divider + copyright line',   build: buildFooter },
-  { label: 'Header / Nav',     icon: '🧭', thumbnail: 'Logo left, nav links + CTA button right',        build: buildHeader },
-  { label: 'Video Hero',       icon: '🎬', thumbnail: 'Badge + headline + embedded video',                build: buildVideoHero },
-  { label: 'Team Grid',        icon: '👥', thumbnail: 'Four-up avatars with name and role',                build: buildTeam },
-  { label: 'Newsletter Signup',icon: '✉️', thumbnail: 'Boxed headline, subtext, and subscribe button',     build: buildNewsletter },
-  { label: 'Comparison Table', icon: '⚖️', thumbnail: 'Three plan columns with checked feature lists', build: buildComparison },
-  { label: 'Blog Grid',        icon: '📰', thumbnail: 'Three-up article cards with image, badge, excerpt', build: buildBlogGrid },
-  { label: 'FAQ (Accordion)',  icon: '🪗', thumbnail: 'Collapsible question/answer accordion',           build: buildFAQAccordion },
-  { label: 'Bento Grid',       icon: '🧩', thumbnail: 'Asymmetric grid: one big cell + three smaller ones', build: buildBentoGrid },
-  { label: 'Feature Tabs',     icon: '🗂️', thumbnail: 'Tabbed feature showcase — image + text per tab',   build: buildFeatureTabs },
-  { label: 'Image Gallery',    icon: '🖼️', thumbnail: 'Autoplaying full-bleed image carousel',              build: buildImageGallery },
-  { label: 'Logo Carousel',    icon: '🏳️', thumbnail: 'Autoplaying rotating rows of trusted-by logos',      build: buildLogoCarousel },
-  { label: 'Testimonial Carousel', icon: '💬', thumbnail: 'Autoplaying rotating customer quote cards',      build: buildTestimonialCarousel },
-]
+// ─── Locale-aware template list ────────────────────────────────────────────
+// CHANGED: every template now has a real Farsi content pack (its own
+// COPY object above, same pattern the original five — Hero, CTA Banner,
+// Testimonial, Pricing, FAQ — already used) and accepts `locale` as a
+// parameter. getTemplates(locale) below now threads `locale` into every
+// single build() call, not just five of them. Labels/thumbnails for the
+// picker card itself still come from TEMPLATE_LABELS_FA, unchanged.
+const TEMPLATE_LABELS_FA: Partial<Record<string, { label: string; thumbnail: string }>> = {
+  'Hero':        { label: 'قهرمان',        thumbnail: 'تیتر بزرگ، زیرنویس و دو دکمه اقدام' },
+  'Feature — Image + Text': { label: 'ویژگی — تصویر و متن', thumbnail: 'دو ستون: تصویر در سمت چپ، تیتر و متن در سمت راست' },
+  'Testimonial': { label: 'نظر مشتری',     thumbnail: 'نقل‌قول بزرگ همراه با اعتبار نویسنده' },
+  'Feature Grid': { label: 'شبکه ویژگی‌ها', thumbnail: 'سه ستون با آیکون، تیتر و توضیحات' },
+  'CTA Banner':  { label: 'بنر فراخوان',   thumbnail: 'تیتر، زیرنویس و یک دکمه فراخوان' },
+  'Pricing':     { label: 'قیمت‌گذاری',    thumbnail: 'سه کارت قیمتی با یک پلن ویژه' },
+  'FAQ':         { label: 'سوالات متداول', thumbnail: 'جفت‌های پرسش و پاسخ همراه با خط جداکننده' },
+  'Stats':       { label: 'آمار',          thumbnail: 'چهار عدد و برچسب بزرگ در یک ردیف' },
+  'Logo Cloud':  { label: 'ابر لوگو',      thumbnail: 'عنوان و ردیفی از لوگوهای مورد اعتماد' },
+  'Footer':      { label: 'فوتر',          thumbnail: 'سه ستون لینک + خط جداکننده + کپی‌رایت' },
+  'Header / Nav': { label: 'هدر / ناوبری',  thumbnail: 'لوگو در سمت راست، لینک‌های ناوبری و دکمه در سمت چپ' },
+  'Video Hero':  { label: 'قهرمان ویدیویی', thumbnail: 'نشان، تیتر و ویدیوی جاسازی‌شده' },
+  'Team Grid':   { label: 'شبکه تیم',      thumbnail: 'چهار آواتار با نام و نقش' },
+  'Newsletter Signup': { label: 'عضویت خبرنامه', thumbnail: 'تیتر، متن و دکمه عضویت در یک کادر' },
+  'Comparison Table': { label: 'جدول مقایسه', thumbnail: 'سه ستون پلن با لیست امکانات تیک‌دار' },
+  'Blog Grid':   { label: 'شبکه وبلاگ',    thumbnail: 'سه کارت مقاله با تصویر، برچسب و خلاصه' },
+  'FAQ (Accordion)': { label: 'سوالات متداول (آکاردئون)', thumbnail: 'آکاردئون پرسش و پاسخ قابل جمع‌شدن' },
+  'Bento Grid':  { label: 'شبکه بنتو',     thumbnail: 'شبکه نامتقارن: یک خانه بزرگ و سه خانه کوچک‌تر' },
+  'Feature Tabs': { label: 'تب‌های ویژگی',  thumbnail: 'نمایش تب‌دار ویژگی‌ها — تصویر و متن در هر تب' },
+  'Image Gallery': { label: 'گالری تصاویر', thumbnail: 'کاروسل تصاویر تمام‌عرض با پخش خودکار' },
+  'Logo Carousel': { label: 'کاروسل لوگو',  thumbnail: 'ردیف‌های چرخان و خودکار لوگوهای مورد اعتماد' },
+  'Testimonial Carousel': { label: 'کاروسل نظرات مشتری', thumbnail: 'کارت‌های چرخان و خودکار نقل‌قول مشتری' },
+}
+
+export function getTemplates(locale: Locale = 'en'): Template[] {
+  const base: Template[] = [
+    { label: 'Hero', icon: '🏔️', thumbnail: 'Large headline, subtext, and two CTA buttons', build: () => buildHero(locale) },
+    { label: 'Feature — Image + Text', icon: '🖼️', thumbnail: 'Two-column: image left, eyebrow + heading + body right', build: () => buildTwoColFeature(locale) },
+    { label: 'Testimonial', icon: '💬', thumbnail: 'Large pull-quote with author credit', build: () => buildTestimonial(locale) },
+    { label: 'Feature Grid', icon: '✦', thumbnail: 'Three columns with icon, title, and description', build: () => buildThreeColFeatures(locale) },
+    { label: 'CTA Banner', icon: '🚀', thumbnail: 'Headline, subtitle, and single call-to-action button', build: () => buildCTABanner(locale) },
+    { label: 'Pricing', icon: '💳', thumbnail: 'Three-tier pricing cards with a featured plan', build: () => buildPricing(locale) },
+    { label: 'FAQ', icon: '❓', thumbnail: 'Question/answer pairs with dividers', build: () => buildFAQ(locale) },
+    { label: 'Stats', icon: '📊', thumbnail: 'Four-up row of big numbers and labels', build: () => buildStats(locale) },
+    { label: 'Logo Cloud', icon: '🏢', thumbnail: 'Caption + row of trusted-by logos/wordmarks', build: () => buildLogoCloud(locale) },
+    { label: 'Footer', icon: '📐', thumbnail: 'Three link columns + divider + copyright line', build: () => buildFooter(locale) },
+    { label: 'Header / Nav', icon: '🧭', thumbnail: 'Logo left, nav links + CTA button right', build: () => buildHeader(locale) },
+    { label: 'Video Hero', icon: '🎬', thumbnail: 'Badge + headline + embedded video', build: () => buildVideoHero(locale) },
+    { label: 'Team Grid', icon: '👥', thumbnail: 'Four-up avatars with name and role', build: () => buildTeam(locale) },
+    { label: 'Newsletter Signup', icon: '✉️', thumbnail: 'Boxed headline, subtext, and subscribe button', build: () => buildNewsletter(locale) },
+    { label: 'Comparison Table', icon: '⚖️', thumbnail: 'Three plan columns with checked feature lists', build: () => buildComparison(locale) },
+    { label: 'Blog Grid', icon: '📰', thumbnail: 'Three-up article cards with image, badge, excerpt', build: () => buildBlogGrid(locale) },
+    { label: 'FAQ (Accordion)', icon: '🪗', thumbnail: 'Collapsible question/answer accordion', build: () => buildFAQAccordion(locale) },
+    { label: 'Bento Grid', icon: '🧩', thumbnail: 'Asymmetric grid: one big cell + three smaller ones', build: () => buildBentoGrid(locale) },
+    { label: 'Feature Tabs', icon: '🗂️', thumbnail: 'Tabbed feature showcase — image + text per tab', build: () => buildFeatureTabs(locale) },
+    { label: 'Image Gallery', icon: '🖼️', thumbnail: 'Autoplaying full-bleed image carousel', build: () => buildImageGallery(locale) },
+    { label: 'Logo Carousel', icon: '🏳️', thumbnail: 'Autoplaying rotating rows of trusted-by logos', build: () => buildLogoCarousel(locale) },
+    { label: 'Testimonial Carousel', icon: '💬', thumbnail: 'Autoplaying rotating customer quote cards', build: () => buildTestimonialCarousel(locale) },
+  ]
+
+  if (locale === 'en') return base
+  return base.map(tpl => {
+    const fa = TEMPLATE_LABELS_FA[tpl.label]
+    return fa ? { ...tpl, label: fa.label, thumbnail: fa.thumbnail } : tpl
+  })
+}
+
+// Backward-compatible plain export for any call site not yet updated to
+// call getTemplates(locale) directly — always English. Prefer
+// getTemplates(locale) in new code (see DropSlot.tsx).
+export const TEMPLATES: Template[] = getTemplates('en')
