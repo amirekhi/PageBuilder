@@ -19,25 +19,125 @@ export function parseSlotId(id: string): { parentId: string; index: number } | n
   return { parentId: parts[1], index: parseInt(parts[2], 10) }
 }
 
+// ─── Grid cell drop target ──────────────────────────────────────────────────
+function gridCellDropId(parentId: string, row: number, col: number) {
+  return `gridcell::${parentId}::${row}::${col}`
+}
+
+export function parseGridCellDropId(id: string): { parentId: string; row: number; col: number } | null {
+  const parts = id.split('::')
+  if (parts[0] !== 'gridcell' || parts.length !== 4) return null
+  return { parentId: parts[1], row: parseInt(parts[2], 10), col: parseInt(parts[3], 10) }
+}
+
+// A single empty grid cell's "+" button.
+//
+// FIX (was position:absolute + tiny centered pill — too small, felt
+// detached from the rest of the placeholder family): reverted to a plain
+// FLOW element. This is safe here specifically because a Grid track's
+// height comes from `minmax(gridRowMinHeight, auto)` (default 100px) —
+// that reservation is genuinely independent of content, so a box sized
+// `w-full h-full` (no explicit min-height of its own) just fills whatever
+// the track already resolved to. It can never REQUEST more height than
+// that, since height:100% is passive (fills what's given), not a demand.
+// Always visible — no hover-gating needed, since it never risks growing
+// the row regardless of visibility.
+export function GridCellSlot({
+  parentId, row, col,
+}: {
+  parentId: string
+  row:      number
+  col:      number
+}) {
+  const [open, setOpen] = useState(false)
+  const anchorRef       = useRef<HTMLDivElement>(null)
+  const addNode         = useBuilderStore(s => s.addNode)
+  const draggingId      = useBuilderStore(s => s.draggingId)
+  const isDragging      = draggingId !== null
+
+  const { setNodeRef, isOver } = useDroppable({
+    id:   gridCellDropId(parentId, row, col),
+    data: { parentId, row, col, isGridCell: true },
+  })
+
+  function handleSelectBlock(type: NodeType) {
+    const parentChildren = useBuilderStore.getState().nodes[parentId]?.children.length ?? 0
+    addNode(type, parentId, parentChildren, { gridColStart: col, gridRowStart: row })
+    setOpen(false)
+  }
+
+  function handleSelectTemplate(template: ReturnType<typeof getTemplates>[number]) {
+    const { nodes: builtNodes, rootChildId } = template.build()
+    useBuilderStore.setState(prev => {
+      const next: NodeMap = JSON.parse(JSON.stringify(prev.nodes))
+      const snap = JSON.parse(JSON.stringify(prev.nodes))
+      const newPast = [snap, ...prev.past].slice(0, 50)
+      Object.values(builtNodes).forEach(n => { next[n.id] = { ...n } })
+      const rootStyle = (next[rootChildId].props.style as Record<string, unknown>) ?? {}
+      next[rootChildId].props = {
+        ...next[rootChildId].props,
+        style: { ...rootStyle, gridColStart: col, gridRowStart: row },
+      }
+      next[parentId].children.push(rootChildId)
+      next[rootChildId].parentId = parentId
+      return { nodes: next, past: newPast, future: [], selectedId: rootChildId }
+    })
+    setOpen(false)
+  }
+
+  return (
+    // setNodeRef on THIS full-cell div — a generous, easy-to-hit drop
+    // target while dragging — but onClick lives only on the box itself, so
+    // clicking anywhere else in the cell doesn't accidentally open the
+    // picker (no pointer-events tricks needed since this is a real,
+    // correctly-bounded element, not an overlay covering something else).
+    <div
+      ref={setNodeRef}
+      style={{ gridColumn: col, gridRow: row }}
+      className="w-full h-full"
+    >
+      <div
+        ref={anchorRef}
+        onClick={e => { e.stopPropagation(); if (!isDragging) setOpen(v => !v) }}
+        className={[
+          'w-full h-full flex items-center justify-center rounded-lg cursor-pointer select-none',
+          'border-2 border-dashed transition-colors duration-150',
+          isDragging
+            ? isOver
+              ? 'border-violet-400 bg-violet-50 text-violet-600'
+              : 'border-violet-200 bg-violet-50/20 text-violet-300'
+            : 'border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 text-neutral-400 hover:text-violet-500',
+        ].join(' ')}
+      >
+        <span className="text-base font-light leading-none">+</span>
+      </div>
+      {open && !isDragging && (
+        <BlockPicker
+          anchorRef={anchorRef as React.RefObject<HTMLDivElement>}
+          onSelectBlock={handleSelectBlock}
+          onSelectTemplate={handleSelectTemplate}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 interface DropSlotProps {
   parentId: string
   index:    number
   isOnly?:  boolean
-  // When true this slot is the persistent "Add block" button shown on selected containers
   isPersistent?: boolean
-  // NEW — which axis this slot's parent container lays its children out on.
-  // Defaults to 'col' (the original, only previously-supported behavior).
-  // A between-block slot in a 'row' parent (Columns) must NOT carry a
-  // w-full-style class: setting flex-basis:100% on a sibling inside a
-  // row-direction flex forces the browser's flex-shrink math to squeeze
-  // every REAL column around that oversized phantom sibling, distorting
-  // their widths — this was the second (independent) cause of the Pricing
-  // template's columns rendering uneven/out-of-order in the editor only
-  // (Preview never renders DropSlot at all, so it never hit this).
   axis?: 'row' | 'col'
+  // Gap-cancellation — see the doc comment on the between-slot branch
+  // below for the full mechanism (now CSS-variable-driven so it can be
+  // switched off the instant the slot is revealed, instead of a
+  // permanent inline negative margin).
+  gapPx?: number
+  isPreSlot?: boolean
 }
 
-export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }: DropSlotProps) {
+export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col', gapPx = 0, isPreSlot = false }: DropSlotProps) {
   const [open, setOpen] = useState(false)
   const anchorRef       = useRef<HTMLDivElement>(null)
   const addNode         = useBuilderStore(s => s.addNode)
@@ -136,14 +236,47 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
     )
   }
 
-  // ── Between-block slot — invisible until parent is hovered (via CSS group) ──
-  // axis === 'row' (e.g. inside a Columns row): this slot must be a narrow,
-  // non-growing, self-stretching sliver — never full-width — so it can't
-  // distort the real columns' widths via flex-shrink math. axis === 'col'
-  // (everything else, unchanged): original full-width horizontal divider.
+  // ── Between-block slot — invisible until parent is hovered ──────────────
+  // FIX (the "now inside the element instead of sandwiched between
+  // elements" report): gap-cancellation used to be a permanent inline
+  // negative margin (marginTop/marginBottom: -gapPx), applied REGARDLESS
+  // of whether the slot was collapsed or revealed. That's correct only
+  // while collapsed (h-0) — the moment the slot is revealed on hover and
+  // expands to its real size, that same negative margin was STILL there,
+  // pulling the now-visible box up/over so it visually overlapped into
+  // the neighboring element instead of creating a clean gap between two
+  // elements. That's what made a revealed slot look like it was "inside"
+  // the adjacent element rather than properly sandwiched.
+  //
+  // Fix: drive the cancellation through a CSS custom property (--gc) plus
+  // Tailwind arbitrary-value classes, so it can be switched OFF the
+  // instant the slot becomes visible — via the same group-hover/hover
+  // mechanism already used for height/opacity — instead of always being
+  // applied via JS inline style. (Arbitrary-value classes like
+  // `mt-[var(--gc)]` are safe here: the CLASS TEXT is a complete literal
+  // string in this file, same requirement Tailwind's scanner has
+  // everywhere else in this codebase — only the CSS variable's VALUE is
+  // dynamic, set via inline style, which Tailwind never needs to see.)
+  // While actively dragging, no cancellation is applied at all — the slot
+  // is already at full size via the isDragging branch below, so it
+  // legitimately needs (and gets) a full real gap on both sides, same as
+  // before.
   const outerClassName = axis === 'row'
     ? 'relative group/slot self-stretch shrink-0'
     : 'relative group/slot'
+
+  const gapCancelStyle: React.CSSProperties | undefined =
+    (!isDragging && gapPx > 0) ? ({ ['--gc' as any]: `${-gapPx}px` }) : undefined
+
+  const gapCancelClass = (!isDragging && gapPx > 0)
+    ? (axis === 'row'
+        ? (isPreSlot
+            ? 'me-[var(--gc)] group-hover/container:me-0 hover:!me-0'
+            : 'ms-[var(--gc)] group-hover/container:ms-0 hover:!ms-0')
+        : (isPreSlot
+            ? 'mb-[var(--gc)] group-hover/container:mb-0 hover:!mb-0'
+            : 'mt-[var(--gc)] group-hover/container:mt-0 hover:!mt-0'))
+    : ''
 
   const innerClassName = axis === 'row'
     ? [
@@ -152,9 +285,6 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
           ? isOver
             ? 'px-5 border-2 border-dashed border-violet-400 bg-violet-50 rounded-lg'
             : 'px-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
-          // Invisible sliver by default, widens on hover of the row's
-          // nearest group-hover container instead of the col-axis version's
-          // height-based reveal.
           : 'w-0 opacity-0 group-hover/container:w-6 group-hover/container:opacity-100 hover:!w-6 hover:!opacity-100',
       ].join(' ')
     : [
@@ -163,13 +293,11 @@ export function DropSlot({ parentId, index, isOnly, isPersistent, axis = 'col' }
           ? isOver
             ? 'py-5 border-2 border-dashed border-violet-400 bg-violet-50 rounded-lg'
             : 'py-5 border-2 border-dashed border-violet-200 bg-violet-50/20 rounded-lg'
-          // Invisible by default, revealed when the nearest group-hover parent is hovered
-          // The 'group-hover/container' class is set on SelectableShell for containers
           : 'h-0 opacity-0 group-hover/container:h-6 group-hover/container:opacity-100 hover:!h-6 hover:!opacity-100',
       ].join(' ')
 
   return (
-    <div ref={anchorRef} className={outerClassName}>
+    <div ref={anchorRef} className={[outerClassName, gapCancelClass].filter(Boolean).join(' ')} style={gapCancelStyle}>
       <div
         ref={setNodeRef}
         onClick={e => { e.stopPropagation(); if (!isDragging) setOpen(v => !v) }}
@@ -246,18 +374,10 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
 
     const rect = anchorRef.current?.getBoundingClientRect()
 
-    // The picker is `position: fixed`, so it's already positioned relative to
-    // the viewport — window.scrollY doesn't belong here (that would only be
-    // correct for `position: absolute` in document flow), and more importantly
-    // there was no vertical bounds check at all: only `left` was clamped to
-    // stay on-screen horizontally, so clicking "+" anywhere in the bottom
-    // ~400px of the viewport pushed the picker past the bottom edge with no
-    // way to scroll to it. Fix: measure space below vs. above the anchor and
-    // flip to open upward when there isn't enough room below.
     const viewportH   = typeof window !== 'undefined' ? window.innerHeight : 800
     const viewportW   = typeof window !== 'undefined' ? window.innerWidth  : 1200
-    const PICKER_H    = 360  // approx max height (search bar + tabs + max-h-72 list + padding)
-    const PICKER_W    = 256  // matches w-64
+    const PICKER_H    = 360
+    const PICKER_W    = 256
     const GAP         = 8
 
     const anchorTop    = rect?.top    ?? 0
@@ -365,14 +485,6 @@ export function BlockPicker({ anchorRef, onSelectBlock, onSelectTemplate, onClos
     </div>
   )
 
-  // Portaled to document.body rather than rendered inline: this is a
-  // position:fixed element, but an ancestor with overflow:hidden (e.g.
-  // CarouselEditor's slide-track clipping wrapper) still clips a fixed
-  // descendant's PAINT even though `fixed` positions it relative to the
-  // viewport — the clip applies to the whole rendered subtree, not just
-  // elements still participating in normal layout flow. Portaling out to
-  // body sidesteps that entirely, so BlockPicker can never be silently
-  // clipped/hidden by any current or future container's overflow setting.
   if (typeof document === 'undefined') return null
   return createPortal(pickerContent, document.body)
 }

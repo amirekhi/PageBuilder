@@ -16,14 +16,113 @@ import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap } from './types'
 import { SelectableShell } from './SelectableShell'
-import { DropSlot, parseSlotId } from './DropSlot'
+import { DropSlot, GridCellSlot, parseSlotId, parseGridCellDropId } from './DropSlot'
+import { computeGridOccupancy, type GridCellOrigin } from './gridLayout'
 import { EmptyCanvasPrompt } from './TemplatePicker'
 import { AnimationStyleSheet, useAnimationProps } from './animations'
 import { CustomCssStyleSheet } from './CustomCssStyleSheet'
 import { useNodeStyle, useNodeAnimation } from './responsive'
 import { setGlobalColorPalette } from './styleMapper'
-import { directionForLocale } from './i18n'
+import { directionForLocale, type Direction } from './i18n'
 
+// ─── Grid cell placement wrapper ───────────────────────────────────────────
+// THE fix for Editor/Preview disagreeing about which cell holds which
+// child. A child's own persisted style (gridColStart/gridRowStart, read by
+// buildGridItemStyle in styleMapper.ts) is only ever set for children that
+// were explicitly placed via GridCellSlot or drag-and-drop (see
+// moveNode's gridPlacement param in store.ts). Anything else — legacy
+// content, a duplicated node, anything computeGridOccupancy had to
+// auto-place via its top-left fallback scan — has NO explicit coords on
+// its own style, so buildGridItemStyle falls back to a bare `span N` and
+// lets the BROWSER's own CSS grid auto-placement algorithm decide where it
+// actually lands.
+//
+// That's exactly the crack Editor and Preview fell through: auto-placement
+// is DOM-composition-dependent. The Editor's DOM contains the real
+// children PLUS GridCellSlot placeholders for every empty cell (each with
+// its own explicit gridColumn/gridRow, which "reserves" that cell and
+// keeps the browser's auto-placement cursor from stepping into it).
+// Preview's DOM has no slot placeholders at all — nothing else in the DOM
+// to keep the auto-placement cursor honest — so a fallback-positioned
+// child could genuinely land in a different cell there than it did in the
+// Editor, even though both call the exact same computeGridOccupancy().
+//
+// The fix: never let CSS auto-flow decide ANY grid child's position.
+// Every rendered child (in both RenderEditorNode and RenderPreviewNode
+// below) is wrapped in a div carrying the EXACT row/col/span
+// computeGridOccupancy already computed for it — explicit grid-column/
+// grid-row on this wrapper, full stop. Since both renderers call
+// computeGridOccupancy with identical inputs (same childIds, same nodes,
+// same cols/rows) and apply the result identically via this same wrapper,
+// there's no way left for the two views to disagree.
+//
+// display:'grid' on the wrapper itself is a small bonus: it turns the
+// wrapper into a nested single-item grid, so its one child (whatever
+// RenderEditorNode/RenderPreviewNode actually renders — SelectableShell in
+// the Editor, the bare PreviewComponent in Preview) automatically fills
+// the wrapper on BOTH axes via ordinary CSS grid default stretch
+// behavior — no explicit width:100%/height:100% needed on the child
+// itself, and no dependency on whatever sizing that child's own style
+// happens to produce.
+// ─── Grid cell placement wrapper ───────────────────────────────────────────
+// THE fix for Editor/Preview disagreeing about which cell holds which
+// child. A child's own persisted style (gridColStart/gridRowStart, read by
+// buildGridItemStyle in styleMapper.ts) is only ever set for children that
+// were explicitly placed via GridCellSlot or drag-and-drop (see
+// moveNode's gridPlacement param in store.ts). Anything else — legacy
+// content, a duplicated node, anything computeGridOccupancy had to
+// auto-place via its top-left fallback scan — has NO explicit coords on
+// its own style, so buildGridItemStyle falls back to a bare `span N` and
+// lets the BROWSER's own CSS grid auto-placement algorithm decide where it
+// actually lands.
+//
+// That's exactly the crack Editor and Preview fell through: auto-placement
+// is DOM-composition-dependent. The Editor's DOM contains the real
+// children PLUS GridCellSlot placeholders for every empty cell (each with
+// its own explicit gridColumn/gridRow, which "reserves" that cell and
+// keeps the browser's auto-placement cursor from stepping into it).
+// Preview's DOM has no slot placeholders at all — nothing else in the DOM
+// to keep the auto-placement cursor honest — so a fallback-positioned
+// child could genuinely land in a different cell there than it did in the
+// Editor, even though both call the exact same computeGridOccupancy().
+//
+// The fix: never let CSS auto-flow decide ANY grid child's position.
+// Every rendered child (in both RenderEditorNode and RenderPreviewNode
+// below) is wrapped in a div carrying the EXACT row/col/span
+// computeGridOccupancy already computed for it — explicit grid-column/
+// grid-row on this wrapper, full stop.
+//
+// IMPORTANT — do NOT set display:'grid' here. An earlier version of this
+// helper did, intending to make the wrapper's single child stretch to
+// fill it — that's backwards, and it's what caused the "some sections in
+// a grid render narrower than their cell" bug. Setting display:'grid' on
+// THIS wrapper turns it into a brand new, SEPARATE grid formatting
+// context for its own one child. With no gridTemplateColumns/
+// gridTemplateRows given to that nested grid, its single implicit column
+// track sizes itself to 'auto' — i.e. content-sized — instead of filling
+// the wrapper's own box. So the wrapper silently stopped being "100% of
+// the parent cell" and became "exactly as wide as whatever's inside it,"
+// which varied per node type depending on what that node's own internal
+// sizing happened to resolve to (hence some blocks looking fine and
+// others shrinking).
+//
+// The actual fix needs NOTHING clever: a plain block-level element that
+// is a direct child of a CSS grid container already defaults to `stretch`
+// alignment on both axes (the CSS Grid spec's default justify-items/
+// align-items value) — it fills its entire grid area on its own, with no
+// extra display mode required. width/height:100% below are just an extra
+// safety net for whatever's nested one level further in (SelectableShell
+// in the Editor, computes its own sizing off nodeStyle — see
+// SelectableShell.tsx), not strictly required for the stretch behavior
+// itself.
+function gridCellPlacementStyle(origin: GridCellOrigin): React.CSSProperties {
+  return {
+    gridColumn: `${origin.col} / span ${origin.colSpan}`,
+    gridRow:    `${origin.row} / span ${origin.rowSpan}`,
+    minWidth:   0,
+    minHeight:  0,
+  }
+}
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
 // is actually available in the editor panel (window minus the ControlPanel
@@ -124,10 +223,23 @@ export function EditorRenderer() {
     const { active, over } = event
     if (!over) return
     const draggedId = active.id as string
-    const slot = parseSlotId(over.id as string)
-    if (!slot) return
     const node = nodes[draggedId]
     if (!node) return
+
+    // Dropped onto a specific empty grid cell — reparent/reorder AND stamp
+    // gridColStart/gridRowStart in one transaction (see moveNode's
+    // gridPlacement param in store.ts). Checked before the generic slot
+    // parse below since the two id formats never collide (different
+    // prefixes — 'gridcell::' vs 'slot::').
+    const gridCell = parseGridCellDropId(over.id as string)
+    if (gridCell) {
+      const targetChildren = nodes[gridCell.parentId]?.children.length ?? 0
+      moveNode(draggedId, gridCell.parentId, targetChildren, { col: gridCell.col, row: gridCell.row })
+      return
+    }
+
+    const slot = parseSlotId(over.id as string)
+    if (!slot) return
     moveNode(draggedId, slot.parentId, slot.index)
   }
 
@@ -165,6 +277,7 @@ export function EditorRenderer() {
               ref={canvasRef}
               dir={dir}
               className="bg-white"
+               data-tutorial="canvas"
               style={{
                 position:        'absolute',
                 top:             0,
@@ -232,10 +345,28 @@ export function EditorRenderer() {
 // because the track itself is `count * 100%` of the viewport — always
 // works out to exactly one full viewport-width per index step, regardless
 // of slide count.
+//
+// dir="ltr" PINNED ON THE TRACK ITSELF: the transform math above
+// (translateX by -widthPct*activeIndex%) and the flex item order both
+// assume a fixed, physical left-to-right layout — this is a MECHANISM, not
+// text, exactly like the Position/Padding controls in panelComponents.tsx.
+// Under an inherited dir="rtl" (Farsi mode), a plain flex row reverses its
+// items' physical order AND the track's overflow-hidden clipping shifts
+// with it — so the "visible" 100%-wide slice of the (count*100%)-wide
+// track stops lining up with slide index 0, and which physical side
+// counts as "forward" flips. That's what caused Farsi carousels to show
+// only the first slide and feel like their prev/next arrows were swapped.
+// Pinning the track (and CarouselEditor/CarouselPreview's own wrapper
+// divs — see nodeComponents.tsx) to dir="ltr" keeps the carousel's
+// MECHANICS identical regardless of language, while `contentDir` restores
+// the real page direction one level further in, on each individual
+// slide's own content wrapper — so Farsi text INSIDE a slide still reads
+// RTL correctly; only the carousel's internal plumbing is pinned.
 function buildSlidingTrack(
   childIds: string[],
   activeIndex: number,
   renderChild: (id: string) => React.ReactNode,
+  contentDir: Direction,
 ): React.ReactNode {
   const count = childIds.length
   if (count === 0) return null
@@ -243,6 +374,7 @@ function buildSlidingTrack(
   return (
     <div
       className="flex"
+      dir="ltr"
       style={{
         width: `${count * 100}%`,
         transform: `translateX(-${widthPct * activeIndex}%)`,
@@ -250,7 +382,7 @@ function buildSlidingTrack(
       }}
     >
       {childIds.map(cid => (
-        <div key={cid} style={{ width: `${widthPct}%`, flexShrink: 0, minWidth: 0 }}>
+        <div key={cid} dir={contentDir} style={{ width: `${widthPct}%`, flexShrink: 0, minWidth: 0 }}>
           {renderChild(cid)}
         </div>
       ))}
@@ -263,18 +395,24 @@ function buildSlidingTrack(
 function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }) {
   const node       = nodes[nodeId]
   const selectedId = useBuilderStore(s => s.selectedId)
-  // Resolved purely to check display mode below — cheap (same hook every
-  // other component in the app already calls), and unconditional so hook
-  // order stays stable regardless of the early `if (!node)` return further
-  // down (same rule RenderPreviewNode's own animation hook already follows).
+  // Resolved purely to check display mode / gridCols / gridRows below —
+  // cheap (same hook every other component in the app already calls), and
+  // unconditional so hook order stays stable regardless of the early
+  // `if (!node)` return further down (same rule RenderPreviewNode's own
+  // animation hook already follows).
   const resolvedStyle = useNodeStyle(node ?? null)
+  // Real page reading direction — needed by the 'carousel' branch below to
+  // restore correct text direction inside each slide even though the
+  // track's own mechanics are pinned to ltr (see buildSlidingTrack).
+  const locale = useBuilderStore(s => s.locale)
+  const contentDir = directionForLocale(locale)
 
-  // Which tab is active for a Tabs node — see the doc comment on
-  // activeIndex/onActiveIndexChange in types.ts for why this lives here as
-  // local state (one instance per Tabs node, scoped by this component's
-  // position in the tree) instead of on node.props. Called unconditionally,
-  // same hook-order rule as resolvedStyle above — harmless for every
-  // non-Tabs node, since nothing else reads it.
+  // Which tab/slide is active for a Tabs/Carousel node — see the doc
+  // comment on activeIndex/onActiveIndexChange in types.ts for why this
+  // lives here as local state (one instance per node, scoped by this
+  // component's position in the tree) instead of on node.props. Called
+  // unconditionally, same hook-order rule as resolvedStyle above —
+  // harmless for every other node type, since nothing else reads it.
   const [activeIndex, setActiveIndex] = useState(0)
 
   if (!node) return null
@@ -288,7 +426,7 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
   // below AND when passed down as the activeIndex prop to EditorComponent
   // — so TabsEditor's header-button highlight and the actual visible pane
   // can never disagree with each other. Harmless to compute for every
-  // non-Tabs node (just unused in that case).
+  // non-Tabs/Carousel node (just unused in that case).
   const safeActiveIndex = node.children.length > 0
     ? Math.min(activeIndex, node.children.length - 1)
     : 0
@@ -335,62 +473,120 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
       node.children,
       safeActiveIndex,
       childId => <RenderEditorNode nodeId={childId} nodes={nodes} />,
+      contentDir,
     )
+  } else if (node.type === 'grid') {
+    // Grid is a THIRD kind of specially-laid-out container, alongside
+    // Tabs/Carousel above — but unlike those two, MULTIPLE children can be
+    // visible at once, each at its own fixed 2D coordinate rather than a
+    // single "active" index. computeGridOccupancy (gridLayout.ts) is the
+    // ONE place both this function and RenderPreviewNode below derive
+    // placement from, so Editor and Preview can never show a child in a
+    // different cell from each other again — AND each occupied cell's
+    // child is wrapped in gridCellPlacementStyle (see the top of this
+    // file) so its exact position is applied via an explicit inline
+    // gridColumn/gridRow, never left to the browser's own CSS
+    // auto-placement algorithm. That auto-placement dependency was the
+    // actual root cause of Editor/Preview showing different cell contents:
+    // Preview's DOM has no GridCellSlot placeholders "reserving" empty
+    // cells the way Editor's does, so a child positioned only via a bare
+    // `span N` (no explicit origin) could get auto-placed differently in
+    // each view. Wrapping in the SAME computed origin removes that
+    // dependency entirely.
+    //
+    // Per cell: an occupied ORIGIN cell renders the actual child (wrapped);
+    // a cell covered only because an earlier child spans over it renders
+    // nothing (already painted by that child); every other cell renders
+    // exactly one GridCellSlot. This entirely replaces the old
+    // generic-container DropSlot/wrapIfGrid machinery for Grid NODES
+    // specifically — no more full-row-spanning divider slots stealing a
+    // column, no more index-based insertion points that don't correspond
+    // to a real 2D coordinate. (Section's own separate Display:Grid style
+    // mode still uses the old wrapIfGrid path below, since that's a plain
+    // CSS-grid layout mode with ordinary auto-placed children, not a Grid
+    // NODE.)
+    const cols = resolvedStyle.gridCols ?? 3
+    const rows = typeof resolvedStyle.gridRows === 'number' ? resolvedStyle.gridRows : 2
+    const { occupied, originByCell } = computeGridOccupancy(node.children, nodes, cols, rows)
+
+    const cells: React.ReactNode[] = []
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        const key = `${r}-${c}`
+        const origin = originByCell.get(key)
+        if (origin) {
+          cells.push(
+            <div key={origin.childId} style={gridCellPlacementStyle(origin)}>
+              <RenderEditorNode nodeId={origin.childId} nodes={nodes} />
+            </div>
+          )
+        } else if (!occupied.has(key)) {
+          cells.push(<GridCellSlot key={key} parentId={node.id} row={r} col={c} />)
+        }
+        // else: covered by an earlier child's span — nothing to render here
+      }
+    }
+    content = <>{cells}</>
   } else if (def.isContainer) {
     // FIX (Pricing template columns rendering uneven/out-of-order): a
     // between-block DropSlot used to always render as a full-width
-    // horizontal divider regardless of the parent's layout direction. Fine
-    // for a vertically-stacked container (Section, Column), but WRONG
-    // inside a Columns row — ColumnsEditor hardcodes flex-row, so a
-    // full-width sibling there forces every real column to shrink around
-    // it via normal flex math, distorting their widths. 'columns' is the
-    // only node type whose Editor component hardcodes flex-row regardless
-    // of style, so checking node.type here (rather than resolving style) is
-    // both sufficient and exactly matches what ColumnsEditor itself does.
+    // horizontal divider regardless of the parent's layout direction.
+    // ... (unchanged comment/logic above this line) ...
     const axis = node.type === 'columns' ? 'row' : 'col'
 
-    // FIX (grid columns/rows corrupted by DropSlots): when a container's
-    // resolved display is 'grid' (Section's Display control, or the Grid
-    // element), each DropSlot rendered as a sibling becomes a REAL grid
-    // item occupying one of the N column tracks — stealing a cell that
-    // should belong to actual content and throwing off which column
-    // everything else lands in. Flex never had this problem (a lone extra
-    // flex item just takes whatever space it's given; it doesn't
-    // pre-declare fixed tracks the way grid's gridTemplateColumns does).
-    // The fix: whenever the parent is a grid, wrap each DropSlot in a div
-    // spanning EVERY column (gridColumn: '1 / -1') instead of letting it
-    // occupy just one — it can never again steal a content column. This is
-    // Editor-only: PreviewRenderer never renders DropSlot at all, so the
-    // published/Preview grid always shows exactly the row/column count set
-    // in the panel, with zero drop-slot interference regardless of this.
     const isGrid = resolvedStyle.display === 'grid'
     function wrapIfGrid(key: string, slot: React.ReactNode): React.ReactNode {
       if (!isGrid) return slot
       return <div key={key} style={{ gridColumn: '1 / -1' }}>{slot}</div>
     }
 
-    const ids = node.children
-    if (ids.length === 0) {
-      const slot = <DropSlot parentId={node.id} index={0} isOnly />
-      content = isGrid ? <div style={{ gridColumn: '1 / -1' }}>{slot}</div> : slot
-    } else {
-      const items: React.ReactNode[] = [
-        wrapIfGrid('slot-pre', <DropSlot key="slot-pre-inner" parentId={node.id} index={0} axis={axis} />),
-      ]
-      ids.forEach((childId, i) => {
-        items.push(<RenderEditorNode key={childId} nodeId={childId} nodes={nodes} />)
-        items.push(wrapIfGrid(`slot-${i}`, <DropSlot key={`slot-${i}-inner`} parentId={node.id} index={i + 1} axis={axis} />))
-      })
-      content = <>{items}</>
-    }
+    // Gap-cancellation input — see the doc comment on DropSlotProps.gapPx
+    // in DropSlot.tsx for the full mechanism. Only meaningful when this
+    // container's own resolved display actually uses `gap` (flex or grid
+    // — CSS ignores `gap` for block display, so canceling anything there
+    // would just be a stray, wrong negative margin). Computed the same way
+    // buildInlineStyle in styleMapper.ts converts style.gap to real px
+    // (×4), so the cancellation always matches EXACTLY what CSS itself
+    // applied as the container's gap.
+    const gapPx = (resolvedStyle.display === 'flex' || resolvedStyle.display === 'grid')
+      ? (resolvedStyle.gap ?? 0) * 4
+      : 0
+
+ 
+      const ids = node.children
+            if (ids.length === 0) {
+              if (node.type === 'section') {
+                content = null
+              } else {
+                const slot = <DropSlot parentId={node.id} index={0} isOnly />
+                content = isGrid ? <div style={{ gridColumn: '1 / -1' }}>{slot}</div> : slot
+              }
+      } else {
+        const willShowPersistentAdd = selectedId === node.id // matches showPersistentAdd's condition below
+        const items: React.ReactNode[] = [
+          wrapIfGrid('slot-pre', <DropSlot key="slot-pre-inner" parentId={node.id} index={0} axis={axis} />),
+        ]
+        ids.forEach((childId, i) => {
+          items.push(<RenderEditorNode key={childId} nodeId={childId} nodes={nodes} />)
+          const isLast = i === ids.length - 1
+          if (!(isLast && willShowPersistentAdd)) {
+            items.push(wrapIfGrid(`slot-${i}`, <DropSlot key={`slot-${i}-inner`} parentId={node.id} index={i + 1} axis={axis} />))
+          }
+        })
+        content = <>{items}</>
+      }
   }
 
   // When this container is selected, show a persistent "Add block" button
   // at the bottom so finding the thin hover-only slots isn't the only way in.
-  // Excludes Tabs and Carousel — neither has a generic "Add block" slot at
-  // all (see above); growing them happens through their own Panel/Editor's
-  // dedicated "+ Add tab"/"+ Add slide" action instead.
-  const showPersistentAdd = def.isContainer && node.type !== 'tabs' && node.type !== 'carousel' && selectedId === node.id && node.children.length > 0
+  // Excludes Tabs, Carousel, and Grid — none of them has a generic "Add
+  // block" append slot (see above); growing them happens through their own
+  // dedicated action instead ("+ Add tab" / "+ Add slide" for Tabs/
+  // Carousel, or simply increasing rows/cols in GridPanel for Grid — more
+  // cells means more GridCellSlots appear automatically).
+const showPersistentAdd = def.isContainer
+    && node.type !== 'tabs' && node.type !== 'carousel' && node.type !== 'grid' && node.type !== 'section'
+    && selectedId === node.id && node.children.length > 0
   const isGridForAdd = def.isContainer && resolvedStyle.display === 'grid'
 
   return (
@@ -504,6 +700,16 @@ function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }
   // Tablet/Mobile) actually take effect here rather than always playing
   // the Desktop definition regardless of previewWidth.
   const animation = useNodeAnimation(node ?? null)
+  // Resolved style is needed for the grid branch below — same gridCols/
+  // gridRows (per the active breakpoint) that RenderEditorNode's grid
+  // branch reads, so Preview computes occupancy against the exact same
+  // cols/rows Editor did.
+  const resolvedStyle = useNodeStyle(node ?? null)
+  // Real page reading direction — see the doc comment on buildSlidingTrack
+  // above for why the carousel branch below needs this even though the
+  // track's own mechanics are pinned to ltr.
+  const locale = useBuilderStore(s => s.locale)
+  const contentDir = directionForLocale(locale)
 
   // Hook is called unconditionally, BEFORE the `if (!node) return null` below
   // — required by the rules of hooks (hook order must never depend on a
@@ -522,14 +728,18 @@ function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
 
-  // Tabs and Carousel each get their own treatment, built directly here —
-  // right where activeIndex's state lives — rather than inside
-  // TabsPreview/CarouselPreview themselves. Tabs' inactive children are
-  // hidden via display:none (an instant swap is correct there); Carousel's
-  // children are laid out via buildSlidingTrack (see above RenderEditorNode)
-  // so the whole row can translateX into view, producing real sliding
-  // motion. Every other node type just gets its children as a plain array,
-  // unchanged.
+  // Tabs, Carousel, and Grid each get their own treatment, built directly
+  // here — right where activeIndex's state lives — rather than inside
+  // TabsPreview/CarouselPreview/GridPreview themselves. Tabs' inactive
+  // children are hidden via display:none (an instant swap is correct
+  // there); Carousel's children are laid out via buildSlidingTrack (see
+  // above RenderEditorNode) so the whole row can translateX into view,
+  // producing real sliding motion; Grid's children are placed via
+  // computeGridOccupancy — the SAME call, with the SAME inputs, that
+  // RenderEditorNode's grid branch makes, wrapped in the SAME
+  // gridCellPlacementStyle helper — which is what guarantees the two views
+  // can never disagree about which child sits in which cell. Every other
+  // node type just gets its children as a plain array, unchanged.
   const safeActiveIndex = node.children.length > 0
     ? Math.min(activeIndex, node.children.length - 1)
     : 0
@@ -546,7 +756,25 @@ function RenderPreviewNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap }
       node.children,
       safeActiveIndex,
       cid => <RenderPreviewNode nodeId={cid} nodes={nodes} />,
+      contentDir,
     )
+  } else if (node.type === 'grid') {
+    // Preview never renders GridCellSlot (there's no "add block" UI in
+    // Preview at all, same as every other node type) — just the occupied
+    // children themselves, each wrapped in the SAME gridCellPlacementStyle
+    // helper RenderEditorNode's grid branch uses, driven by the SAME
+    // computeGridOccupancy origin. Not left to buildGridItemStyle/the
+    // child's own persisted style, and not left to CSS auto-flow — see the
+    // doc comment on gridCellPlacementStyle at the top of this file for
+    // why that's the actual fix here.
+    const cols = resolvedStyle.gridCols ?? 3
+    const rows = typeof resolvedStyle.gridRows === 'number' ? resolvedStyle.gridRows : 2
+    const { originByCell } = computeGridOccupancy(node.children, nodes, cols, rows)
+    children = Array.from(originByCell.values()).map(origin => (
+      <div key={origin.childId} style={gridCellPlacementStyle(origin)}>
+        <RenderPreviewNode nodeId={origin.childId} nodes={nodes} />
+      </div>
+    ))
   } else {
     children = node.children.map(cid => <RenderPreviewNode key={cid} nodeId={cid} nodes={nodes} />)
   }

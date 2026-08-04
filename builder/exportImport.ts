@@ -3,7 +3,7 @@ import {
   StyleProps, buildClassName, buildInlineStyle, buildOverlayStyle,
   buildSectionOuterStyle, buildSectionInnerStyle, setGlobalColorPalette,
 } from './styleMapper'
-import { compileCustomCss, compileHoverCss, wrapperClassFor } from './customCss'
+import { compileCustomCss, compileHoverCss, wrapperClassFor, buildHoverTransitionStyle } from './customCss'
 import type { HoverStyleProps } from './customCss'
 import { resolveStyleForBreakpoint, resolveAnimationForBreakpoint } from './responsive'
 import { AnimationProps, EFFECT_KEYFRAME, STARTS_HIDDEN } from './animations'
@@ -117,15 +117,14 @@ export function readFileAsText(file: File): Promise<string> {
 }
 
 // ─── HTML export ──────────────────────────────────────────────────────────────
-// Rewritten to REUSE the live style/animation pipeline instead of hand-
-// duplicating it (which is exactly how this file drifted out of sync with
-// Preview in the first place). Every color/spacing/typography/border/
-// effect/visibility value is produced by the SAME buildInlineStyle /
-// buildSectionOuterStyle / buildSectionInnerStyle functions styleMapper.ts
-// already exports for the live editor — this file only adds the plumbing
-// needed to turn "one resolved StyleProps object" into "real CSS a static
-// file can render," three times per node (Desktop/Tablet/Mobile), instead
-// of relying on React state to pick which one applies.
+// Reuses the live style/animation pipeline instead of hand-duplicating it —
+// every color/spacing/typography/border/effect/visibility value is produced
+// by the SAME buildInlineStyle / buildSectionOuterStyle / buildSectionInnerStyle
+// functions styleMapper.ts already exports for the live editor and Preview.
+// This file only adds the plumbing needed to turn "one resolved StyleProps
+// object" into "real CSS a static file can render," three times per node
+// (Desktop/Tablet/Mobile), instead of relying on React state to pick which
+// one applies.
 //
 // STRATEGY: every node gets a stable class (wrapperClassFor(node.id), the
 // same class Custom CSS / hover already use) with NO responsive-CSS
@@ -137,10 +136,15 @@ export function readFileAsText(file: File): Promise<string> {
 // breakpoint (not a diff) — simpler and just as correct, since equal-
 // specificity same-selector rules are resolved by source order, and mobile
 // is emitted after tablet so it correctly wins at very narrow widths where
-// both queries match. This also sidesteps the exact specificity problem
-// hover's !important rules exist to solve (inline styles always beating
-// classes) — since responsive values are never inline here, no !important
-// is needed for them.
+// both queries match.
+//
+// INTERACTIVE BLOCKS (Tabs, Carousel, Accordion): Preview drives these with
+// React state (activeIndex / openIdx). The exported file has no React, so
+// each gets a small, self-contained vanilla-JS behavior in
+// INTERACTIVE_SCRIPT at the bottom of this file — one shared script,
+// feature-detecting which blocks are actually present via their
+// data-pb-* marker attributes, so pages with none of these cost nothing
+// extra.
 //
 // buildClassName's literal Tailwind utility output (w-full, object-cover,
 // italic, etc.) is the one thing still DESKTOP-only — reflecting the
@@ -203,6 +207,19 @@ function emitResponsiveRule(selector: string, desktop: CSSProperties, tablet: CS
   return parts.join('\n')
 }
 
+// Hover-capable nodes get a smooth CSS transition in Preview (see
+// buildHoverTransitionStyle in customCss.ts, merged into the live style
+// object) — this was previously never emitted into the exported CSS at
+// all, so hover color/opacity/shadow changes SNAPPED instantly in the
+// exported file instead of fading like they do in Preview. Not
+// breakpoint-dependent (the transition itself doesn't vary by width), so
+// it's a single plain rule, not a media-query set.
+function buildTransitionCss(nodeId: string, node: PageNode): string {
+  const text = reactStyleToCssText(buildHoverTransitionStyle(node))
+  if (!text) return ''
+  return `.${wrapperClassFor(nodeId)}{${text}}`
+}
+
 // ─── Animations ─────────────────────────────────────────────────────────────
 // Per-breakpoint effect/duration/delay/easing, same resolveAnimationForBreakpoint
 // responsive.ts already exports. `trigger`/`once` themselves are read from
@@ -213,10 +230,11 @@ function emitResponsiveRule(selector: string, desktop: CSSProperties, tablet: CS
 // this here rather than silently assuming it doesn't matter.
 //
 // Mechanism: a shared `pb-play` class, added by a small IntersectionObserver
-// script (mirroring animations.ts's own useInView/useAnimationProps logic)
-// or immediately on load for trigger:'onLoad'. CSS never plays anything on
-// its own — `.cc-id.pb-play{...}` only matches once the script adds that
-// class, exactly mirroring the live "shouldPlay" gate in useAnimationProps.
+// in INTERACTIVE_SCRIPT (mirroring animations.ts's own useInView/
+// useAnimationProps logic) or immediately on load for trigger:'onLoad'. CSS
+// never plays anything on its own — `.cc-id.pb-play{...}` only matches once
+// the script adds that class, exactly mirroring the live "shouldPlay" gate
+// in useAnimationProps.
 
 function buildAnimationCssForNode(nodeId: string, node: PageNode): string {
   const c = wrapperClassFor(nodeId)
@@ -255,10 +273,29 @@ function animAttrs(node: PageNode): string {
   return ` data-pb-animate="1" data-pb-trigger="${trigger}" data-pb-once="${once ? '1' : '0'}"`
 }
 
-const ANIMATE_SCRIPT = `<script>
+// ─── Combined interactive behavior (Animations + Accordion + Tabs + Carousel) ──
+// One shared script, appended once, only when at least one interactive
+// marker attribute is actually present in the body (see needsInteractiveScript
+// in exportToHtml below) — feature-detects each behavior independently via
+// querySelectorAll, so a page with e.g. only Tabs and no Carousel/Accordion
+// pays no extra runtime cost for the ones it doesn't use.
+//
+// Each block below mirrors its React counterpart's actual behavior, not
+// just its appearance:
+//   - Accordion: exactly one item open at a time (AccordionRender's
+//     useState<number|null> semantics), same 240px max-height cap the live
+//     component itself uses (see AccordionRender), same rotating "+" icon.
+//   - Tabs: instant swap, exactly one pane visible (TabsEditor/TabsPreview),
+//     first tab active by default (matches the `useState(0)` default).
+//   - Carousel: sliding track via translateX (buildSlidingTrack in
+//     Renderer.tsx), prev/next + dot navigation, autoplay as a
+//     re-armed one-shot-timeout chain (matching CarouselPreview's own
+//     useEffect exactly, including loop/no-loop stopping behavior and
+//     pause-on-hover).
+const INTERACTIVE_SCRIPT = `<script>
 (function(){
-  var els = document.querySelectorAll('[data-pb-animate]');
-  els.forEach(function(el){
+  // ── Scroll/onLoad animations ──
+  document.querySelectorAll('[data-pb-animate]').forEach(function(el){
     var trig = el.getAttribute('data-pb-trigger');
     var once = el.getAttribute('data-pb-once') === '1';
     if (trig === 'onLoad') { el.classList.add('pb-play'); return; }
@@ -274,10 +311,90 @@ const ANIMATE_SCRIPT = `<script>
     }, { threshold: 0.15 });
     obs.observe(el);
   });
+
+  // ── Accordions: one item open at a time ──
+  document.querySelectorAll('[data-pb-accordion]').forEach(function(acc){
+    var items = acc.querySelectorAll(':scope > .pb-acc-item');
+    items.forEach(function(item){
+      var btn = item.querySelector(':scope > .pb-acc-btn');
+      var content = item.querySelector(':scope > .pb-acc-content');
+      var icon = btn.querySelector('.pb-acc-icon');
+      btn.addEventListener('click', function(){
+        var isOpen = content.style.maxHeight !== '0px';
+        items.forEach(function(other){
+          other.querySelector(':scope > .pb-acc-content').style.maxHeight = '0px';
+          other.querySelector('.pb-acc-icon').classList.remove('rotate-45');
+        });
+        if (!isOpen) {
+          content.style.maxHeight = '240px';
+          icon.classList.add('rotate-45');
+        }
+      });
+    });
+  });
+
+  // ── Tabs: instant swap, one pane visible ──
+  document.querySelectorAll('[data-pb-tabs]').forEach(function(tabs){
+    var btns   = tabs.querySelectorAll(':scope > .pb-tab-header > .pb-tab-btn');
+    var panels = tabs.querySelectorAll(':scope > .pb-tab-panel');
+    btns.forEach(function(btn, i){
+      btn.addEventListener('click', function(){
+        btns.forEach(function(b, j){
+          b.classList.toggle('border-violet-600', j === i);
+          b.classList.toggle('text-violet-700', j === i);
+          b.classList.toggle('border-transparent', j !== i);
+          b.classList.toggle('text-neutral-500', j !== i);
+        });
+        panels.forEach(function(p, j){ p.style.display = j === i ? 'block' : 'none'; });
+      });
+    });
+  });
+
+  // ── Carousels: sliding track + arrows/dots + autoplay ──
+  document.querySelectorAll('[data-pb-carousel]').forEach(function(car){
+    var track = car.querySelector(':scope > .pb-car-track');
+    if (!track) return;
+    var count = parseInt(car.getAttribute('data-count'), 10) || 1;
+    var loop = car.getAttribute('data-loop') === '1';
+    var autoplay = car.getAttribute('data-autoplay') === '1';
+    var intervalMs = Math.max(1000, parseInt(car.getAttribute('data-autoplay-interval'), 10) || 4000);
+    var dots = car.querySelectorAll('.pb-car-dot');
+    var prevBtn = car.querySelector('.pb-car-prev');
+    var nextBtn = car.querySelector('.pb-car-next');
+    var active = 0;
+    var timer = null;
+    var paused = false;
+
+    function render(){
+      var widthPct = 100 / count;
+      track.style.transform = 'translateX(-' + (widthPct * active) + '%)';
+      dots.forEach(function(d, i){
+        d.classList.toggle('bg-white', i === active);
+        d.classList.toggle('bg-white/50', i !== active);
+      });
+    }
+    function goTo(i){ active = ((i % count) + count) % count; render(); }
+    function scheduleNext(){
+      if (!autoplay || count <= 1 || paused) return;
+      clearTimeout(timer);
+      timer = setTimeout(function(){
+        var next = active + 1;
+        if (next >= count) { if (loop) goTo(0); }
+        else { goTo(next); }
+        scheduleNext();
+      }, intervalMs);
+    }
+    if (prevBtn) prevBtn.addEventListener('click', function(){ goTo(active - 1); });
+    if (nextBtn) nextBtn.addEventListener('click', function(){ goTo(active + 1); });
+    dots.forEach(function(d, i){ d.addEventListener('click', function(){ goTo(i); }); });
+    car.addEventListener('mouseenter', function(){ paused = true; });
+    car.addEventListener('mouseleave', function(){ paused = false; scheduleNext(); });
+    scheduleNext();
+  });
 })();
 </script>`
 
-// ─── Per-node CSS (style + animation + hover + custom CSS) ────────────────
+// ─── Per-node CSS (style + animation + hover-transition + hover + custom CSS) ──
 
 function collectStyleCss(nodes: NodeMap, rootId: string): string {
   const parts: string[] = []
@@ -321,6 +438,9 @@ function collectStyleCss(nodes: NodeMap, rootId: string): string {
       parts.push(emitResponsiveRule(`.${c}`, buildInlineStyle(dS), buildInlineStyle(tS), buildInlineStyle(mS)))
     }
 
+    const transitionCss = buildTransitionCss(id, node)
+    if (transitionCss) parts.push(transitionCss)
+
     const animCss = buildAnimationCssForNode(id, node)
     if (animCss) parts.push(animCss)
 
@@ -337,10 +457,10 @@ function collectStyleCss(nodes: NodeMap, rootId: string): string {
 // ─── HTML body ──────────────────────────────────────────────────────────────
 // Every node always gets its wrapperClassFor class on its root element,
 // unconditionally — including nodes with no custom CSS/hover/animation at
-// all (an unused CSS class costs nothing) — rather than the old
-// conditional withCustomCss() check, since now the class is also how base
-// responsive styling attaches. Simpler and can never drift into "class
-// exists in <style> but missing from the element" or vice versa.
+// all (an unused CSS class costs nothing) — rather than a conditional
+// check, since now the class is also how base responsive styling attaches.
+// Simpler and can never drift into "class exists in <style> but missing
+// from the element" or vice versa.
 
 function renderNode(nodeId: string, nodes: NodeMap, rootId: string, depth = 0): string {
   const node = nodes[nodeId]
@@ -378,6 +498,9 @@ ${pad}</section>`
     case 'column':
       return `${pad}<div class="${cls(buildClassName(ds, 'flex-1 min-w-0'), wrapCls)}"${anim}>\n${kids}\n${pad}</div>`
 
+    case 'grid':
+      return `${pad}<div class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim}>\n${kids}\n${pad}</div>`
+
     case 'text':
       return `${pad}<p class="${cls(buildClassName(ds, ''), wrapCls)}"${anim}>${(node.props.content as string) ?? ''}</p>`
 
@@ -402,7 +525,9 @@ ${pad}</section>`
         variant === 'outline' ? 'border-2 border-violet-600 text-violet-600 hover:bg-violet-50' :
         variant === 'ghost'   ? 'text-violet-600 hover:bg-violet-50' :
         'bg-violet-600 text-white hover:bg-violet-700'
-      return `${pad}<a href="${esc(href)}" class="${cls(`inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${vc}`, wrapCls)}"${anim}>${esc(label)}</a>`
+      const openInNewTab = !!node.props.openInNewTab
+      const targetAttrs = openInNewTab ? ` target="_blank" rel="noopener noreferrer"` : ''
+      return `${pad}<a href="${esc(href)}"${targetAttrs} class="${cls(`inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${vc}`, wrapCls)}"${anim}>${esc(label)}</a>`
     }
 
     case 'spacer':
@@ -475,17 +600,120 @@ ${pad}</div>`
       if (!embed) {
         return `${pad}<div class="${cls(buildClassName(ds, 'bg-neutral-100 border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center gap-1.5 text-neutral-400 text-sm'), wrapCls)}"${anim} style="aspect-ratio:${ratio};min-height:160px"><span style="font-size:1.25rem">▶</span><span style="font-size:0.75rem;font-weight:500">Paste a YouTube or Vimeo link</span></div>`
       }
-      return `${pad}<div class="${cls(buildClassName(ds, 'overflow-hidden'), wrapCls)}"${anim} style="aspect-ratio:${ratio}"><iframe src="${esc(embed)}" style="width:100%;height:100%;border:0" allowfullscreen></iframe></div>`
+      // `allow` attribute matched to VideoRender's own iframe exactly — the
+      // exported file previously omitted this entirely, meaning autoplay/
+      // encrypted-media/picture-in-picture permissions silently differed
+      // from what Preview actually grants the embed.
+      return `${pad}<div class="${cls(buildClassName(ds, 'overflow-hidden'), wrapCls)}"${anim} style="aspect-ratio:${ratio}"><iframe src="${esc(embed)}" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
     }
 
+    // ── Accordion ──────────────────────────────────────────────────────
+    // Real div/button structure (NOT native <details>/<summary>) so it can
+    // exactly match AccordionRender's actual behavior: exactly ONE item
+    // open at a time (native <details> elements are independently
+    // toggleable — several could be open simultaneously, which is NOT what
+    // the live component does), the same 240px max-height cap
+    // AccordionRender itself uses, and the rotating "+" icon. Interactivity
+    // lives in INTERACTIVE_SCRIPT's accordion block. First item open by
+    // default, matching AccordionRender's `useState<number|null>(0)`.
     case 'accordion': {
       const items = (node.props.items as { q: string; a: string }[]) ?? []
-      const rows = items.map(item => `${pad}  <details class="border-b border-neutral-200 py-3">
-${pad}    <summary class="cursor-pointer text-sm font-medium text-neutral-800 list-none flex justify-between items-center">${esc(item.q)}<span>+</span></summary>
-${pad}    <p class="pt-2 text-sm text-neutral-500 leading-relaxed">${esc(item.a)}</p>
-${pad}  </details>`).join('\n')
-      return `${pad}<div class="${cls(buildClassName(ds, 'w-full border-t border-neutral-200'), wrapCls)}"${anim}>\n${rows}\n${pad}</div>`
+      const rows = items.map((item, i) => `${pad}  <div class="pb-acc-item">
+${pad}    <button type="button" class="pb-acc-btn w-full flex items-center justify-between gap-4 py-4 text-left">
+${pad}      <span class="text-sm font-medium text-neutral-800">${esc(item.q)}</span>
+${pad}      <span class="pb-acc-icon shrink-0 text-neutral-400 transition-transform duration-150${i === 0 ? ' rotate-45' : ''}">+</span>
+${pad}    </button>
+${pad}    <div class="pb-acc-content overflow-hidden transition-all duration-200" style="max-height:${i === 0 ? '240px' : '0px'}">
+${pad}      <p class="pb-4 text-sm text-neutral-500 leading-relaxed pr-8">${esc(item.a)}</p>
+${pad}    </div>
+${pad}  </div>`).join('\n')
+      return `${pad}<div class="${cls(buildClassName(ds, 'w-full divide-y divide-neutral-200 border-t border-b border-neutral-200'), wrapCls)}"${anim} data-pb-accordion="1">
+${rows}
+${pad}</div>`
     }
+
+    // ── Tabs ────────────────────────────────────────────────────────────
+    // Header row of real <button>s (labels read straight off each tabpane's
+    // `label` prop, same fallback TabHeaderRow itself uses) + one panel div
+    // per tabpane, all but the first hidden via inline display:none — an
+    // instant swap, matching TabsEditor/TabsPreview exactly (no
+    // fade/slide). Switching is wired up in INTERACTIVE_SCRIPT's tabs
+    // block via :scope-scoped queries, so nested Tabs-inside-Tabs (however
+    // unlikely) can't cross-wire each other's buttons/panels.
+    case 'tabs': {
+      const paneIds = node.children
+      if (paneIds.length === 0) return ''
+      const headerBtns = paneIds.map((pid, i) => {
+        const pane = nodes[pid]
+        const label = (pane?.props.label as string) || `Tab ${i + 1}`
+        const activeCls = i === 0 ? 'border-violet-600 text-violet-700' : 'border-transparent text-neutral-500 hover:text-neutral-700'
+        return `${pad}    <button type="button" class="pb-tab-btn px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors cursor-pointer ${activeCls}">${esc(label)}</button>`
+      }).join('\n')
+      const panels = paneIds.map((pid, i) => {
+        const inner = renderNode(pid, nodes, rootId, depth + 2)
+        return `${pad}  <div class="pb-tab-panel" style="display:${i === 0 ? 'block' : 'none'}">
+${inner}
+${pad}  </div>`
+      }).join('\n')
+      return `${pad}<div class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim} data-pb-tabs="1">
+${pad}  <div class="pb-tab-header flex border-b border-neutral-200 mb-4 gap-1 overflow-x-auto">
+${headerBtns}
+${pad}  </div>
+${panels}
+${pad}</div>`
+    }
+
+    case 'tabpane':
+      return `${pad}<div class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim}>\n${kids}\n${pad}</div>`
+
+    // ── Carousel ────────────────────────────────────────────────────────
+    // Same sliding-track technique as buildSlidingTrack in Renderer.tsx:
+    // the track is `count * 100%` wide with each slide at `100/count`
+    // percent, translateX'd by index — every percentage resolves against a
+    // concrete number instead of the circular flex-percentage trap a naive
+    // per-slide 100% width would hit. Arrows/dots render only when
+    // showArrows/showDots are on AND there's more than one slide, matching
+    // CarouselArrows/CarouselDots exactly. Autoplay/loop/pause-on-hover are
+    // read off node.props into data attributes and driven by
+    // INTERACTIVE_SCRIPT's carousel block, which mirrors CarouselPreview's
+    // own re-armed-one-shot-timeout effect (not a single setInterval) so
+    // loop/no-loop stopping behavior matches exactly.
+    case 'carousel': {
+      const slideIds = node.children
+      const count = slideIds.length
+      if (count === 0) return ''
+      const widthPct   = 100 / count
+      const showArrows = node.props.showArrows !== false
+      const showDots   = node.props.showDots !== false
+      const autoplay   = !!node.props.autoplay
+      const interval   = (node.props.autoplayInterval as number) ?? 4000
+      const loop       = node.props.loop !== false
+
+      const slidesHtml = slideIds.map(sid => {
+        const inner = renderNode(sid, nodes, rootId, depth + 2)
+        return `${pad}    <div style="width:${widthPct}%;flex-shrink:0;min-width:0">
+${inner}
+${pad}    </div>`
+      }).join('\n')
+
+      const arrowsHtml = (showArrows && count > 1) ? `
+${pad}  <button type="button" class="pb-car-prev absolute left-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-neutral-700 text-sm transition-colors" aria-label="Previous slide">‹</button>
+${pad}  <button type="button" class="pb-car-next absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-neutral-700 text-sm transition-colors" aria-label="Next slide">›</button>` : ''
+
+      const dotsHtml = (showDots && count > 1) ? `
+${pad}  <div class="pb-car-dots absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
+${slideIds.map((_, i) => `${pad}    <button type="button" class="pb-car-dot w-2 h-2 rounded-full transition-colors ${i === 0 ? 'bg-white' : 'bg-white/50 hover:bg-white/80'}" aria-label="Go to slide ${i + 1}"></button>`).join('\n')}
+${pad}  </div>` : ''
+
+      return `${pad}<div class="${cls(buildClassName(ds, 'w-full relative overflow-hidden'), wrapCls)}"${anim} data-pb-carousel="1" data-count="${count}" data-autoplay="${autoplay ? '1' : '0'}" data-autoplay-interval="${interval}" data-loop="${loop ? '1' : '0'}">
+${pad}  <div class="pb-car-track flex" style="width:${count * 100}%;transform:translateX(0%);transition:transform 450ms ease">
+${slidesHtml}
+${pad}  </div>${arrowsHtml}${dotsHtml}
+${pad}</div>`
+    }
+
+    case 'slide':
+      return `${pad}<div class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim}>\n${kids}\n${pad}</div>`
 
     default:
       return ''
@@ -520,6 +748,12 @@ export interface ExportOptions {
   globalCustomCss?: string
   globalColors?:    GlobalColor[]
   seo?:             SeoSettings
+  // Locale the page was authored in — drives `<html lang dir>` so a Farsi
+  // page exports RTL instead of always exporting as LTR English regardless
+  // of the builder's own language setting. Optional/defaulted to 'en' so
+  // any existing caller that hasn't been updated to pass this still works
+  // exactly as before.
+  locale?:          'en' | 'fa'
 }
 
 export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions = {}): string {
@@ -534,14 +768,17 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
   const styleCss = collectStyleCss(nodes, rootId)
   const globalCss = opts.globalCustomCss?.trim() ?? ''
   const styleBlock = [globalCss, styleCss].filter(Boolean).join('\n\n')
-  const needsAnimateScript = body.includes('data-pb-animate')
+  const needsInteractiveScript = /data-pb-(animate|accordion|tabs|carousel)/.test(body)
+
+  const locale = opts.locale ?? 'en'
+  const dir    = locale === 'fa' ? 'rtl' : 'ltr'
 
   const seo = opts.seo ?? {}
   const pageTitle = seo.title || opts.title || 'Exported Page'
   const seoHead = buildSeoHead(seo)
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}" dir="${dir}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -553,7 +790,10 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
     visibility, and responsive (Tablet/Mobile) value below is real CSS
     generated from the same style-resolution functions the live editor and
     Preview use (see styleMapper.ts / responsive.ts) — this file mirrors
-    Preview directly instead of duplicating that logic by hand.
+    Preview directly instead of duplicating that logic by hand. Tabs,
+    Carousel, and Accordion get real interactive HTML/CSS/vanilla-JS (see
+    INTERACTIVE_SCRIPT) instead of React, so they behave the same as
+    Preview with zero framework runtime.
   -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -562,7 +802,7 @@ ${styleBlock}
 </head>
 <body>
 ${body}
-${needsAnimateScript ? ANIMATE_SCRIPT : ''}
+${needsInteractiveScript ? INTERACTIVE_SCRIPT : ''}
 </body>
 </html>`
 }

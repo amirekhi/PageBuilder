@@ -82,6 +82,7 @@ const DICT = {
     emptyCanvasSubtitle: 'Start with a template or add blocks from the sidebar.',
     chooseTemplate: '+ Choose a template',
     dismiss: 'Dismiss',
+    addContentTitle: 'Add content', closeAria: 'Close',
 
     // Language toggle — shows the OTHER language's own name, since tapping
     // it switches you TO that language.
@@ -396,6 +397,7 @@ const DICT = {
     emptyCanvasSubtitle: 'با یک قالب شروع کنید یا از نوار کناری بلوک اضافه کنید.',
     chooseTemplate: '+ انتخاب قالب',
     dismiss: 'رد کردن',
+    addContentTitle: 'افزودن محتوا', closeAria: 'بستن',
 
     languageToggleLabel: 'English',
 
@@ -706,4 +708,20 @@ const NODE_LABELS_FA: Partial<Record<NodeType, string>> = {
 export function nodeLabel(locale: Locale, type: NodeType, fallbackEnglishLabel: string): string {
   if (locale === 'fa') return NODE_LABELS_FA[type] ?? fallbackEnglishLabel
   return fallbackEnglishLabel
+}
+
+// ─── Block-group display names ──────────────────────────────────────────────
+// BLOCK_GROUPS in registry.tsx (Layout / Content / Elements) are plain
+// English section headers, same situation as NODE_REGISTRY's `label` above
+// — kept English there on purpose, translated only at the display call
+// site via this map, so registry.tsx doesn't need a locale import.
+const BLOCK_GROUP_LABELS_FA: Record<string, string> = {
+  Layout: 'چیدمان',
+  Content: 'محتوا',
+  Elements: 'عناصر',
+}
+
+export function blockGroupLabel(locale: Locale, groupLabel: string): string {
+  if (locale === 'fa') return BLOCK_GROUP_LABELS_FA[groupLabel] ?? groupLabel
+  return groupLabel
 }

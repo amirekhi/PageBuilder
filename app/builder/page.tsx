@@ -8,6 +8,7 @@ import { MediaPickerModal } from '@/builder/MediaPickerModal'
 import { ImageEditorModal } from '@/builder/ImageEditorModal'
 import { MobileBlockModal } from '@/builder/MobileBlockModal'
 import { useIsViewportTooNarrow } from '@/builder/useViewportGate'
+import { Tutorial } from '@/builder/Tutorial'
 
 export default function BuilderPage() {
   const mode   = useBuilderStore(s => s.mode)
@@ -32,6 +33,7 @@ export default function BuilderPage() {
       </div>
       <MediaPickerModal />
       <ImageEditorModal />
+      <Tutorial />
     </div>
   )
 }

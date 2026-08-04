@@ -1480,7 +1480,10 @@ function buildLogoCarousel(locale: Locale = 'en'): { nodes: NodeMap; rootChildId
     },
     [carouselId]: {
       id: carouselId, type: 'carousel', parentId: sectionId,
-      props: { autoplay: true, autoplayInterval: 3500, loop: true, showArrows: false, showDots: true, style: {} },
+      // showArrows was false — the reason this template had no way to
+      // navigate manually in either locale. Autoplay + dots alone isn't
+      // enough; arrows are the primary manual control everywhere else.
+      props: { autoplay: true, autoplayInterval: 3500, loop: true, showArrows: true, showDots: true, style: {} },
       children: [s1.slideId, s2.slideId],
     },
     ...s1.nodes, ...s2.nodes,

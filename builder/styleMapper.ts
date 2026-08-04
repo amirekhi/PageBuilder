@@ -101,15 +101,30 @@ export interface StyleProps {
   // own style rather than as a coordinate map on the parent: children stay
   // ordinary ordered nodes (drag/drop, add, delete, duplicate all keep
   // working exactly as they already do for Columns/Section), and a child's
-  // visual cell falls out of its position in that order plus however many
-  // cells it's told to span here. Harmless on any node whose parent isn't
-  // a grid — grid-column/grid-row are simply ignored by the browser
-  // outside a grid formatting context. See GridCellSpanField in
-  // panelComponents.tsx, and gridAutoFlow:'dense' in buildFlexInlineProps
-  // below, which is what lets a smaller sibling fill the hole a spanning
-  // child would otherwise leave behind.
+  // visual cell falls out of its explicit origin (see gridColStart/
+  // gridRowStart below) plus however many cells it's told to span here.
+  // Harmless on any node whose parent isn't a grid — grid-column/grid-row
+  // are simply ignored by the browser outside a grid formatting context.
+  // See GridCellSpanField in panelComponents.tsx, gridLayout.ts's
+  // computeGridOccupancy (the single place both Editor and Preview derive
+  // a child's actual cell from), and gridAutoFlow:'dense' in
+  // buildFlexInlineProps below, which lets a smaller sibling fill the hole
+  // a spanning child would otherwise leave behind in the CSS-native
+  // (non-grid-node) auto-placement case.
   gridColSpan?: 1|2|3|4
   gridRowSpan?: 1|2|3|4
+  // Explicit top-left origin of this child within its PARENT grid — 1-based,
+  // matching CSS grid-line numbering. This is what makes a child's position
+  // deterministic and shared between Editor and Preview (see gridLayout.ts's
+  // computeGridOccupancy, the single place both renderers read placement
+  // from). Set either by GridCellSlot (clicking "+" in a specific empty
+  // cell — see DropSlot.tsx) or by the grid-cell drag-and-drop target (see
+  // Renderer.tsx's handleDragEnd, via moveNode's gridPlacement param in
+  // store.ts). Undefined for a child that's never been explicitly placed
+  // (e.g. legacy/template-authored) — computeGridOccupancy falls back to
+  // auto-placing those deterministically instead.
+  gridColStart?: number
+  gridRowStart?: number
 
   // Visibility — deliberately separate from `display` (see the comment on
   // `display` above for why). Cascades through the same per-breakpoint
@@ -385,7 +400,14 @@ export function buildFlexInlineProps(style: StyleProps = {}): React.CSSPropertie
     // one. Safe for every existing grid user (previously just Section's own
     // Display:Grid mode) since it only changes anything once at least one
     // child spans more than a single cell; plain auto-placement (every
-    // child spanning exactly 1×1) behaves identically either way.
+    // child spanning exactly 1×1) behaves identically either way. NOTE:
+    // this dense-autoflow path is irrelevant for the Grid ELEMENT
+    // specifically now that its children carry explicit gridColStart/
+    // gridRowStart (see gridLayout.ts's computeGridOccupancy) — the
+    // browser is simply told each child's exact cell directly, so its own
+    // auto-placement algorithm (dense or not) never gets a chance to run
+    // for those children. Still meaningful for Section's own Display:Grid
+    // mode, which never sets explicit origins.
     s.gridAutoFlow = 'dense'
   } else if (style.display === 'flex' || style.display === 'inline-flex') {
     if (style.flexDir) {
@@ -411,14 +433,36 @@ export function buildFlexInlineProps(style: StyleProps = {}): React.CSSPropertie
 // Deliberately unconditional — harmless on any node whose parent ISN'T a
 // grid (grid-column/grid-row are simply ignored by the browser outside a
 // grid formatting context), so no parent-type check is needed here at all.
-// The Grid element (nodeComponents.tsx) is currently the only node type
-// that exposes a UI for setting these on a child (via GridCellSpanField in
-// panelComponents.tsx, wired in through ControlPanel's ContentTab), but any
-// node — Section, Column, Text, whatever — can carry them.
+//
+// Emits the full shorthand (`"<start> / span <n>"`) whenever an explicit
+// origin is known, so the browser places this exact child at this exact
+// cell rather than letting CSS's own auto-placement algorithm decide —
+// that auto-placement is exactly what caused Editor/Preview to disagree
+// before (different DOM siblings around a child meant the browser's
+// internal placement cursor took a different path through the grid in each
+// view). Falls back to a bare `span <n>` (ordinary CSS auto-placement) only
+// when no origin is set at all — Renderer.tsx's computeGridOccupancy is now
+// what actually decides fallback placement in both views identically, so in
+// practice this bare-span path is rarely hit for the Grid element; it's
+// kept as a harmless no-op safety net for any node type using grid outside
+// the Grid element (e.g. Section's own Display:Grid mode, which never sets
+// explicit origins).
 function buildGridItemStyle(style: StyleProps = {}): React.CSSProperties {
   const s: React.CSSProperties = {}
-  if (style.gridColSpan) s.gridColumn = `span ${style.gridColSpan}`
-  if (style.gridRowSpan) s.gridRow    = `span ${style.gridRowSpan}`
+  if (style.gridColStart) {
+    s.gridColumn = style.gridColSpan
+      ? `${style.gridColStart} / span ${style.gridColSpan}`
+      : `${style.gridColStart}`
+  } else if (style.gridColSpan) {
+    s.gridColumn = `span ${style.gridColSpan}`
+  }
+  if (style.gridRowStart) {
+    s.gridRow = style.gridRowSpan
+      ? `${style.gridRowStart} / span ${style.gridRowSpan}`
+      : `${style.gridRowStart}`
+  } else if (style.gridRowSpan) {
+    s.gridRow = `span ${style.gridRowSpan}`
+  }
   return s
 }
 
@@ -506,12 +550,12 @@ export function buildInlineStyle(
   // self-positioning) without trying to multiply the string 'auto' by 4.
   Object.assign(s, buildAlignMargin(style))
   Object.assign(s, buildFlexInlineProps(style))
-  // Per-child grid placement (span N columns/rows) — deliberately applied
-  // unconditionally, same as justify/align above, regardless of skipSizing:
-  // this is a layout/position property, not a sizing one, so it must apply
-  // identically whether or not the SelectableShell wrapper is also mirroring
-  // it (see buildBoxSizingStyle below) — same reasoning already used for
-  // buildFlexInlineProps here.
+  // Per-child grid placement (explicit origin + span) — deliberately
+  // applied unconditionally, same as justify/align above, regardless of
+  // skipSizing: this is a layout/position property, not a sizing one, so
+  // it must apply identically whether or not the SelectableShell wrapper
+  // is also mirroring it (see buildBoxSizingStyle below) — same reasoning
+  // already used for buildFlexInlineProps here.
   Object.assign(s, buildGridItemStyle(style))
 
   // Typography — real inline CSS now (see buildFlexInlineProps comment above
@@ -725,7 +769,7 @@ export function buildBoxSizingStyle(style: StyleProps = {}): React.CSSProperties
   // present — same precedence buildInlineStyle uses.
   Object.assign(s, buildAlignMargin(style))
 
-  // Per-child grid placement (span N columns/rows) — the SelectableShell
+  // Per-child grid placement (explicit origin + span) — the SelectableShell
   // wrapper is the REAL grid item in the Editor tree whenever this node's
   // parent is a Grid (its own EditorComponent's root div is one level
   // further in and is never itself a grid child) — same reasoning as every
