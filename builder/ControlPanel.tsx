@@ -9,18 +9,11 @@ import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } f
 import type { HoverStyleProps } from './customCss'
 import { useT, nodeLabel, type DictKey } from './i18n'
 
-// Only these three ever get a button in THIS component's own tab bar.
-// Theme and SEO are still perfectly valid values of controlPanelTab (see
-// store.ts) and still render their exact same body below — they're just
-// switched TO from TopBar's own buttons now instead of from a button here.
 const VISIBLE_TABS: ControlPanelTab[] = ['layers', 'style', 'content']
 
-// Maps each visible tab id to its dictionary key — the tab id itself
-// ('layers'/'style'/'content') used to just get capitalize()'d and shown
-// directly as the label; that trick only works for English.
 const TAB_LABEL_KEY: Record<ControlPanelTab, DictKey> = {
   layers: 'tabLayers', style: 'tabStyle', content: 'tabContent',
-  theme: 'tabLayers', seo: 'tabLayers', // never actually shown (not in VISIBLE_TABS) — placeholder to satisfy the Record type
+  theme: 'tabLayers', seo: 'tabLayers',
 }
 
 export function ControlPanel() {
@@ -28,18 +21,11 @@ export function ControlPanel() {
   const setTab          = useBuilderStore(s => s.setControlPanelTab)
   const selectedNode    = useBuilderStore(s => s.selectedNode())
   const updateProps     = useBuilderStore(s => s.updateProps)
-  // Named `tt`, not `t` — the tab bar's own .map(t => ...) below already
-  // uses `t` as the loop variable for each ControlPanelTab id.
   const tt              = useT()
 
   return (
     <aside className="w-72 h-full flex flex-col bg-white border-l border-neutral-200 shrink-0 overflow-hidden">
-      {/* Tab bar — layers/style/content only. Theme/SEO are switched to
-          from TopBar, so they intentionally have no button here, even
-          though tab CAN equal 'theme' or 'seo' (in which case none of
-          these three buttons show as active, which is correct — the
-          active view genuinely isn't one of them). */}
-      <div className="flex border-b border-neutral-200 shrink-0">
+      <div className="flex border-b border-neutral-200 shrink-0" data-tutorial="cp-tabs">
         {VISIBLE_TABS.map(t => (
           <button
             key={t} onClick={() => setTab(t)}
@@ -55,9 +41,7 @@ export function ControlPanel() {
         ))}
       </div>
 
-      {/* Panel body — all five possible tabs render from here, same as
-          before; only the switcher UI for two of them moved. */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" data-tutorial="cp-body">
         {tab === 'layers'  && <LayersTab />}
         {tab === 'style'   && <StyleTab   node={selectedNode} onUpdate={updateProps} />}
         {tab === 'content' && <ContentTab node={selectedNode} onUpdate={updateProps} />}
@@ -67,13 +51,6 @@ export function ControlPanel() {
     </aside>
   )
 }
-
-// ─── Theme tab ────────────────────────────────────────────────────────────
-// Page-wide design tokens — deliberately NOT node-scoped, unlike every other
-// tab here, so it doesn't matter whether a block is selected. Colors here
-// are live-linked (see GlobalColorManager/ColorField); typography styles
-// are copy-once presets (see GlobalTypographyManager's own doc comment for
-// why those two behave differently).
 
 function ThemeTab() {
   const t = useT()
@@ -87,8 +64,6 @@ function ThemeTab() {
     </div>
   )
 }
-
-// ─── Layers ───────────────────────────────────────────────────────────────────
 
 function LayersTab() {
   const nodes      = useBuilderStore(s => s.nodes)
@@ -154,16 +129,6 @@ function LayerNode({
   )
 }
 
-// ─── Style tab ────────────────────────────────────────────────────────────────
-// Every node type now gets the per-field "H" hover toggles rendered inside
-// StylePanel (Background color, Text color, Border color, Opacity, Shadow
-// each get their own independent toggle) — there's no longer a curated
-// HOVER_CAPABLE whitelist here. That whitelist made sense when hover was a
-// single panel-wide switch flipping every dual-mode field at once (only
-// worth it for a few node types); now each field opts in on its own, so
-// gating by node type buys nothing and just means most blocks silently
-// lack a feature that costs nothing to expose everywhere.
-
 function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
   const style             = useNodeStyle(node)
@@ -185,11 +150,7 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
   const isSection             = node.type === 'section'
   const isContainer           = NODE_REGISTRY[node.type]?.isContainer ?? false
   const hideSize              = node.type === 'avatar' || node.type === 'spacer'
-  const hideWidth             = node.type === 'column' || node.type === 'image' || node.type === 'tabpane'
-  // Section, Column, and Tab Pane all have their own, richer background
-  // picker in the Content tab (SectionPanel / ColumnPanel / TabPanePanel)
-  // — hiding the Style tab's generic Background field for them avoids two
-  // controls silently editing the exact same bgColor value.
+  const hideWidth              = node.type === 'column' || node.type === 'image' || node.type === 'tabpane'
   const hideBackground         = isSection || node.type === 'column' || node.type === 'tabpane'
 
   return (
@@ -216,9 +177,6 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
         </p>
       )}
       <StylePanel
-        // Resets which fields are mid-hover-edit whenever a different block
-        // is selected, instead of carrying that transient UI state over
-        // from whatever was previously selected.
         key={node.id}
         style={style}
         onChange={partial => patchNodeStyle(node, p => onUpdate(node.id, p), partial)}
@@ -236,11 +194,7 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
   )
 }
 
-// ─── Content tab ──────────────────────────────────────────────────────────────
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
-  // All hooks called unconditionally, BEFORE the early `if (!node)` return
-  // below, per the rules of hooks — useNodeStyle already tolerates a null
-  // node (see responsive.ts) for exactly this reason.
   const nodes = useBuilderStore(s => s.nodes)
   const style = useNodeStyle(node)
   const t     = useT()
@@ -250,15 +204,6 @@ function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: 
   if (!def) return null
   const Panel = def.EditorPanel
 
-  // Whenever this block's direct parent is a Grid, surface the "Cell span"
-  // control right above that block's own Content panel — this is how a
-  // child claims more than one of the parent Grid's cells (see
-  // GridCellSpanField in panelComponents.tsx and the Grid element in
-  // nodeComponents.tsx/registry.tsx). Any other parent type never renders
-  // this field, since gridColSpan/gridRowSpan are inert outside a grid
-  // parent anyway. (A Tabs parent doesn't need an analogous field here —
-  // its children's "position" is just which tab they are, already edited
-  // via TabPanePanel's own Tab label field and TabsPanel's tab list.)
   const parentNode  = node.parentId ? nodes[node.parentId] : null
   const isGridChild = parentNode?.type === 'grid'
 

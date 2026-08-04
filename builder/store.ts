@@ -113,6 +113,52 @@ export type Locale = 'en' | 'fa'
 // TopBar instead. Nothing about how the tab content itself works changes.
 export type ControlPanelTab = 'layers' | 'style' | 'content' | 'theme' | 'seo'
 
+// ─── Guided tutorial (onboarding walkthrough) ──────────────────────────────
+// A one-time, step-by-step spotlight tour (see TutorialOverlay.tsx) that
+// highlights real elements already in the app (the canvas, ControlPanel's
+// tabs, TopBar's various controls) via `data-tutorial="<id>"` attributes
+// added directly to those elements. Two pieces of UI-only state live here
+// (NOT undo-tracked, same precedent as locale/controlPanelTab above — a
+// tutorial step is navigation, not a content edit):
+//   - tutorialLangModalOpen: the very first thing a first-time visitor
+//     sees — pick English or فارسی before anything else, since that choice
+//     drives BOTH `locale` (and therefore the whole app's UI language/
+//     direction) AND which language the tutorial's own copy renders in.
+//   - tutorialStep: -1 means "tutorial not currently running". >= 0 is an
+//     index into TUTORIAL_STEPS (see tutorialSteps.ts) — kept as a plain
+//     number here rather than importing TUTORIAL_STEPS into the store, so
+//     this file has no dependency on that config; bounds-checking against
+//     the step count happens in TutorialOverlay.tsx, which already needs to
+//     import the step list to render each step's copy anyway.
+// `hasSeenTutorial` mirrors a single localStorage flag — read once on the
+// client via hydrateTutorialFlag() (called from Tutorial.tsx's mount
+// effect, the same "read after mount, not at store-creation time" pattern
+// TopBar.tsx already uses for hasLocalStorageSave(), to avoid an SSR/client
+// hydration mismatch) and written every time the tour is skipped, finished,
+// or completes its last step, so it never auto-opens again until the user
+// deliberately clicks "Restart tutorial" in TopBar (resetTutorial, which
+// clears the flag and reopens the language modal).
+const TUTORIAL_SEEN_KEY = 'pagebuilder_tutorial_seen_v1'
+
+function readTutorialSeenFlag(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.localStorage.getItem(TUTORIAL_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeTutorialSeenFlag(seen: boolean): void {
+  try {
+    if (typeof window === 'undefined') return
+    if (seen) window.localStorage.setItem(TUTORIAL_SEEN_KEY, '1')
+    else window.localStorage.removeItem(TUTORIAL_SEEN_KEY)
+  } catch {
+    // Storage unavailable/full — the tutorial just won't remember it was
+    // seen and may show again next visit, which is a harmless fallback.
+  }
+}
+
 // ─── Global design tokens (colors + typography) ────────────────────────────
 // Page-wide, NOT per-node — sibling to globalCustomCss, not part of the
 // `nodes` tree. Colors are genuinely LIVE-linked: a node's style can store a
@@ -197,6 +243,16 @@ const DEFAULT_GLOBAL_TYPOGRAPHY: GlobalTypographyStyle[] = [
 type MediaPickCallback = (item: MediaItem) => void
 type ImageEditCallback = (editedDataUrl: string) => void
 
+// Placement info for dropping/moving a node directly into a specific Grid
+// cell — see GridCellSlot in DropSlot.tsx (clicking "+" in an empty cell)
+// and the grid-cell branch of handleDragEnd in Renderer.tsx (drag-and-drop
+// onto an empty cell). Bundled into the SAME history entry as the
+// move/create itself (see moveNode/addNode below) rather than a separate
+// follow-up updateProps call — otherwise a cell-targeted add/move would
+// take two undo steps and briefly render unplaced (auto-flowed) for one
+// frame before the coords landed.
+export interface GridPlacement { col: number; row: number }
+
 interface BuilderStore {
   nodes:        NodeMap
   rootId:       string
@@ -218,6 +274,21 @@ interface BuilderStore {
 
   controlPanelTab:    ControlPanelTab
   setControlPanelTab: (tab: ControlPanelTab) => void
+
+  // See the "Guided tutorial" doc comment above for the full rundown.
+  hasSeenTutorial:       boolean
+  tutorialLangModalOpen: boolean
+  tutorialStep:          number // -1 = not running
+
+  hydrateTutorialFlag:     () => void
+  openTutorialLangModal:   () => void
+  closeTutorialLangModal:  () => void
+  chooseTutorialLanguage:  (locale: Locale) => void
+  nextTutorialStep:        () => void
+  prevTutorialStep:        () => void
+  skipTutorial:            () => void
+  finishTutorial:          () => void
+  resetTutorial:           () => void
 
   globalColors:     GlobalColor[]
   globalTypography: GlobalTypographyStyle[]
@@ -256,8 +327,16 @@ interface BuilderStore {
   setDragging:     (id: string | null) => void
   setResizing:     (id: string | null) => void
   updateProps:     (id: string, props: Record<string, unknown>) => void
-  addNode:         (type: NodeType, parentId: string, index: number) => void
-  moveNode:        (id: string, newParentId: string, index: number) => void
+  // extraStyle: merged into the new node's default style in the SAME
+  // history entry — used by GridCellSlot (DropSlot.tsx) to stamp
+  // gridColStart/gridRowStart onto a block the instant it's created, so it
+  // never renders unplaced even for one frame.
+  addNode:         (type: NodeType, parentId: string, index: number, extraStyle?: Partial<StyleProps>) => void
+  // gridPlacement: when moving a node into (or within) a Grid via drag-and-
+  // drop onto a specific empty cell — see GridCellSlot's droppable id and
+  // handleDragEnd in Renderer.tsx. Stamps gridColStart/gridRowStart onto
+  // the moved node's style in the same transaction as the reparent/reorder.
+  moveNode:        (id: string, newParentId: string, index: number, gridPlacement?: GridPlacement) => void
   deleteNode:      (id: string) => void
   duplicateNode:   (id: string) => void
   undo:            () => void
@@ -301,6 +380,10 @@ export const useBuilderStore = create<BuilderStore>()(
 
       controlPanelTab: 'layers',
 
+      hasSeenTutorial:       false, // hydrated client-side — see hydrateTutorialFlag
+      tutorialLangModalOpen: false,
+      tutorialStep:          -1,
+
       globalColors:     DEFAULT_GLOBAL_COLORS,
       globalTypography: DEFAULT_GLOBAL_TYPOGRAPHY,
       seo:              { ...DEFAULT_SEO },
@@ -332,6 +415,67 @@ export const useBuilderStore = create<BuilderStore>()(
       setGlobalCustomCss:   (css) => set(s => { s.globalCustomCss = css }),
       setLocale:            (locale) => set(s => { s.locale = locale }),
       setControlPanelTab:   (tab) => set(s => { s.controlPanelTab = tab }),
+
+      // Reads the localStorage flag once — call this from a useEffect on
+      // mount (see Tutorial.tsx), never at store-creation time, so the
+      // server-rendered pass and the client's first pass agree (both start
+      // from hasSeenTutorial:false) and only THEN, client-side, do we
+      // decide whether to pop the language modal open.
+      hydrateTutorialFlag: () => set(s => {
+        const seen = readTutorialSeenFlag()
+        s.hasSeenTutorial = seen
+        if (!seen) s.tutorialLangModalOpen = true
+      }),
+
+      openTutorialLangModal:  () => set(s => { s.tutorialLangModalOpen = true }),
+      closeTutorialLangModal: () => set(s => { s.tutorialLangModalOpen = false }),
+
+      // Picking a language both sets the app's real locale AND kicks off
+      // the tour at step 0 — the one action that ties the two together, so
+      // there's no in-between state where the modal is gone but the tour
+      // hasn't started (or vice versa).
+      chooseTutorialLanguage: (locale) => set(s => {
+        s.locale = locale
+        s.tutorialLangModalOpen = false
+        s.tutorialStep = 0
+      }),
+
+      nextTutorialStep: () => set(s => { s.tutorialStep += 1 }),
+      prevTutorialStep: () => set(s => { s.tutorialStep = Math.max(0, s.tutorialStep - 1) }),
+
+      skipTutorial: () => set(s => {
+        s.tutorialStep = -1
+        s.tutorialLangModalOpen = false
+        s.hasSeenTutorial = true
+        writeTutorialSeenFlag(true)
+      }),
+
+      // Semantically identical to skipTutorial (same end state) — kept as
+      // its own action so TutorialOverlay's "Finish" button on the last
+      // step and its "Skip" button can each call the one that matches what
+      // actually happened, in case that ever needs to diverge (e.g.
+      // logging completion vs. abandonment differently) without touching
+      // call sites.
+      finishTutorial: () => set(s => {
+        s.tutorialStep = -1
+        s.tutorialLangModalOpen = false
+        s.hasSeenTutorial = true
+        writeTutorialSeenFlag(true)
+      }),
+
+      // The TopBar "Restart tutorial" button. Clears the seen-flag and
+      // reopens the language modal, exactly like a brand-new first-time
+      // visitor — deliberately does NOT pre-fill the language modal choice
+      // from the current locale, so re-running the tour in the other
+      // language is a genuine one-click action, not a two-step detour
+      // through the LanguageToggle first.
+      resetTutorial: () => set(s => {
+        s.tutorialStep = -1
+        s.hasSeenTutorial = false
+        writeTutorialSeenFlag(false)
+        s.tutorialLangModalOpen = true
+      }),
+
       selectNode:      (id)   => set(s => { s.selectedId = id }),
       setDragging:     (id)   => set(s => { s.draggingId = id }),
       setResizing:     (id)   => set(s => { s.resizingId = id }),
@@ -341,14 +485,18 @@ export const useBuilderStore = create<BuilderStore>()(
         Object.assign(s.nodes[id].props, props)
       }),
 
-      addNode: (type, parentId, index) => set(s => {
+      addNode: (type, parentId, index, extraStyle) => set(s => {
         pushHistory(s)
         const def = NODE_REGISTRY[type]
         if (!def) return
         const id = makeId()
+        const props = JSON.parse(JSON.stringify(def.defaultProps))
+        if (extraStyle) {
+          props.style = { ...(props.style ?? {}), ...extraStyle }
+        }
         s.nodes[id] = {
           id, type,
-          props:    JSON.parse(JSON.stringify(def.defaultProps)),
+          props,
           children: [],
           parentId,
         }
@@ -361,7 +509,7 @@ export const useBuilderStore = create<BuilderStore>()(
         s.selectedId = id
       }),
 
-      moveNode: (id, newParentId, index) => set(s => {
+      moveNode: (id, newParentId, index, gridPlacement) => set(s => {
         pushHistory(s)
         const node = s.nodes[id]
         if (!node || !node.parentId) return
@@ -382,6 +530,14 @@ export const useBuilderStore = create<BuilderStore>()(
           s.nodes[newParentId].children.splice(index, 0, id)
         }
         node.parentId = newParentId
+        if (gridPlacement) {
+          const style = (node.props.style as Record<string, unknown>) ?? {}
+          node.props.style = {
+            ...style,
+            gridColStart: gridPlacement.col,
+            gridRowStart: gridPlacement.row,
+          }
+        }
       }),
 
       deleteNode: (id) => set(s => {

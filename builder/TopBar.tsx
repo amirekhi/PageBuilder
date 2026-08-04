@@ -12,15 +12,8 @@ import {
   readFileAsText,
 } from './exportImport'
 import { LanguageToggle } from './LanguageToggle'
-import { useT, directionForLocale, type DictKey } from './i18n'
-
-// Maps a PreviewWidth key to its translated dictionary key — PREVIEW_WIDTHS
-// itself (in store.ts) only stores an English label, since it's also used
-// as a plain data source elsewhere; the translation lookup lives here
-// instead of hardcoding cfg.label in JSX below.
-const BP_LABEL_KEY: Record<PreviewWidth, DictKey> = {
-  desktop: 'bpDesktop', tablet: 'bpTablet', mobile: 'bpMobile',
-}
+import { useT } from './i18n'
+import { useTutorialT } from './tutorialI18n'
 
 export function TopBar() {
   const mode                = useBuilderStore(s => s.mode)
@@ -37,9 +30,9 @@ export function TopBar() {
   const dup                  = useBuilderStore(s => s.duplicateNode)
   const controlPanelTab      = useBuilderStore(s => s.controlPanelTab)
   const setControlPanelTab   = useBuilderStore(s => s.setControlPanelTab)
-  const locale                = useBuilderStore(s => s.locale)
-  const dir                   = directionForLocale(locale)
-  const t                     = useT()
+  const resetTutorial        = useBuilderStore(s => s.resetTutorial)
+  const t                    = useT()
+  const tt                   = useTutorialT()
 
   const [toast, setToast]         = useState<string | null>(null)
   const [menuOpen, setMenuOpen]   = useState(false)
@@ -68,16 +61,11 @@ export function TopBar() {
     setTimeout(() => setToast(null), 2800)
   }
 
-  // Switching into Preview mode also snaps previewWidth to whatever
-  // breakpoint you were just editing — so Preview always opens showing the
-  // same width you were actively working on, instead of silently defaulting
-  // back to desktop regardless of what you'd been editing.
   function handleSetMode(next: 'edit' | 'preview') {
     if (next === 'preview') setPreviewWidth(editingBreakpoint)
     setMode(next)
   }
 
-  // Keyboard shortcuts
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       const meta   = e.metaKey || e.ctrlKey
@@ -156,6 +144,7 @@ function handleExportHTML() {
     globalTypography,
     globalCustomCss,
     seo,
+    locale,
   } = useBuilderStore.getState()
 
   downloadHtml(nodes, rootId, 'page.html', {
@@ -163,6 +152,7 @@ function handleExportHTML() {
     globalColors,
     globalCustomCss,
     seo,
+    locale,
   })
 
   setMenuOpen(false)
@@ -175,7 +165,7 @@ function handleExportHTML() {
       const text   = await readFileAsText(file)
       const result = parseImportedJSON(text)
       if (!result.success || !result.nodes || !result.rootId) {
-        showToast(t('toastImportError', result.error))
+        showToast(t('toastImportError', result.error ?? ''))
         return
       }
       useBuilderStore.setState(prev => ({
@@ -189,15 +179,13 @@ function handleExportHTML() {
     } catch {
       showToast(t('toastCouldNotRead'))
     } finally {
-      // Reset so the same file can be re-imported if needed
       if (importRef.current) importRef.current.value = ''
       setMenuOpen(false)
     }
   }
 
   return (
-    <header dir={dir} className="h-12 flex items-center justify-between px-4 bg-white border-b border-neutral-200 shrink-0 z-50 gap-4">
-      {/* Logo */}
+    <header className="h-12 flex items-center justify-between px-4 bg-white border-b border-neutral-200 shrink-0 z-50 gap-4">
       <div className="flex items-center gap-3 shrink-0">
         <div className="w-6 h-6 rounded-md bg-violet-600 flex items-center justify-center">
           <span className="text-white text-xs font-bold">B</span>
@@ -205,26 +193,12 @@ function handleExportHTML() {
         <span className="text-sm font-semibold text-neutral-800 hidden sm:block">{t('appName')}</span>
       </div>
 
-      {/* Undo / redo — pinned to ltr regardless of page direction. These
-          curved arrows encode a TIME relationship (back/forward through
-          history), not a reading-direction one — letting the ambient
-          dir="rtl" mirror this cluster would swap which side each button
-          sits on, but the ↩/↪ glyphs themselves never mirror, so the two
-          arrows would end up pointing at each other instead of both
-          "forward" in the same rotational sense. Keeping this one cluster
-          fixed-LTR is the standard fix (same convention as most editors'
-          undo/redo controls, which don't mirror under RTL either). */}
-      <div dir="ltr" className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1 shrink-0" data-tutorial="undo-redo">
         <TopBtn onClick={undo} disabled={!canUndo} title={t('undoTitle')}>↩</TopBtn>
         <TopBtn onClick={redo} disabled={!canRedo} title={t('redoTitle')}>↪</TopBtn>
       </div>
 
-      {/* Theme / SEO — these switch the sidebar's ControlPanel to its Theme
-          or SEO tab from out here, since neither one gets its own button in
-          ControlPanel's own tab bar anymore (that bar only ever shows
-          Layers/Style/Content — see ControlPanel.tsx). The tab CONTENT is
-          unchanged; only its switcher moved. */}
-      <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5 shrink-0">
+      <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5 shrink-0" data-tutorial="theme-seo-switcher">
         <button
           onClick={() => setControlPanelTab('theme')}
           title={t('themeTabTitle')}
@@ -247,33 +221,30 @@ function handleExportHTML() {
         </button>
       </div>
 
-      {/* Centre: mode + responsive width */}
       <div className="flex items-center gap-2 flex-1 justify-center">
-        <div className="flex bg-neutral-100 rounded-lg p-0.5">
+        <div className="flex bg-neutral-100 rounded-lg p-0.5" data-tutorial="mode-switch">
           <ModeBtn active={mode === 'edit'}    onClick={() => handleSetMode('edit')}>{t('editModeLabel')}</ModeBtn>
           <ModeBtn active={mode === 'preview'} onClick={() => handleSetMode('preview')}>{t('previewModeLabel')}</ModeBtn>
         </div>
 
-        {/* Edit mode: which breakpoint's styles you're currently authoring.
-            This drives useNodeStyle/patchNodeStyle everywhere (see
-            responsive.ts) — it's independent from the Preview-mode width
-            switcher below, though switching into Preview snaps that one to
-            match (see handleSetMode above). */}
         {mode === 'edit' && (
-          <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5">
-            {(Object.entries(PREVIEW_WIDTHS) as [PreviewWidth, typeof PREVIEW_WIDTHS[PreviewWidth]][]).map(([key, cfg]) => (
-              <button
-                key={key}
-                title={t('editBreakpointTitle', t(BP_LABEL_KEY[key]), cfg.px)}
-                onClick={() => setEditingBreakpoint(key)}
-                className={[
-                  'w-8 h-7 flex items-center justify-center rounded-md text-sm transition-colors',
-                  editingBreakpoint === key ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-400 hover:text-neutral-600',
-                ].join(' ')}
-              >
-                {cfg.icon}
-              </button>
-            ))}
+          <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5" dir="ltr" data-tutorial="breakpoint-switch">
+            {(Object.entries(PREVIEW_WIDTHS) as [PreviewWidth, typeof PREVIEW_WIDTHS[PreviewWidth]][]).map(([key, cfg]) => {
+              const bpLabel = key === 'desktop' ? t('bpDesktop') : key === 'tablet' ? t('bpTablet') : t('bpMobile')
+              return (
+                <button
+                  key={key}
+                  title={t('editBreakpointTitle', bpLabel, cfg.px)}
+                  onClick={() => setEditingBreakpoint(key)}
+                  className={[
+                    'w-8 h-7 flex items-center justify-center rounded-md text-sm transition-colors',
+                    editingBreakpoint === key ? 'bg-white text-violet-600 shadow-sm' : 'text-neutral-400 hover:text-neutral-600',
+                  ].join(' ')}
+                >
+                  {cfg.icon}
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -291,16 +262,16 @@ function handleExportHTML() {
 
         {mode === 'edit' && editingBreakpoint !== 'desktop' && (
           <span className="text-xs text-violet-500 font-medium hidden md:block">
-            {t('editingBreakpointLabel', t(BP_LABEL_KEY[editingBreakpoint]))}
+            {t('editingBreakpointLabel', PREVIEW_WIDTHS[editingBreakpoint].label)}
           </span>
         )}
 
         {mode === 'preview' && (
-          <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5">
+          <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5" dir="ltr">
             {(Object.entries(PREVIEW_WIDTHS) as [PreviewWidth, typeof PREVIEW_WIDTHS[PreviewWidth]][]).map(([key, cfg]) => (
               <button
                 key={key}
-                title={t('previewWidthTitle', t(BP_LABEL_KEY[key]), cfg.px)}
+                title={t('previewWidthTitle', PREVIEW_WIDTHS[key].label, cfg.px)}
                 onClick={() => setPreviewWidth(key)}
                 className={[
                   'w-8 h-7 flex items-center justify-center rounded-md text-sm transition-colors',
@@ -314,28 +285,30 @@ function handleExportHTML() {
         )}
 
         {mode === 'preview' && (
-          <span className="text-xs text-neutral-400 tabular-nums hidden md:block">
+          <span className="text-xs text-neutral-400 tabular-nums hidden md:block" dir="ltr">
             {PREVIEW_WIDTHS[previewWidth].px}px
           </span>
         )}
       </div>
 
-      {/* Right: language + save menu + publish */}
       <div className="flex items-center gap-2 shrink-0 relative" ref={menuRef}>
-        {/* Language toggle — the one switch that cascades direction
-            (dir="rtl"/"ltr" on the Editor canvas and every Preview root,
-            see Renderer.tsx), the builder's own UI strings (useT(), see
-            panelComponents.tsx/ControlPanel.tsx/DropSlot.tsx/
-            TemplatePicker.tsx/TopBar.tsx), and which language's content
-            pack the Farsi-enabled templates render in (templates.ts's
-            getTemplates(locale)). See LanguageToggle.tsx for the full
-            rundown of what flipping it actually touches. */}
         <LanguageToggle />
 
-        {/* Save/export menu */}
+        {/* Restart the guided tour on demand — clears the "seen" flag and
+            reopens the language-choice modal, same starting point as a
+            first-time visitor (see resetTutorial in store.ts). */}
+        <button
+          onClick={resetTutorial}
+          title={tt('restartTitle')}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-neutral-200 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-800 transition-colors"
+        >
+          {tt('restartLabel')}
+        </button>
+
         <button
           onClick={() => setMenuOpen(v => !v)}
           title={t('saveExportTitle')}
+          data-tutorial="save-menu"
           className={[
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
             menuOpen
@@ -349,11 +322,7 @@ function handleExportHTML() {
         </button>
 
         {menuOpen && (
-          <div
-            dir={dir}
-            className="absolute end-0 top-10 w-56 bg-white rounded-xl border border-neutral-200 shadow-xl py-1.5 z-50"
-          >
-            {/* Browser save */}
+          <div className="absolute right-0 top-10 w-56 bg-white rounded-xl border border-neutral-200 shadow-xl py-1.5 z-50">
             <MenuSection label={t('browserStorageSection')} />
             <MenuItem
               icon="💾"
@@ -371,7 +340,6 @@ function handleExportHTML() {
             )}
             <div className="my-1 border-t border-neutral-100" />
 
-            {/* JSON */}
             <MenuSection label={t('jsonFileSection')} />
             <MenuItem
               icon="⬇"
@@ -387,7 +355,6 @@ function handleExportHTML() {
             />
             <div className="my-1 border-t border-neutral-100" />
 
-            {/* HTML */}
             <MenuSection label={t('staticHtmlSection')} />
             <MenuItem
               icon="🌐"
@@ -398,7 +365,6 @@ function handleExportHTML() {
           </div>
         )}
 
-        {/* Hidden file input for JSON import */}
         <input
           ref={importRef}
           type="file"
@@ -407,12 +373,14 @@ function handleExportHTML() {
           onChange={handleImportJSON}
         />
 
-        <button className="px-4 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
+        <button
+          data-tutorial="publish-btn"
+          className="px-4 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors"
+        >
           {t('publishLabel')}
         </button>
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-xl z-[99999] pointer-events-none">
           {toast}
@@ -451,7 +419,7 @@ function ModeBtn({ children, active, onClick }: { children: React.ReactNode; act
 
 function MenuSection({ label }: { label: string }) {
   return (
-    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-neutral-400 text-start">
+    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">
       {label}
     </p>
   )
@@ -463,7 +431,7 @@ function MenuItem({ icon, label, sublabel, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-violet-50 transition-colors text-start"
+      className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-violet-50 transition-colors"
     >
       <span className="shrink-0 w-5 text-center text-sm">{icon}</span>
       <div className="min-w-0">

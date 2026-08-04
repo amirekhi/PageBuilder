@@ -1,13 +1,15 @@
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { useBuilderStore } from './store'
-import { PageNode } from './types'
+import { NodeType, NodeMap, PageNode } from './types'
 import { NODE_REGISTRY } from './registry'
 import { ResizeHandles } from './ResizeHandles'
 import { buildBoxSizingStyle } from './styleMapper'
 import { useNodeStyle } from './responsive'
+import { BlockPicker } from './DropSlot'
+import { getTemplates } from './templates'
 
 interface SelectableShellProps {
   node:     PageNode
@@ -21,6 +23,7 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
   const selectNode    = useBuilderStore(s => s.selectNode)
   const deleteNode    = useBuilderStore(s => s.deleteNode)
   const duplicateNode = useBuilderStore(s => s.duplicateNode)
+  const addNode       = useBuilderStore(s => s.addNode)
   const rootId        = useBuilderStore(s => s.rootId)
   const isSelected    = selectedId === node.id
   const isDragging    = draggingId === node.id
@@ -110,6 +113,43 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
     }
   }
 
+  // ── Toolbar "+ Add block" fallback for empty containers ──────────────
+  // The in-container DropSlot placeholder (DropSlot.tsx's `isOnly` branch)
+  // now fills exactly whatever real space the container has via `inset`
+  // (see the doc comment there) — which correctly stops it from ever
+  // overflowing past a small container, but means a container that's been
+  // manually resized very short can end up with too little room to
+  // legibly show that placeholder at all. This toolbar button is the
+  // guaranteed fallback: the toolbar itself is already positioned
+  // `absolute, top: -34` — ENTIRELY outside the container's own box — so
+  // it's never constrained by how tall/short that box actually is. Only
+  // shown for empty containers (populated ones don't need an "add block"
+  // affordance at all — DropSlot's between-block/persistent variants cover
+  // that case instead), and only alongside the existing toolbar, so it
+  // costs nothing for every other node type.
+  const isEmptyContainer = isContainer && node.children.length === 0
+  const [addOpen, setAddOpen] = useState(false)
+  const addAnchorRef = useRef<HTMLDivElement>(null)
+
+  function handleToolbarSelectBlock(type: NodeType) {
+    addNode(type, node.id, 0)
+    setAddOpen(false)
+  }
+
+  function handleToolbarSelectTemplate(template: ReturnType<typeof getTemplates>[number]) {
+    const { nodes: builtNodes, rootChildId } = template.build()
+    useBuilderStore.setState(prev => {
+      const next: NodeMap = JSON.parse(JSON.stringify(prev.nodes))
+      const snap = JSON.parse(JSON.stringify(prev.nodes))
+      const newPast = [snap, ...prev.past].slice(0, 50)
+      Object.values(builtNodes).forEach(n => { next[n.id] = { ...n } })
+      next[node.id].children.splice(0, 0, rootChildId)
+      next[rootChildId].parentId = node.id
+      return { nodes: next, past: newPast, future: [], selectedId: rootChildId }
+    })
+    setAddOpen(false)
+  }
+
   const selectedOutline = '2px solid #7c3aed'
   const hoverOutline    = '1px dashed #a78bfa'
 
@@ -157,6 +197,19 @@ export function SelectableShell({ node, children }: SelectableShellProps) {
           <span className="text-[11px] font-medium text-violet-600 px-2 py-0.5 bg-violet-50 rounded mr-1 select-none">
             {node.type}
           </span>
+          {isEmptyContainer && (
+            <div ref={addAnchorRef} className="relative">
+              <ToolBtn title="Add block" onClick={() => setAddOpen(v => !v)}>+</ToolBtn>
+              {addOpen && (
+                <BlockPicker
+                  anchorRef={addAnchorRef as React.RefObject<HTMLDivElement>}
+                  onSelectBlock={handleToolbarSelectBlock}
+                  onSelectTemplate={handleToolbarSelectTemplate}
+                  onClose={() => setAddOpen(false)}
+                />
+              )}
+            </div>
+          )}
           <button
             ref={setActivatorNodeRef}
             {...listeners}

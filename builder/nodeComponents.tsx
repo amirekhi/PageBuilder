@@ -1003,14 +1003,39 @@ export const CarouselEditor: React.FC<NodeComponentProps> = ({ node, children, a
       className={buildClassName(s, withCustomCss(node, 'w-full'))}
       style={buildInlineStyle(s, { skipSizing: true })}
     >
-      <div
-        onClick={e => { e.stopPropagation(); selectNode(node.id) }}
-        className="flex items-center gap-1.5 px-2 py-1 mb-1 rounded-md bg-neutral-50 border border-neutral-200 text-[10px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 cursor-pointer select-none w-fit"
-      >
-        <span aria-hidden>🎠</span>
-        <span>{t('carouselCaption', count)}</span>
+      <div className="flex items-center gap-1.5 mb-1">
+        <div
+          onClick={e => { e.stopPropagation(); selectNode(node.id) }}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-neutral-50 border border-neutral-200 text-[10px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 cursor-pointer select-none w-fit"
+        >
+          <span aria-hidden>🎠</span>
+          <span>{t('carouselCaption', count)}</span>
+        </div>
+        {/* Previously the ONLY way to add another slide once at least one
+            already existed was the Content tab's panel button — there was
+            no in-canvas affordance at all once past the empty state. This
+            gives the canvas its own always-visible "+ Add slide" next to
+            the caption strip, same action as CarouselPanel's own button. */}
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); addNode('slide', node.id, slideIds.length) }}
+          className="shrink-0 px-2 py-1 rounded-md bg-neutral-50 border border-neutral-200 text-[10px] font-medium text-violet-600 hover:bg-violet-50 hover:border-violet-300 transition-colors"
+        >
+          {t('addSlideBtn')}
+        </button>
       </div>
-      <div className="relative overflow-hidden">
+      {/* dir="ltr" pinned: the sliding track underneath (built by
+          buildSlidingTrack in Renderer.tsx) positions slides via translateX
+          percentages and physical flex order — a mechanical, not textual,
+          layout. Under an inherited dir="rtl" this flex row reverses item
+          order AND the overflow-hidden clipping shifts with it, so the
+          "visible" slice of the track stops lining up with slide index 0
+          — this is what caused only the first slide to show and the
+          prev/next arrows to feel swapped in Farsi. Each individual
+          slide's own content still gets the real page direction restored
+          one level in (see buildSlidingTrack) — only the carousel's own
+          mechanics are pinned, not the content inside it. */}
+      <div className="relative overflow-hidden" dir="ltr">
         {children}
         {showArrows && (
           <CarouselArrows count={count} onPrev={() => goTo(safeIndex - 1)} onNext={() => goTo(safeIndex + 1)} stopPropagation />
@@ -1073,6 +1098,7 @@ export const CarouselPreview: React.FC<NodeComponentProps> = ({
       id={elementId(node)}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      dir="ltr"
       className={buildClassName(s, withCustomCss(node, 'w-full relative overflow-hidden'))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
     >
