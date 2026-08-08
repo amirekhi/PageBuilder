@@ -7,6 +7,7 @@ import { compileCustomCss, compileHoverCss, wrapperClassFor, buildHoverTransitio
 import type { HoverStyleProps } from './customCss'
 import { resolveStyleForBreakpoint, resolveAnimationForBreakpoint } from './responsive'
 import { AnimationProps, EFFECT_KEYFRAME, STARTS_HIDDEN } from './animations'
+import { buildPersianGoogleFontsHref } from './richText'
 import type { GlobalColor, GlobalTypographyStyle, SeoSettings } from './store'
 import type { CSSProperties } from 'react'
 
@@ -911,6 +912,21 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
   const locale = opts.locale ?? 'en'
   const dir    = locale === 'fa' ? 'rtl' : 'ltr'
 
+  // Persian typography: the exported page needs the SAME Google Fonts the
+  // live editor/Preview loaded on demand via ensurePersianFontsLoaded (see
+  // richText.ts) — a standalone HTML file has no store/effect of its own
+  // to trigger that lazily, so it's baked into <head> up front instead,
+  // gated on the page's own locale exactly like `dir`/`lang` above. An
+  // English-language export never pays for fonts it never uses. The two
+  // <link rel="preconnect"> tags are the standard Google Fonts performance
+  // hint (opens the connection to fonts.gstatic.com early, before the
+  // stylesheet response even tells the browser it needs to).
+  const persianFontsHead = locale === 'fa'
+    ? `<link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="${buildPersianGoogleFontsHref()}" />`
+    : ''
+
   const seo = opts.seo ?? {}
   const pageTitle = seo.title || opts.title || 'Exported Page'
   const seoHead = buildSeoHead(seo)
@@ -922,6 +938,7 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${esc(pageTitle)}</title>
   ${seoHead}
+  ${persianFontsHead}
   <!--
     Layout/fit utility classes (w-full, object-cover, etc.) load via the
     Tailwind CDN. Every color, spacing, typography, border, effect,
