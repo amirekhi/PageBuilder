@@ -9,6 +9,8 @@ export type NodeType =
   | 'list' | 'badge'
   | 'avatar' | 'quote' | 'video'
   | 'accordion'
+  // ── NEW — forms feature (see formNodes.tsx) ──
+  | 'form' | 'formInput' | 'formTextarea' | 'formSelect' | 'formCheckbox' | 'formSubmit'
 
 export interface PageNode {
   id:       string
@@ -69,7 +71,10 @@ export interface NodeComponentProps {
   // an opaque, already-rendered ReactNode blob.
   //
   // Optional and harmless for every other node type — nothing else
-  // destructures or reads them.
+  // destructures or reads them. formNodes.tsx's Form/field components
+  // never read these either (a Form's active-vs-inactive concept doesn't
+  // exist — every field renders simultaneously), so they're simply unused
+  // there, same as on Text/Heading/Image/Button/etc. today.
   activeIndex?:          number
   onActiveIndexChange?: (index: number) => void
 }
@@ -95,13 +100,15 @@ export interface NodeDefinition {
   createExtras?:    (parentId: string) => PageNode[]
   // True for node types whose own render function hardcodes a `w-full`
   // class regardless of style.width (Section, Columns, Image, Divider,
-  // Accordion, Grid, Tabs, Tab Pane). The SelectableShell wrapper needs to
-  // mirror this exact same default — otherwise, when style.width is
-  // genuinely unset AND the node sits in a flex parent that isn't using
-  // the default `stretch` alignment (e.g. align:'center'), the wrapper
-  // shrink-wraps to content while the component's own inner element still
-  // renders full-width one level deeper inside it — invisible until the
-  // wrapper is the thing constraining the box.
+  // Accordion, Grid, Tabs, Tab Pane, and now Form — FormEditor/FormPreview
+  // in formNodes.tsx follow the exact same hardcoded 'w-full' pattern).
+  // The SelectableShell wrapper needs to mirror this exact same default —
+  // otherwise, when style.width is genuinely unset AND the node sits in a
+  // flex parent that isn't using the default `stretch` alignment (e.g.
+  // align:'center'), the wrapper shrink-wraps to content while the
+  // component's own inner element still renders full-width one level
+  // deeper inside it — invisible until the wrapper is the thing
+  // constraining the box.
   defaultFullWidth?: boolean
   // True for node types whose own render function hardcodes `flex-1` (or
   // equivalent flex-fill behavior) regardless of style.width (currently

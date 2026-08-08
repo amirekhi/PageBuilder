@@ -21,6 +21,14 @@ import {
   VideoEditor,  VideoPreview,  VideoPanel,
  AccordionEditor, AccordionPreview, AccordionPanel,
 } from './nodeComponents'
+import {
+  FormEditor,         FormPreview,         FormPanel,
+  FormInputEditor,    FormInputPreview,    FormInputPanel,
+  FormTextareaEditor, FormTextareaPreview, FormTextareaPanel,
+  FormSelectEditor,   FormSelectPreview,   FormSelectPanel,
+  FormCheckboxEditor, FormCheckboxPreview, FormCheckboxPanel,
+  FormSubmitEditor,   FormSubmitPreview,   FormSubmitPanel,
+} from './formNodes'
 
 function makeId() {
   return `node_${Math.random().toString(36).slice(2, 8)}`
@@ -357,10 +365,82 @@ export const NODE_REGISTRY: Record<NodeType, NodeDefinition> = {
       style: { my: 6, borderColor: 'neutral-200', borderWidth: 1, borderStyle: 'solid' },
     },
   },
+
+  form: {
+    label: 'Form', icon: '📝', isContainer: true,
+    EditorComponent:  FormEditor,
+    PreviewComponent: FormPreview,
+    EditorPanel:      FormPanel,
+    // FormEditor/FormPreview hardcode 'w-full' — same pattern as
+    // Section/Columns/Tabs/etc.
+    defaultFullWidth: true,
+    defaultProps: {
+      action: '', method: 'POST', submitAsJson: false,
+      successMessage: 'Thanks! Your submission has been received.',
+      errorMessage: 'Something went wrong — please try again.',
+      style: { display: 'flex', flexDir: 'col', gap: 4 },
+    },
+    // Seeds a working starter form (Name, Email, Message, Submit) so a
+    // freshly-dropped Form is immediately usable rather than empty — same
+    // instinct as Columns seeding two columns.
+    createExtras: (parentId: string): PageNode[] => {
+      const nameId    = makeId()
+      const emailId   = makeId()
+      const messageId = makeId()
+      const submitId  = makeId()
+      return [
+        { id: nameId,    type: 'formInput',    props: { fieldName: 'name',    label: 'Name',    placeholder: 'Jane Doe',        inputType: 'text',  required: true,  style: {} }, children: [], parentId },
+        { id: emailId,   type: 'formInput',    props: { fieldName: 'email',   label: 'Email',   placeholder: 'jane@example.com', inputType: 'email', required: true,  style: {} }, children: [], parentId },
+        { id: messageId, type: 'formTextarea', props: { fieldName: 'message', label: 'Message', placeholder: 'How can we help?', rows: 4,            required: false, style: {} }, children: [], parentId },
+        { id: submitId,  type: 'formSubmit',   props: { label: 'Send message', variant: 'solid', style: {} }, children: [], parentId },
+      ]
+    },
+  },
+
+  formInput: {
+    label: 'Text Field', icon: '⌨️', isContainer: false,
+    EditorComponent:  FormInputEditor,
+    PreviewComponent: FormInputPreview,
+    EditorPanel:      FormInputPanel,
+    defaultProps: { fieldName: 'field', label: 'Label', placeholder: '', inputType: 'text', required: false, style: {} },
+  },
+
+  formTextarea: {
+    label: 'Textarea', icon: '▤', isContainer: false,
+    EditorComponent:  FormTextareaEditor,
+    PreviewComponent: FormTextareaPreview,
+    EditorPanel:      FormTextareaPanel,
+    defaultProps: { fieldName: 'message', label: 'Message', placeholder: '', rows: 4, required: false, style: {} },
+  },
+
+  formSelect: {
+    label: 'Dropdown', icon: '▾', isContainer: false,
+    EditorComponent:  FormSelectEditor,
+    PreviewComponent: FormSelectPreview,
+    EditorPanel:      FormSelectPanel,
+    defaultProps: { fieldName: 'field', label: 'Label', options: ['Option 1', 'Option 2'], required: false, style: {} },
+  },
+
+  formCheckbox: {
+    label: 'Checkbox', icon: '☑', isContainer: false,
+    EditorComponent:  FormCheckboxEditor,
+    PreviewComponent: FormCheckboxPreview,
+    EditorPanel:      FormCheckboxPanel,
+    defaultProps: { fieldName: 'field', label: 'Checkbox label', required: false, style: {} },
+  },
+
+  formSubmit: {
+    label: 'Submit Button', icon: '⬜', isContainer: false,
+    EditorComponent:  FormSubmitEditor,
+    PreviewComponent: FormSubmitPreview,
+    EditorPanel:      FormSubmitPanel,
+    defaultProps: { label: 'Submit', variant: 'solid', style: {} },
+  },
 }
 
 export const BLOCK_GROUPS: { label: string; types: NodeType[] }[] = [
   { label: 'Layout',   types: ['section', 'columns', 'grid', 'tabs', 'carousel', 'spacer', 'divider'] },
   { label: 'Content',  types: ['heading', 'text', 'image', 'list', 'video', 'accordion'] },
   { label: 'Elements', types: ['button', 'badge', 'avatar', 'quote'] },
+  { label: 'Form',     types: ['form', 'formInput', 'formTextarea', 'formSelect', 'formCheckbox', 'formSubmit'] },
 ]

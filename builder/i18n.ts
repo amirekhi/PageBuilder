@@ -29,7 +29,8 @@ export function useDirection(): Direction {
 // panel empty states, DropSlot.tsx's BlockPicker, TemplatePicker.tsx /
 // EmptyCanvasPrompt, and TopBar.tsx in full (undo/redo, Theme/SEO tab
 // switcher, Edit/Preview mode + breakpoint switchers, the replay button,
-// the Save/Export menu and all its items, and the toast messages).
+// the Save/Export menu and all its items, and the toast messages), and
+// formNodes.tsx's Form/field panels.
 // NOT yet covered: the individual per-node-type Content panels in
 // nodeComponents.tsx (Button's "Label"/"Link" fields, Image's "Source"/
 // "Fit" fields, Accordion's "Question"/"Answer" placeholders, etc.) — same
@@ -357,6 +358,27 @@ const DICT = {
 
     // ── DividerPanel ──
     dividerPositionNote: "Only has a visible effect if this Divider's width/height has been resized smaller than its container",
+
+    // ── FormPanel / field panels (formNodes.tsx) ──
+    formNoDestinationWarning: 'No destination set — add a URL in the Content tab so submissions actually go somewhere.',
+    formDestinationSection: 'Destination',
+    formActionLabel: 'Send submissions to (URL)',
+    formActionNote: 'Where the form data is sent when someone submits — e.g. a Formspree/Getform endpoint, a Zapier webhook, or your own API route.',
+    formMethodLabel: 'Method',
+    formSubmitAsJsonLabel: 'Send as JSON',
+    formSubmitAsJsonNote: 'Off sends normal form-data (works with most form-backend services out of the box). On sends a JSON body instead — use this only if your endpoint specifically expects JSON.',
+    formMessagesSection: 'Messages',
+    formSuccessMessageLabel: 'Success message',
+    formErrorMessageLabel: 'Error message',
+    formLabelFieldLabel: 'Field label',
+    formPlaceholderLabel: 'Placeholder',
+    formFieldTypeLabel: 'Field type',
+    formRequiredLabel: 'Required',
+    formFieldNameSection: 'Field name',
+    formFieldNameNote: 'The key this field is submitted under (e.g. "email"). Letters, numbers, hyphens, and underscores only.',
+    formRowsLabel: 'Rows',
+    formOptionsSection: 'Options',
+    formAddOptionBtn: '+ Add option',
   },
   fa: {
     tabLayers: 'لایه‌ها', tabStyle: 'استایل', tabContent: 'محتوا',
@@ -670,6 +692,27 @@ const DICT = {
 
     // ── DividerPanel ──
     dividerPositionNote: 'فقط زمانی جلوه قابل مشاهده دارد که عرض/ارتفاع این خط جداکننده کوچک‌تر از کانتینرش تنظیم شده باشد',
+
+    // ── FormPanel / field panels (formNodes.tsx) ──
+    formNoDestinationWarning: 'مقصدی تنظیم نشده — یک آدرس در تب محتوا اضافه کنید تا ارسال‌ها واقعاً جایی بروند.',
+    formDestinationSection: 'مقصد',
+    formActionLabel: 'ارسال داده‌ها به (آدرس)',
+    formActionNote: 'محلی که داده‌های فرم هنگام ارسال به آن فرستاده می‌شود — مثلاً یک endpoint در Formspree/Getform، یک وب‌هوک Zapier، یا مسیر API خودتان.',
+    formMethodLabel: 'متد',
+    formSubmitAsJsonLabel: 'ارسال به‌صورت JSON',
+    formSubmitAsJsonNote: 'در حالت خاموش، داده‌های فرم به شکل معمول ارسال می‌شود (با اکثر سرویس‌های فرم به‌طور پیش‌فرض کار می‌کند). در حالت روشن، به‌جای آن یک بدنهٔ JSON ارسال می‌شود — فقط زمانی از این استفاده کنید که endpoint شما دقیقاً JSON می‌خواهد.',
+    formMessagesSection: 'پیام‌ها',
+    formSuccessMessageLabel: 'پیام موفقیت',
+    formErrorMessageLabel: 'پیام خطا',
+    formLabelFieldLabel: 'برچسب فیلد',
+    formPlaceholderLabel: 'متن جایگزین',
+    formFieldTypeLabel: 'نوع فیلد',
+    formRequiredLabel: 'الزامی',
+    formFieldNameSection: 'نام فیلد',
+    formFieldNameNote: 'کلیدی که این فیلد با آن ارسال می‌شود (مثلاً «email»). فقط حروف، اعداد، خط تیره و زیرخط.',
+    formRowsLabel: 'تعداد ردیف',
+    formOptionsSection: 'گزینه‌ها',
+    formAddOptionBtn: '+ افزودن گزینه',
   },
 } as const
 
@@ -703,6 +746,8 @@ const NODE_LABELS_FA: Partial<Record<NodeType, string>> = {
   spacer: 'فاصله‌گذار', divider: 'خط جداکننده',
   list: 'لیست', badge: 'برچسب', avatar: 'آواتار', quote: 'نقل‌قول',
   video: 'ویدیو', accordion: 'آکاردئون',
+  form: 'فرم', formInput: 'فیلد متنی', formTextarea: 'ناحیه متنی',
+  formSelect: 'منوی کشویی', formCheckbox: 'چک‌باکس', formSubmit: 'دکمه ارسال',
 }
 
 export function nodeLabel(locale: Locale, type: NodeType, fallbackEnglishLabel: string): string {
@@ -711,7 +756,7 @@ export function nodeLabel(locale: Locale, type: NodeType, fallbackEnglishLabel: 
 }
 
 // ─── Block-group display names ──────────────────────────────────────────────
-// BLOCK_GROUPS in registry.tsx (Layout / Content / Elements) are plain
+// BLOCK_GROUPS in registry.tsx (Layout / Content / Elements / Form) are plain
 // English section headers, same situation as NODE_REGISTRY's `label` above
 // — kept English there on purpose, translated only at the display call
 // site via this map, so registry.tsx doesn't need a locale import.
@@ -719,6 +764,7 @@ const BLOCK_GROUP_LABELS_FA: Record<string, string> = {
   Layout: 'چیدمان',
   Content: 'محتوا',
   Elements: 'عناصر',
+  Form: 'فرم',
 }
 
 export function blockGroupLabel(locale: Locale, groupLabel: string): string {
