@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { Editor } from '@tiptap/react'
-import { FONT_FAMILIES, FONT_SIZES, FONT_WEIGHTS, HIGHLIGHT_COLORS } from './richText'
+import { getFontFamilies, getFontSizes, getFontWeights, getHighlightColors, ensurePersianFontsLoaded } from './richText'
+import { useBuilderStore } from './store'
 
 const MARGIN = 8  // gap kept from viewport edges when clamping
 const GAP    = 8  // vertical gap kept between the toolbar and the text itself
@@ -17,6 +18,44 @@ export function RichTextToolbar({
   const [placement, setPlacement] = useState<'above' | 'below'>('above')
   const [leftOffset, setLeftOffset] = useState(0)
   const [maxWidth, setMaxWidth] = useState<number | undefined>(undefined)
+
+  // Locale drives which dropdown option lists are shown (Persian fonts,
+  // translated weight/size/highlight labels — see richText.ts's
+  // getFontFamilies/getFontWeights/getFontSizes/getHighlightColors) — the
+  // exact same "swap the whole set, don't just translate labels in place"
+  // approach templates.ts already uses for its own locale-parameterized
+  // content, since a Latin-only font list genuinely doesn't apply to Farsi
+  // content rather than just needing different words.
+  const locale = useBuilderStore(s => s.locale)
+  const FONT_FAMILIES    = getFontFamilies(locale)
+  const FONT_SIZES       = getFontSizes(locale)
+  const FONT_WEIGHTS     = getFontWeights(locale)
+  const HIGHLIGHT_COLORS = getHighlightColors(locale)
+
+  // Loads the Persian Google Fonts stylesheet the moment this toolbar is
+  // showing in Farsi mode, so the font-family dropdown's own preview text
+  // and any freshly-applied Persian font render correctly right away
+  // instead of only after a page reload. useRichTextEdit's own hook (in
+  // richText.ts) triggers the same load as soon as Farsi editing starts
+  // anywhere, so in practice this is usually already a no-op by the time
+  // the toolbar mounts — kept here too as a safety net for any path that
+  // reaches this toolbar without going through that hook first.
+  useEffect(() => {
+    if (locale === 'fa') ensurePersianFontsLoaded()
+  }, [locale])
+
+  // Persian option labels ("وزیرمتن (Vazirmatn)", "نیمه‌ضخیم", …) run
+  // noticeably longer than their English counterparts once rendered in a
+  // Farsi-capable font — widened here so labels don't get clipped inside
+  // the toolbar's otherwise-fixed-width <select> elements. The toolbar's
+  // own positioning math (leftOffset/maxWidth below) already reads each
+  // select's rendered width off the DOM via the wrapper's own
+  // ResizeObserver, so a wider select here is accounted for automatically
+  // — nothing else needs to change to keep the toolbar from overflowing
+  // the viewport.
+  const fontFamilyWidthClass = locale === 'fa' ? 'w-[168px]' : 'w-[104px]'
+  const fontWeightWidthClass = locale === 'fa' ? 'w-[120px]' : 'w-[100px]'
+  const selectDir = locale === 'fa' ? 'rtl' : 'ltr'
 
   // Repositions AND resizes the toolbar so it (a) never gets clipped off
   // the top/side of the browser window, and (b) wraps into more rows
@@ -146,6 +185,7 @@ export function RichTextToolbar({
         <Divider />
 
         <select
+          dir={selectDir}
           value={(editor.getAttributes('textStyle').fontFamily as string) ?? ''}
           onChange={e => {
             const v = e.target.value
@@ -153,7 +193,7 @@ export function RichTextToolbar({
             else editor.chain().focus().unsetFontFamily().run()
           }}
           title="Font family"
-          className="h-7 text-xs border border-neutral-200 rounded pl-1.5 pr-1 bg-white text-neutral-600 focus:outline-none w-[104px] shrink-0"
+          className={`h-7 text-xs border border-neutral-200 rounded pl-1.5 pr-1 bg-white text-neutral-600 focus:outline-none ${fontFamilyWidthClass} shrink-0`}
         >
           {FONT_FAMILIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
@@ -172,6 +212,7 @@ export function RichTextToolbar({
         </select>
 
         <select
+          dir={selectDir}
           value={(editor.getAttributes('textStyle').fontWeight as string) ?? ''}
           onChange={e => {
             const v = e.target.value
@@ -179,7 +220,7 @@ export function RichTextToolbar({
             else (editor.chain().focus() as any).unsetFontWeight().run()
           }}
           title="Font weight"
-          className="h-7 text-xs border border-neutral-200 rounded pl-1.5 pr-1 bg-white text-neutral-600 focus:outline-none w-[100px] shrink-0"
+          className={`h-7 text-xs border border-neutral-200 rounded pl-1.5 pr-1 bg-white text-neutral-600 focus:outline-none ${fontWeightWidthClass} shrink-0`}
         >
           {FONT_WEIGHTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
