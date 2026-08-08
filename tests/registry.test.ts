@@ -107,7 +107,7 @@ describe('defaultFullWidth flag — must match the documented hardcoded-w-full n
   // whenever it sits in a non-stretch-aligned flex parent.
   const shouldBeFullWidth: NodeType[] = [
     'section', 'columns', 'image', 'divider', 'accordion',
-    'grid', 'tabs', 'tabpane', 'carousel', 'slide',
+     'grid', 'tabs', 'tabpane', 'carousel', 'slide', 'form',
   ]
 
   it.each(shouldBeFullWidth)('%s has defaultFullWidth: true', (type) => {

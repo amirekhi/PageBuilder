@@ -138,11 +138,11 @@ export function readFileAsText(file: File): Promise<string> {
 // is emitted after tablet so it correctly wins at very narrow widths where
 // both queries match.
 //
-// INTERACTIVE BLOCKS (Tabs, Carousel, Accordion): Preview drives these with
-// React state (activeIndex / openIdx). The exported file has no React, so
-// each gets a small, self-contained vanilla-JS behavior in
-// INTERACTIVE_SCRIPT at the bottom of this file — one shared script,
-// feature-detecting which blocks are actually present via their
+// INTERACTIVE BLOCKS (Tabs, Carousel, Accordion, Form): Preview drives these
+// with React state (activeIndex / openIdx / submit status). The exported
+// file has no React, so each gets a small, self-contained vanilla-JS
+// behavior in INTERACTIVE_SCRIPT at the bottom of this file — one shared
+// script, feature-detecting which blocks are actually present via their
 // data-pb-* marker attributes, so pages with none of these cost nothing
 // extra.
 //
@@ -273,12 +273,12 @@ function animAttrs(node: PageNode): string {
   return ` data-pb-animate="1" data-pb-trigger="${trigger}" data-pb-once="${once ? '1' : '0'}"`
 }
 
-// ─── Combined interactive behavior (Animations + Accordion + Tabs + Carousel) ──
+// ─── Combined interactive behavior (Animations + Accordion + Tabs + Carousel + Form) ──
 // One shared script, appended once, only when at least one interactive
 // marker attribute is actually present in the body (see needsInteractiveScript
 // in exportToHtml below) — feature-detects each behavior independently via
-// querySelectorAll, so a page with e.g. only Tabs and no Carousel/Accordion
-// pays no extra runtime cost for the ones it doesn't use.
+// querySelectorAll, so a page with e.g. only Tabs and no Carousel/Accordion/
+// Form pays no extra runtime cost for the ones it doesn't use.
 //
 // Each block below mirrors its React counterpart's actual behavior, not
 // just its appearance:
@@ -292,6 +292,10 @@ function animAttrs(node: PageNode): string {
 //     re-armed one-shot-timeout chain (matching CarouselPreview's own
 //     useEffect exactly, including loop/no-loop stopping behavior and
 //     pause-on-hover).
+//   - Form: AJAX submit via fetch, mirroring FormPreview's own handleSubmit
+//     in formNodes.tsx exactly (same FormData serialization, same
+//     JSON-vs-multipart choice, same success/error messaging) — see the
+//     new block at the bottom of this script.
 const INTERACTIVE_SCRIPT = `<script>
 (function(){
   // ── Scroll/onLoad animations ──
@@ -391,6 +395,50 @@ const INTERACTIVE_SCRIPT = `<script>
     car.addEventListener('mouseleave', function(){ paused = false; scheduleNext(); });
     scheduleNext();
   });
+
+  // ── Forms: AJAX submit with success/error messaging ──
+  // Mirrors FormPreview's handleSubmit in formNodes.tsx exactly: native
+  // FormData serialization (no per-field state to keep in sync), a fetch
+  // to the configured destination with either a multipart FormData body
+  // or a JSON body depending on the author's "Send as JSON" choice, and a
+  // success/error message swapped into the .pb-form-status placeholder
+  // paragraph every <form> already renders (see the 'form' case in
+  // renderNode below).
+  document.querySelectorAll('[data-pb-form]').forEach(function(form){
+    var action  = form.getAttribute('data-action');
+    var method  = form.getAttribute('data-method') || 'POST';
+    var asJson  = form.getAttribute('data-json') === '1';
+    var successMsg = form.getAttribute('data-success') || 'Thanks!';
+    var errorMsg   = form.getAttribute('data-error') || 'Something went wrong.';
+    var statusEl = form.querySelector('.pb-form-status');
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      if (!action) return;
+      var fd = new FormData(form);
+      var submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      fetch(action, {
+        method: method,
+        headers: asJson ? { 'Content-Type': 'application/json', 'Accept': 'application/json' } : { 'Accept': 'application/json' },
+        body: asJson ? JSON.stringify(Object.fromEntries(fd.entries())) : fd
+      }).then(function(res){
+        if (statusEl) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = res.ok ? successMsg : errorMsg;
+          statusEl.style.color = res.ok ? '#16a34a' : '#dc2626';
+        }
+        if (res.ok) form.reset();
+      }).catch(function(){
+        if (statusEl) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = errorMsg;
+          statusEl.style.color = '#dc2626';
+        }
+      }).finally(function(){
+        if (submitBtn) submitBtn.disabled = false;
+      });
+    });
+  });
 })();
 </script>`
 
@@ -461,6 +509,13 @@ function collectStyleCss(nodes: NodeMap, rootId: string): string {
 // check, since now the class is also how base responsive styling attaches.
 // Simpler and can never drift into "class exists in <style> but missing
 // from the element" or vice versa.
+
+// Shared input-field styling for exported form fields — kept as one
+// literal string constant so every field case below (formInput/
+// formTextarea/formSelect) stays visually identical, same instinct as the
+// `vc` variant-class lookups already used for button/badge.
+const FORM_INPUT_CLASS =
+  'w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-violet-400 focus:border-violet-400 transition-colors'
 
 function renderNode(nodeId: string, nodes: NodeMap, rootId: string, depth = 0): string {
   const node = nodes[nodeId]
@@ -715,6 +770,89 @@ ${pad}</div>`
     case 'slide':
       return `${pad}<div class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim}>\n${kids}\n${pad}</div>`
 
+    // ── Form ────────────────────────────────────────────────────────────
+    // A real <form> with the destination/method/JSON-vs-multipart choice
+    // and the success/error message text baked into data-* attributes,
+    // read by INTERACTIVE_SCRIPT's forms block at runtime (see the doc
+    // comment there) — mirrors FormPreview's handleSubmit in
+    // formNodes.tsx exactly, just as plain JS instead of a React handler.
+    // The trailing <p class="pb-form-status"> is the single place the
+    // script swaps in the success/error text; hidden by default via an
+    // inline style so it costs nothing visually until a submission
+    // actually resolves.
+    case 'form': {
+      const action         = (node.props.action as string) || ''
+      const method         = ((node.props.method as string) || 'POST').toUpperCase()
+      const asJson         = node.props.submitAsJson ? '1' : '0'
+      const successMessage = (node.props.successMessage as string) || 'Thanks! Your submission has been received.'
+      const errorMessage   = (node.props.errorMessage as string) || 'Something went wrong — please try again.'
+      return `${pad}<form class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim} novalidate data-pb-form="1" data-action="${esc(action)}" data-method="${esc(method)}" data-json="${asJson}" data-success="${esc(successMessage)}" data-error="${esc(errorMessage)}">
+${kids}
+${pad}  <p class="pb-form-status text-sm mt-2" style="display:none"></p>
+${pad}</form>`
+    }
+
+    // ── Form fields ─────────────────────────────────────────────────────
+    // Each renders a real, natively-named form control so the browser's
+    // own FormData serialization (read by INTERACTIVE_SCRIPT's forms
+    // block) picks it up with zero extra wiring — same "let the platform
+    // do it" instinct FormInputPreview/etc. already use in formNodes.tsx.
+    case 'formInput': {
+      const fieldName = esc((node.props.fieldName as string) || 'field')
+      const label     = (node.props.label as string) || ''
+      const inputType = (node.props.inputType as string) || 'text'
+      const required  = node.props.required ? ' required' : ''
+      return `${pad}<label class="${cls('flex flex-col gap-1.5', wrapCls)}"${anim}>
+${label ? `${pad}  <span class="text-sm font-medium text-neutral-700">${esc(label)}${node.props.required ? ' <span class="text-red-500">*</span>' : ''}</span>` : ''}
+${pad}  <input type="${esc(inputType)}" name="${fieldName}" placeholder="${esc((node.props.placeholder as string) || '')}"${required} class="${FORM_INPUT_CLASS}" />
+${pad}</label>`
+    }
+
+    case 'formTextarea': {
+      const fieldName = esc((node.props.fieldName as string) || 'message')
+      const label     = (node.props.label as string) || ''
+      const rows      = (node.props.rows as number) ?? 4
+      const required  = node.props.required ? ' required' : ''
+      return `${pad}<label class="${cls('flex flex-col gap-1.5', wrapCls)}"${anim}>
+${label ? `${pad}  <span class="text-sm font-medium text-neutral-700">${esc(label)}${node.props.required ? ' <span class="text-red-500">*</span>' : ''}</span>` : ''}
+${pad}  <textarea name="${fieldName}" rows="${rows}" placeholder="${esc((node.props.placeholder as string) || '')}"${required} class="${FORM_INPUT_CLASS} resize-y"></textarea>
+${pad}</label>`
+    }
+
+    case 'formSelect': {
+      const fieldName = esc((node.props.fieldName as string) || 'field')
+      const label     = (node.props.label as string) || ''
+      const options   = (node.props.options as string[]) ?? ['Option 1', 'Option 2']
+      const required  = node.props.required ? ' required' : ''
+      const opts = options.map(o => `${pad}    <option value="${esc(o)}">${esc(o)}</option>`).join('\n')
+      return `${pad}<label class="${cls('flex flex-col gap-1.5', wrapCls)}"${anim}>
+${label ? `${pad}  <span class="text-sm font-medium text-neutral-700">${esc(label)}${node.props.required ? ' <span class="text-red-500">*</span>' : ''}</span>` : ''}
+${pad}  <select name="${fieldName}"${required} class="${FORM_INPUT_CLASS}">
+${opts}
+${pad}  </select>
+${pad}</label>`
+    }
+
+    case 'formCheckbox': {
+      const fieldName = esc((node.props.fieldName as string) || 'field')
+      const label     = (node.props.label as string) || 'Checkbox label'
+      const required  = node.props.required ? ' required' : ''
+      return `${pad}<label class="${cls('flex items-center gap-2', wrapCls)}"${anim}>
+${pad}  <input type="checkbox" name="${fieldName}" value="on" class="w-4 h-4 accent-violet-600"${required} />
+${pad}  <span class="text-sm text-neutral-700">${esc(label)}${node.props.required ? ' <span class="text-red-500">*</span>' : ''}</span>
+${pad}</label>`
+    }
+
+    case 'formSubmit': {
+      const label   = (node.props.label as string) || 'Submit'
+      const variant = (node.props.variant as string) || 'solid'
+      const vc =
+        variant === 'outline' ? 'border-2 border-violet-600 text-violet-600 hover:bg-violet-50' :
+        variant === 'ghost'   ? 'text-violet-600 hover:bg-violet-50' :
+        'bg-violet-600 text-white hover:bg-violet-700'
+      return `${pad}<button type="submit" class="${cls(`inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-medium transition-colors text-sm ${vc}`, wrapCls)}"${anim}>${esc(label)}</button>`
+    }
+
     default:
       return ''
   }
@@ -768,7 +906,7 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
   const styleCss = collectStyleCss(nodes, rootId)
   const globalCss = opts.globalCustomCss?.trim() ?? ''
   const styleBlock = [globalCss, styleCss].filter(Boolean).join('\n\n')
-  const needsInteractiveScript = /data-pb-(animate|accordion|tabs|carousel)/.test(body)
+  const needsInteractiveScript = /data-pb-(animate|accordion|tabs|carousel|form)/.test(body)
 
   const locale = opts.locale ?? 'en'
   const dir    = locale === 'fa' ? 'rtl' : 'ltr'
@@ -791,8 +929,8 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
     generated from the same style-resolution functions the live editor and
     Preview use (see styleMapper.ts / responsive.ts) — this file mirrors
     Preview directly instead of duplicating that logic by hand. Tabs,
-    Carousel, and Accordion get real interactive HTML/CSS/vanilla-JS (see
-    INTERACTIVE_SCRIPT) instead of React, so they behave the same as
+    Carousel, Accordion, and Form get real interactive HTML/CSS/vanilla-JS
+    (see INTERACTIVE_SCRIPT) instead of React, so they behave the same as
     Preview with zero framework runtime.
   -->
   <script src="https://cdn.tailwindcss.com"></script>
