@@ -181,20 +181,28 @@ export interface GlobalColor {
   value: string // hex, e.g. '#7c3aed'
 }
 
-// Deliberately just the "shape" fields (size/weight/line-height/align) —
-// the same subset StylePanel's own Typography group already exposes.
-// Unlike GlobalColor, applying one of these is a one-time COPY onto a
-// node's style, not a live reference: a text style touches several
-// StyleProps fields at once (fontSize + fontWeight + leading + textAlign),
-// and letting a node "subscribe" to all of them simultaneously would mean
-// either overriding fields the user deliberately customized afterward, or
-// building a much heavier partial-override-tracking system than a first
-// version needs. Copy-once matches how "paragraph styles" work in most
-// design tools' quick-apply feature, as opposed to their separate (heavier)
-// linked-style-system feature.
+// Deliberately just the "shape" fields (font, size/weight/line-height/
+// align) — the same subset StylePanel's own Typography group already
+// exposes. Unlike GlobalColor, applying one of these is a one-time COPY
+// onto a node's style, not a live reference: a text style touches several
+// StyleProps fields at once (fontFamily + fontSize + fontWeight + leading +
+// textAlign), and letting a node "subscribe" to all of them simultaneously
+// would mean either overriding fields the user deliberately customized
+// afterward, or building a much heavier partial-override-tracking system
+// than a first version needs. Copy-once matches how "paragraph styles" work
+// in most design tools' quick-apply feature, as opposed to their separate
+// (heavier) linked-style-system feature.
+//
+// fontFamily added alongside the original four fields — stores the same
+// raw, ready-to-use CSS font-family string StyleProps.fontFamily itself
+// stores (see the doc comment there), so applying a preset with a Persian
+// font set on it (e.g. via GlobalTypographyManager in panelComponents.tsx,
+// using richText.ts's locale-aware getFontFamilies) copies that font onto
+// the target block exactly the same way fontSize/fontWeight already do.
 export interface GlobalTypographyStyle {
   id:         string
   name:       string
+  fontFamily?: StyleProps['fontFamily']
   fontSize?:   StyleProps['fontSize']
   fontWeight?: StyleProps['fontWeight']
   leading?:    StyleProps['leading']
