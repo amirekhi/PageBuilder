@@ -9,6 +9,7 @@ import { useNodeAnimation, patchNodeAnimation, hasAnimationOverrideAt, clearNode
 import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { sanitizeElementId } from './elementId'
 import { useT, useDirection } from './i18n'
+import { getFontFamilies, ensurePersianFontsLoaded } from './richText'
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 // Sets `dir={direction}` from useDirection() — this is the ONE place that
 // cascades RTL to nearly every panel in this file, since almost every
@@ -675,6 +676,7 @@ function TypographyPresetPicker({
           const preset = presets.find(p => p.id === id)
           if (!preset) return
           onApply({
+            fontFamily: preset.fontFamily,
             fontSize:   preset.fontSize,
             fontWeight: preset.fontWeight,
             leading:    preset.leading,
@@ -764,6 +766,19 @@ export function StylePanel({
       : onChange({ shadow: v as StyleProps['shadow'] })
 
   const t = useT()
+  // Locale-aware font list — see the doc comment on StyleProps.fontFamily
+  // in styleMapper.ts. Reuses the EXACT same getFontFamilies(locale)
+  // function the rich-text toolbar uses (richText.ts), so there is one
+  // canonical font list for the whole app rather than a separate one for
+  // block-level styling. Loads the Persian Google Fonts stylesheet as soon
+  // as this panel renders in Farsi mode, same trigger point
+  // RichTextToolbar.tsx and useRichTextEdit already use — cheap/no-op if
+  // it's already been loaded via either of those.
+  const locale = useBuilderStore(s => s.locale)
+  const fontFamilies = getFontFamilies(locale)
+  useEffect(() => {
+    if (locale === 'fa') ensurePersianFontsLoaded()
+  }, [locale])
 
   return (
     <div className="space-y-5 p-4">
@@ -906,6 +921,19 @@ export function StylePanel({
 
       <FieldGroup label={t('sectionTypography')}>
         <TypographyPresetPicker onApply={onChange} />
+        {/* Font Family — see the doc comment on StyleProps.fontFamily
+            (styleMapper.ts) for why this is a raw pass-through CSS value
+            rather than an enum, and on getFontFamilies (richText.ts) for
+            why the option list itself swaps entirely by locale (Persian
+            fonts genuinely aren't the same list as Latin ones, not just a
+            translation of the same labels). Not hover-capable, same as
+            Size/Weight/Align below — font changes on hover would be
+            layout-jank-prone the same way width/height changes are. */}
+        <SelectField
+          label={t('fontFamilyLabel')} value={style.fontFamily ?? ''}
+          options={fontFamilies}
+          onChange={v => onChange({ fontFamily: v || undefined })}
+        />
         <SelectField
           label={t('typoSize')} value={style.fontSize ?? ''}
           options={[{label:'—',value:''}, 'xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl']}
@@ -1267,6 +1295,13 @@ export function GlobalTypographyManager() {
   // shadowing it with the translation function would break every `t.id`/
   // `t.name`/etc reference inside that callback.
   const tr                      = useT()
+  // Locale-aware font list — same getFontFamilies(locale) StylePanel uses
+  // above, so a preset saved here (e.g. "Farsi Heading" bound to
+  // Vazirmatn) offers the exact same font choices a block's own Style tab
+  // would, and copies the same raw font-family string onto whatever block
+  // applies it (see TypographyPresetPicker's onApply above).
+  const locale = useBuilderStore(s => s.locale)
+  const fontFamilies = getFontFamilies(locale)
 
   return (
     <FieldGroup label={tr('sectionTypographyStyles')}>
@@ -1291,6 +1326,11 @@ export function GlobalTypographyManager() {
                 ✕
               </button>
             </div>
+            <SelectField
+              label={tr('fontFamilyLabel')} value={t.fontFamily ?? ''}
+              options={fontFamilies}
+              onChange={v => updateGlobalTypography(t.id, { fontFamily: v || undefined })}
+            />
             <SelectField
               label={tr('typoSize')} value={t.fontSize ?? 'base'}
               options={['xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl']}

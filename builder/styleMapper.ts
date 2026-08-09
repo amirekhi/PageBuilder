@@ -48,6 +48,20 @@ export interface StyleProps {
   borderColor?: string
 
   // Typography
+  // fontFamily is stored as a raw, ready-to-use CSS font-family value (e.g.
+  // "'Vazirmatn', ui-sans-serif, system-ui, sans-serif") — exactly the same
+  // string shape Tiptap's own FontFamily mark already stores for rich-text
+  // content (see richText.ts). Sharing that shape (and, in the panel UI,
+  // the SAME locale-aware option list — see getFontFamilies in richText.ts,
+  // reused by StylePanel and GlobalTypographyManager in
+  // panelComponents.tsx) means there's one canonical font list for the
+  // whole app, not a separate one for "rich text" vs "block style".
+  // Undefined/'' means "inherit from the parent" — since font-family is a
+  // normally-inherited CSS property, setting this on a container (e.g. the
+  // root Section) cascades to every text-bearing descendant for free,
+  // which is what makes this double as a lightweight "page base font"
+  // control without needing separate plumbing for that.
+  fontFamily?: string
   fontSize?:   'xs'|'sm'|'base'|'lg'|'xl'|'2xl'|'3xl'|'4xl'|'5xl'|'6xl'
   fontWeight?: 'light'|'normal'|'medium'|'semibold'|'bold'|'extrabold'
   textAlign?:  'left'|'center'|'right'|'justify'
@@ -560,6 +574,11 @@ export function buildInlineStyle(
 
   // Typography — real inline CSS now (see buildFlexInlineProps comment above
   // for why the old `text-${style.fontSize}`-style classes were unreliable).
+  // fontFamily is a raw, pass-through CSS value (see the doc comment on
+  // StyleProps.fontFamily) — no enum-to-CSS lookup needed, unlike fontSize/
+  // fontWeight/leading below, since the panel UI already writes a complete,
+  // ready-to-use font-family string (see getFontFamilies in richText.ts).
+  if (style.fontFamily) s.fontFamily = style.fontFamily
   if (style.fontSize)   s.fontSize   = `${FONT_SIZE_PX[style.fontSize]}px`
   if (style.fontWeight) s.fontWeight = FONT_WEIGHT_NUM[style.fontWeight]
   if (style.textAlign)  s.textAlign  = style.textAlign
@@ -841,6 +860,18 @@ export function buildSectionOuterStyle(
   }
 
   if (style.textColor)   s.color       = resolveColor(style.textColor)
+  // fontFamily applied here alongside `color` (both are ordinary inherited
+  // CSS properties) — this is what lets a font chosen on the Section's own
+  // Style tab cascade down to every text-bearing descendant (Heading, Text,
+  // List, Quote, …) for free via normal CSS inheritance, with zero extra
+  // plumbing needed on any of those child components. Setting a font on
+  // the page's ROOT Section this way is the closest thing this app has to
+  // a single "page base font" control — see the doc comment on
+  // StyleProps.fontFamily. fontSize/fontWeight/textAlign are deliberately
+  // NOT mirrored here (pre-existing behavior, unchanged by this addition)
+  // — Section's Style tab shows those controls too, but they've never had
+  // an effect on the Section itself, only fontFamily and color do.
+  if (style.fontFamily)  s.fontFamily  = style.fontFamily
   if (style.borderColor) s.borderColor = resolveColor(style.borderColor)
   if (style.rounded && style.rounded !== 'none') s.borderRadius = `${ROUNDED_PX[style.rounded]}px`
   if (style.borderWidth !== undefined && style.borderWidth > 0) {

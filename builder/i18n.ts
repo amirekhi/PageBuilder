@@ -117,6 +117,7 @@ const DICT = {
     gradientLabel: 'Gradient', gradientLabelHover: 'Gradient (hover)',
 
     // ── StylePanel: Typography ──
+    fontFamilyLabel: 'Font family',
     typoSize: 'Size', typoWeight: 'Weight', typoTextAlign: 'Text align',
     textColorLabel: 'Text color', textColorLabelHover: 'Text color (hover)',
     presetLabel: 'Preset', applySavedStyle: 'Apply a saved style…',
@@ -451,6 +452,7 @@ const DICT = {
     gradientLabel: 'گرادیان', gradientLabelHover: 'گرادیان (هاور)',
 
     // ── StylePanel: Typography ──
+    fontFamilyLabel: 'فونت',
     typoSize: 'اندازه', typoWeight: 'وزن', typoTextAlign: 'ترازبندی متن',
     textColorLabel: 'رنگ متن', textColorLabelHover: 'رنگ متن (هاور)',
     presetLabel: 'الگو', applySavedStyle: 'اعمال یک استایل ذخیره‌شده…',
