@@ -20,6 +20,10 @@ import { useBuilderStore } from './store'
 import type { Locale } from './store'
 import { PageNode } from './types'
 import { directionForLocale } from './i18n'
+import {
+  resolveContentForBreakpoint, commitContentForBreakpoint,
+  clearContentOverride, hasContentOverrideAt,
+} from './richTextResponsive'
 
 // ─── Toolbar dropdown option shape ─────────────────────────────────────────
 // Shared shape for every *_EN/*_FA pair below (Font Family, Font Weight,
@@ -347,6 +351,35 @@ export function buildHeadingExtensions(): AnyExtension[] {
 // outside the wrapper entirely — clicking elsewhere on the canvas, a panel
 // field, etc.).
 //
+// NEW (breakpoint-aware content): this hook used to read/write
+// node.props[prop] directly — a single copy shared by every breakpoint,
+// which is exactly what caused editing font size while viewing Mobile to
+// silently change Desktop too (there was only ever one string to edit).
+// Fixed via richTextResponsive.ts's three-bucket cascade
+// (content/contentTablet/contentMobile), mirroring the exact pattern
+// style/animation already use:
+//   - LOADING: the content-sync effect below now resolves against
+//     resolveContentForBreakpoint(node, prop, editingBreakpoint) instead of
+//     reading node.props[prop] directly, so opening the editor while
+//     viewing Mobile loads Mobile's own snapshot (or falls back up the
+//     chain if Mobile has none yet).
+//   - COMMITTING: commitAndClose now writes through
+//     commitContentForBreakpoint, which — like patchNodeStyle — always
+//     targets whichever breakpoint is ACTIVE AT COMMIT TIME, reading
+//     editingBreakpoint fresh off the store rather than a stale closure
+//     value.
+//   - SWITCHING BREAKPOINTS MID-EDIT: if the user changes
+//     Desktop/Tablet/Mobile while the editor is still open, the "switch
+//     breakpoint while mid-edit" effect below auto-commits and closes
+//     first — the same safe, predictable behavior as switching away to a
+//     different selected block (see the existing commit-on-deselect
+//     effect), rather than leaving the editor open showing stale content
+//     while writes silently get attributed to a different breakpoint.
+//   - RESETTING: hasOverride/clearOverride are exposed so callers (the
+//     RichTextToolbar's breakpoint pill, and TextPanel/HeadingPanel's
+//     plain-textarea fallback) can show the familiar "differs from
+//     Desktop" pill + reset button StyleTab/AnimationPanel already have.
+//
 // NEW: dir attribute on the underlying ProseMirror contenteditable, kept in
 // sync with the current locale (see directionForLocale in i18n.ts) via a
 // plain imperative DOM update in an effect — NOT via editorProps.attributes
@@ -357,15 +390,19 @@ export function buildHeadingExtensions(): AnyExtension[] {
 // whichever direction is active right now without ever tearing down and
 // rebuilding the whole editor instance.
 export function useRichTextEdit(node: PageNode, prop: string, extensions: AnyExtension[]) {
-  const updateProps    = useBuilderStore(s => s.updateProps)
-  const selectedId     = useBuilderStore(s => s.selectedId)
-  const setRichEditing = useBuilderStore(s => s.setRichEditing)
-  const locale         = useBuilderStore(s => s.locale)
+  const updateProps       = useBuilderStore(s => s.updateProps)
+  const selectedId        = useBuilderStore(s => s.selectedId)
+  const setRichEditing    = useBuilderStore(s => s.setRichEditing)
+  const locale             = useBuilderStore(s => s.locale)
+  const editingBreakpoint  = useBuilderStore(s => s.editingBreakpoint)
   const [isRichEditing, setIsRichEditing] = useState(false)
+
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  const hasOverride = isOverrideBreakpoint && hasContentOverrideAt(node, prop, editingBreakpoint)
 
   const editor = useEditor({
     extensions,
-    content: (node.props[prop] as string) ?? '',
+    content: resolveContentForBreakpoint(node, prop, editingBreakpoint),
     editable: false,
     immediatelyRender: false, // avoids an SSR/hydration mismatch in Next.js
     // NOTE: no onBlur here anymore — see handleBlur below, attached at the
@@ -401,11 +438,11 @@ export function useRichTextEdit(node: PageNode, prop: string, extensions: AnyExt
 
   const commitAndClose = useCallback((ed: Editor) => {
     const html = sanitizeRichText(ed.getHTML())
-    updateProps(node.id, { [prop]: html })
+    commitContentForBreakpoint(node, prop, p => updateProps(node.id, p), html)
     setIsRichEditing(false)
     setRichEditing(null)
     ed.setEditable(false)
-  }, [node.id, prop, updateProps, setRichEditing])
+  }, [node, prop, updateProps, setRichEditing])
 
   // Wrapper-level blur handler — see the big comment above. Attach this to
   // the outer div that wraps both the toolbar and EditorContent.
@@ -422,12 +459,33 @@ export function useRichTextEdit(node: PageNode, prop: string, extensions: AnyExt
     if (isRichEditing) requestAnimationFrame(() => editor.commands.focus('end'))
   }, [isRichEditing, editor])
 
+  // Keeps the Tiptap document in sync with whichever breakpoint's snapshot
+  // is currently RESOLVED (not just node.props[prop] directly — see the
+  // big comment above) whenever something changes it externally (undo/
+  // redo, a different collaborator, the plain-textarea fallback in
+  // TextPanel/HeadingPanel) while this editor isn't actively being typed
+  // into. Depends on all three buckets AND editingBreakpoint, so switching
+  // Desktop/Tablet/Mobile while NOT mid-edit correctly reloads whichever
+  // snapshot that breakpoint resolves to.
   useEffect(() => {
     if (!editor || isRichEditing) return
-    const incoming = (node.props[prop] as string) ?? ''
+    const incoming = resolveContentForBreakpoint(node, prop, editingBreakpoint)
     if (editor.getHTML() !== incoming) editor.commands.setContent(incoming, { emitUpdate: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.props[prop], editor, isRichEditing])
+  }, [node.props[prop], node.props[`${prop}Tablet`], node.props[`${prop}Mobile`], editor, isRichEditing, editingBreakpoint])
+
+  // Commit-on-breakpoint-switch — if the user changes Desktop/Tablet/
+  // Mobile while this exact editor is still open, close it out first
+  // rather than leaving it open showing stale content while any further
+  // typing would get silently attributed to the NEW breakpoint. Mirrors
+  // commit-on-deselect below exactly, just keyed off editingBreakpoint
+  // instead of selectedId.
+  useEffect(() => {
+    if (isRichEditing && editor) {
+      commitAndClose(editor)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingBreakpoint])
 
   // Commit-on-deselect — unrelated to the blur fix above, still needed for
   // the case where a different block is selected entirely (e.g. via the
@@ -444,5 +502,12 @@ export function useRichTextEdit(node: PageNode, prop: string, extensions: AnyExt
     setRichEditing(node.id)
   }, [node.id, setRichEditing])
 
-  return { isRichEditing, startEditing, editor, handleBlur }
+  const clearOverride = useCallback(() => {
+    clearContentOverride(node, prop, p => updateProps(node.id, p), editingBreakpoint)
+  }, [node.id, prop, updateProps, editingBreakpoint])
+
+  return {
+    isRichEditing, startEditing, editor, handleBlur,
+    editingBreakpoint, hasOverride, clearOverride,
+  }
 }

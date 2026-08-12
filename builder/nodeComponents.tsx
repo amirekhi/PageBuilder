@@ -7,7 +7,7 @@ import {
   buildSectionOuterStyle, buildSectionOuterClassName, buildSectionInnerClassName, buildSectionInnerStyle,
 } from './styleMapper'
 import { FieldGroup, SelectField, SpacingField, AlignField, ColorField, GradientField, BoxSpacingField, AnimationPanel, HoverToggle, CheckField } from './panelComponents'
-import { useBuilderStore } from './store'
+import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { useNodeStyle, patchNodeStyle } from './responsive'
 import { AnimationProps } from './animations'
 import { EditorContent } from '@tiptap/react'
@@ -18,6 +18,10 @@ import type { HoverStyleProps } from './customCss'
 import { elementId } from './elementId'
 import { resolveHref, type LinkType } from './links'
 import { useT } from './i18n'
+import {
+  useNodeContent, resolveContentForBreakpoint,
+  commitContentForBreakpoint, clearContentOverride, hasContentOverrideAt,
+} from './richTextResponsive'
 
 
 
@@ -1736,12 +1740,32 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const t = useT()
   const selectedId = useBuilderStore(st => st.selectedId)
   const isSelected = selectedId === node.id
-  const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getTextExtensions())
+  const {
+    isRichEditing, startEditing, editor, handleBlur,
+    editingBreakpoint, hasOverride, clearOverride,
+  } = useRichTextEdit(node, 'content', getTextExtensions())
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  // Called unconditionally, BEFORE the isRichEditing early return below —
+  // this must run on every render regardless of branch, or React sees a
+  // different number of hooks fired between the "editing" render and the
+  // "not editing" render and throws "Rendered fewer hooks than expected"
+  // the moment isRichEditing flips (exactly what double-clicking used to
+  // trigger). Harmless to compute even while isRichEditing is true; it's
+  // simply unused in that branch's JSX.
+  const content = useNodeContent(node, 'content')
 
   if (isRichEditing) {
     return (
       <div className="relative" id={elementId(node)} style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
-        <RichTextToolbar editor={editor} allowBlocks />
+        <RichTextToolbar
+          editor={editor}
+          allowBlocks
+          breakpointBadge={isOverrideBreakpoint ? {
+            label: `${PREVIEW_WIDTHS[editingBreakpoint].icon} ${PREVIEW_WIDTHS[editingBreakpoint].label}`,
+            hasOverride,
+            onClear: clearOverride,
+          } : undefined}
+        />
         <EditorContent
           editor={editor}
           className={buildClassName(s, withCustomCss(node, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none'))}
@@ -1750,38 +1774,82 @@ export const TextEditor: React.FC<NodeComponentProps> = ({ node }) => {
     )
   }
 
-  const hasContent = !!(node.props.content as string)
+  // Resolves against whichever breakpoint is currently being edited (via
+  // useNodeContent — see richTextResponsive.ts) rather than reading
+  // node.props.content directly, so switching Desktop/Tablet/Mobile while
+  // NOT actively editing still shows that breakpoint's own snapshot (or
+  // falls back to Desktop if it has none yet).
+  const hasContent = !!content
   return (
     <p
       id={elementId(node)}
       onDoubleClick={e => { e.stopPropagation(); startEditing() }}
       className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
-      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : t('dblClickEditText') }}
+      dangerouslySetInnerHTML={{ __html: hasContent ? content : t('dblClickEditText') }}
     />
   )
 }
 
 export const TextPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s = useNodeStyle(node)
+  // Mode-aware (edit → editingBreakpoint, preview → previewWidth) — see
+  // useNodeContent in richTextResponsive.ts. This is the fix for the bug
+  // where a font-size change made while viewing Mobile used to silently
+  // apply to Desktop too: Desktop and Mobile now read their OWN
+  // independent snapshot of node.props.content, instead of the single
+  // shared string every breakpoint used to read.
+  const content = useNodeContent(node, 'content')
   return (
     <p
       ref={animationRef}
       id={elementId(node)}
       className={buildClassName(s, customCssClass(node))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
-      dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
+      dangerouslySetInnerHTML={{ __html: content }}
     />
   )
 }
 
 export const TextPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const t = useT()
+  // Plain-textarea fallback (as opposed to double-click rich editing) —
+  // needs the exact same breakpoint-aware resolve/commit as
+  // useRichTextEdit itself, or editing here while viewing Tablet/Mobile
+  // would silently bypass the override system and always write straight
+  // to Desktop's content, reintroducing the original bug through this
+  // second entry point. Shows the same "differs from Desktop" pill +
+  // reset button StyleTab/AnimationPanel already use elsewhere.
+  const editingBreakpoint = useBuilderStore(st => st.editingBreakpoint)
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  const hasOverride = isOverrideBreakpoint && hasContentOverrideAt(node, 'content', editingBreakpoint)
+  const resolvedContent = resolveContentForBreakpoint(node, 'content', editingBreakpoint)
+
   return (
     <div className="space-y-5 p-4">
+      {isOverrideBreakpoint && (
+        <div className="flex items-center justify-between px-2 -mb-3">
+          <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+            {PREVIEW_WIDTHS[editingBreakpoint].icon} {t('editingContentAt', PREVIEW_WIDTHS[editingBreakpoint].label)}
+          </span>
+          {hasOverride && (
+            <button
+              onClick={() => clearContentOverride(node, 'content', onChange, editingBreakpoint)}
+              className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+              title={t('removeContentOverrideTitle')}
+            >
+              {t('resetToDesktop')}
+            </button>
+          )}
+        </div>
+      )}
       <FieldGroup label={t('tabContent')}>
         <label className="block text-xs text-neutral-500 mb-1">{t('textFieldLabel')}</label>
-        <textarea className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
+        <textarea
+          className="w-full border border-neutral-200 rounded-md text-sm p-2 resize-y min-h-20 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          value={resolvedContent}
+          onChange={e => commitContentForBreakpoint(node, 'content', onChange, e.target.value)}
+        />
         <p className="text-[10px] text-neutral-400 mt-1">{t('textTip')}</p>
       </FieldGroup>
       <AnimationPanel
@@ -1804,12 +1872,29 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
   const selectedId = useBuilderStore(st => st.selectedId)
   const isSelected = selectedId === node.id
-  const { isRichEditing, startEditing, editor, handleBlur } = useRichTextEdit(node, 'content', getHeadingExtensions())
+  const {
+    isRichEditing, startEditing, editor, handleBlur,
+    editingBreakpoint, hasOverride, clearOverride,
+  } = useRichTextEdit(node, 'content', getHeadingExtensions())
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  // Called unconditionally, BEFORE the isRichEditing early return below —
+  // see the identical comment in TextEditor above for why this must never
+  // move behind a conditional (React's "Rendered fewer hooks than
+  // expected" error the instant isRichEditing flips).
+  const content = useNodeContent(node, 'content')
 
   if (isRichEditing) {
     return (
       <div className="relative" id={elementId(node)} style={buildInlineStyle(s, { skipSizing: true })} onBlur={handleBlur}>
-        <RichTextToolbar editor={editor} allowBlocks={false} />
+        <RichTextToolbar
+          editor={editor}
+          allowBlocks={false}
+          breakpointBadge={isOverrideBreakpoint ? {
+            label: `${PREVIEW_WIDTHS[editingBreakpoint].icon} ${PREVIEW_WIDTHS[editingBreakpoint].label}`,
+            hasOverride,
+            onClear: clearOverride,
+          } : undefined}
+        />
         <EditorContent
           editor={editor}
           className={buildClassName(s, withCustomCss(node, 'outline-none ring-1 ring-violet-300 ring-inset rounded cursor-text [&_.ProseMirror]:outline-none'))}
@@ -1818,14 +1903,16 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
     )
   }
 
-  const hasContent = !!(node.props.content as string)
+  // Same breakpoint-aware resolution as TextEditor — see useNodeContent's
+  // doc comment in richTextResponsive.ts.
+  const hasContent = !!content
   return (
     <Tag
       id={elementId(node)}
       onDoubleClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing() }}
       className={buildClassName(s, withCustomCss(node, ['outline-none', isSelected ? 'cursor-text' : '', !hasContent ? 'text-neutral-300 italic' : ''].join(' ')))}
       style={buildInlineStyle(s, { skipSizing: true })}
-      dangerouslySetInnerHTML={{ __html: hasContent ? (node.props.content as string) : t('dblClickEditHeading') }}
+      dangerouslySetInnerHTML={{ __html: hasContent ? content : t('dblClickEditHeading') }}
     />
   )
 }
@@ -1833,24 +1920,54 @@ export const HeadingEditor: React.FC<NodeComponentProps> = ({ node }) => {
 export const HeadingPreview: React.FC<NodeComponentProps> = ({ node, animationRef, animationStyle }) => {
   const s   = useNodeStyle(node)
   const Tag = ((node.props.tag as HTag) || 'h2') as HTag
+  // Mode-aware, same fix as TextPreview — see useNodeContent's doc comment
+  // in richTextResponsive.ts.
+  const content = useNodeContent(node, 'content')
   return (
     <Tag
       ref={animationRef}
       id={elementId(node)}
       className={buildClassName(s, customCssClass(node))}
       style={{ ...buildInlineStyle(s), ...buildHoverTransitionStyle(node), ...animationStyle }}
-      dangerouslySetInnerHTML={{ __html: (node.props.content as string) ?? '' }}
+      dangerouslySetInnerHTML={{ __html: content }}
     />
   )
 }
 
 export const HeadingPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   const t = useT()
+  // Same breakpoint-aware plain-input fallback as TextPanel — see the doc
+  // comment there.
+  const editingBreakpoint = useBuilderStore(st => st.editingBreakpoint)
+  const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
+  const hasOverride = isOverrideBreakpoint && hasContentOverrideAt(node, 'content', editingBreakpoint)
+  const resolvedContent = resolveContentForBreakpoint(node, 'content', editingBreakpoint)
+
   return (
     <div className="space-y-5 p-4">
+      {isOverrideBreakpoint && (
+        <div className="flex items-center justify-between px-2 -mb-3">
+          <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+            {PREVIEW_WIDTHS[editingBreakpoint].icon} {t('editingContentAt', PREVIEW_WIDTHS[editingBreakpoint].label)}
+          </span>
+          {hasOverride && (
+            <button
+              onClick={() => clearContentOverride(node, 'content', onChange, editingBreakpoint)}
+              className="text-[10px] font-medium text-neutral-400 hover:text-red-500 transition-colors"
+              title={t('removeContentOverrideTitle')}
+            >
+              {t('resetToDesktop')}
+            </button>
+          )}
+        </div>
+      )}
       <FieldGroup label={t('tabContent')}>
         <label className="block text-xs text-neutral-500 mb-1">{t('textFieldLabel')}</label>
-        <input className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400" value={(node.props.content as string) ?? ''} onChange={e => onChange({ content: e.target.value })} />
+        <input
+          className="w-full border border-neutral-200 rounded-md text-sm p-2 focus:outline-none focus:ring-1 focus:ring-violet-400"
+          value={resolvedContent}
+          onChange={e => commitContentForBreakpoint(node, 'content', onChange, e.target.value)}
+        />
         <SelectField label={t('tagLabel')} value={(node.props.tag as string) ?? 'h2'} options={['h1','h2','h3','h4','h5','h6']} onChange={v => onChange({ tag: v })} />
         <p className="text-[10px] text-neutral-400 mt-1">{t('headingTip')}</p>
       </FieldGroup>

@@ -46,6 +46,8 @@ const DICT = {
     resetToDesktop: 'Reset to Desktop',
     editingStyleAt: (label: string) => `Editing ${label} style`,
     editingAnimationAt: (label: string) => `Editing ${label} animation`,
+    editingContentAt: (label: string) => `Editing ${label} content`,
+    removeContentOverrideTitle: "Remove this breakpoint's content override",
     positionSpacingNote: 'Position, spacing, and background for Sections are set in the Content tab, where the fuller controls live.',
 
     // Theme tab intro (ControlPanel.tsx)
@@ -389,6 +391,8 @@ const DICT = {
     resetToDesktop: 'بازگشت به دسکتاپ',
     editingStyleAt: (label: string) => `در حال ویرایش استایل ${label}`,
     editingAnimationAt: (label: string) => `در حال ویرایش انیمیشن ${label}`,
+    editingContentAt: (label: string) => `در حال ویرایش محتوای ${label}`,
+    removeContentOverrideTitle: 'حذف بازنویسی محتوای این اندازه صفحه',
     positionSpacingNote: 'موقعیت، فاصله‌گذاری و پس‌زمینه بخش‌ها در تب محتوا تنظیم می‌شوند، جایی که کنترل‌های کامل‌تر قرار دارند.',
 
     themeTabIntro: 'رنگ‌ها و استایل‌های تایپوگرافی در اینجا در کل صفحه اعمال می‌شوند. آن‌ها را در پایین مدیریت کنید، سپس از تب استایل هر بلوکی دوباره از آن‌ها استفاده کنید.',
