@@ -1641,3 +1641,38 @@ export function getTemplates(locale: Locale = 'en'): Template[] {
 // call getTemplates(locale) directly — always English. Prefer
 // getTemplates(locale) in new code (see DropSlot.tsx).
 export const TEMPLATES: Template[] = getTemplates('en')
+
+// ─── Section builder registry (for full PAGE templates — see pageTemplates.ts) ───
+// Exposes every section-build function above under a stable key so a page
+// template can compose several sections together (Hero + Features + Pricing
+// + Footer, etc.) without duplicating any section's copy/layout logic. Same
+// (locale) => { nodes, rootChildId } shape as Template['build'] above.
+// Calling the same builder twice on one page is always safe — id() mints a
+// fresh random id every call, so there's never a collision even if the same
+// section type appears twice on one page.
+export const SECTION_BUILDERS = {
+  hero: buildHero,
+  twoColFeature: buildTwoColFeature,
+  testimonial: buildTestimonial,
+  threeColFeatures: buildThreeColFeatures,
+  pricing: buildPricing,
+  faq: buildFAQ,
+  stats: buildStats,
+  header: buildHeader,
+  videoHero: buildVideoHero,
+  team: buildTeam,
+  newsletter: buildNewsletter,
+  logoCloud: buildLogoCloud,
+  footer: buildFooter,
+  comparison: buildComparison,
+  blogGrid: buildBlogGrid,
+  faqAccordion: buildFAQAccordion,
+  bentoGrid: buildBentoGrid,
+  featureTabs: buildFeatureTabs,
+  ctaBanner: buildCTABanner,
+  imageGallery: buildImageGallery,
+  logoCarousel: buildLogoCarousel,
+  testimonialCarousel: buildTestimonialCarousel,
+} as const
+
+export type SectionBuilderKey = keyof typeof SECTION_BUILDERS

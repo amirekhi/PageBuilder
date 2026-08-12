@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { getTemplates, type Template } from './templates'
+import { getPageTemplates, useInsertPageTemplate, PageTemplateGrid } from './pageTemplates'
 import { useBuilderStore, type Locale } from './store'
 import { useT, directionForLocale, nodeLabel, blockGroupLabel } from './i18n'
 import { NodeMap, NodeType } from './types'
@@ -95,11 +96,14 @@ export function TemplatePicker() {
 
 // ─── AddContentModal ──────────────────────────────────────────────────────────
 // The unique, expanded design for the empty canvas: a centered modal with a
-// Templates/Components segmented switch, rather than the sidebar's list.
-// Templates render as a 2-col card grid (bigger, since a template is a whole
-// section); Components render as a denser icon-tile grid grouped by
-// BLOCK_GROUPS (Layout / Content / Elements), since each one is a single,
-// small unit.
+// Templates/Pages/Components segmented switch, rather than the sidebar's
+// list. Templates render as a 2-col card grid (bigger, since a template is a
+// whole section); Pages render as a single-column list of full-page templates
+// (see pageTemplates.ts — each one replaces the whole canvas rather than
+// appending, which is safe here since this modal only ever shows while the
+// canvas is already empty); Components render as a denser icon-tile grid
+// grouped by BLOCK_GROUPS (Layout / Content / Elements), since each one is a
+// single, small unit.
 //
 // Component insertion goes straight through the store's addNode — no node
 // graft needed the way templates require, since NODE_REGISTRY + addNode
@@ -180,10 +184,12 @@ function AddContentModal({
   const rootId    = useBuilderStore(s => s.rootId)
   const addNode   = useBuilderStore(s => s.addNode)
   const templates = getTemplates(locale)
+  const pages     = getPageTemplates(locale)
   const insertTemplate = useInsertTemplate(templates)
+  const insertPage      = useInsertPageTemplate(pages)
   const t = useT()
 
-  const [tab, setTab] = useState<'templates' | 'components'>('templates')
+  const [tab, setTab] = useState<'templates' | 'pages' | 'components'>('templates')
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -197,6 +203,16 @@ function AddContentModal({
     insertTemplate(index)
     onClose()
   }, [insertTemplate, onClose])
+
+  // No "replace everything" confirmation needed here — this modal only ever
+  // renders while the canvas is already empty (see EmptyCanvasPrompt below),
+  // so a page template has nothing to destroy. The TopBar entry point (see
+  // PageTemplatePickerModal in pageTemplates.ts) is the one that needs the
+  // confirm step, since it can be opened with existing content on the page.
+  const handleInsertPage = useCallback((index: number) => {
+    insertPage(index)
+    onClose()
+  }, [insertPage, onClose])
 
   const handleInsertComponent = useCallback((type: NodeType) => {
     const rootChildren = useBuilderStore.getState().nodes[rootId]?.children ?? []
@@ -227,17 +243,17 @@ function AddContentModal({
             </button>
           </div>
 
-          {/* Two clearly separate, always-outlined buttons rather than a
-              single pill-on-gray track — the inactive tab keeps its own
+          {/* Three clearly separate, always-outlined buttons rather than a
+              single pill-on-gray track — every inactive tab keeps its own
               visible border so it still reads as a clickable option, not
               just muted text next to the active one. */}
-          <div role="tablist" className="flex gap-2">
+          <div role="tablist" className="flex gap-1.5">
             <button
               role="tab"
               aria-selected={tab === 'templates'}
               onClick={() => setTab('templates')}
               className={[
-                'flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                'flex-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                 tab === 'templates'
                   ? 'bg-violet-600 border-violet-600 text-white'
                   : 'bg-white border-neutral-200 text-neutral-600 hover:border-violet-300 hover:text-violet-700',
@@ -247,10 +263,23 @@ function AddContentModal({
             </button>
             <button
               role="tab"
+              aria-selected={tab === 'pages'}
+              onClick={() => setTab('pages')}
+              className={[
+                'flex-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                tab === 'pages'
+                  ? 'bg-violet-600 border-violet-600 text-white'
+                  : 'bg-white border-neutral-200 text-neutral-600 hover:border-violet-300 hover:text-violet-700',
+              ].join(' ')}
+            >
+              {t('pagesTab')}
+            </button>
+            <button
+              role="tab"
               aria-selected={tab === 'components'}
               onClick={() => setTab('components')}
               className={[
-                'flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                'flex-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                 tab === 'components'
                   ? 'bg-violet-600 border-violet-600 text-white'
                   : 'bg-white border-neutral-200 text-neutral-600 hover:border-violet-300 hover:text-violet-700',
@@ -263,9 +292,20 @@ function AddContentModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 mt-1">
-          {tab === 'templates'
-            ? <TemplateGrid templates={templates} onInsert={handleInsertTemplate} />
-            : <ComponentGrid locale={locale} onInsert={handleInsertComponent} />}
+          {tab === 'templates' && (
+            <TemplateGrid templates={templates} onInsert={handleInsertTemplate} />
+          )}
+          {tab === 'pages' && (
+            <>
+              <p className="text-[11px] text-neutral-400 mb-2 leading-relaxed">
+                {t('pageTemplatesIntro')}
+              </p>
+              <PageTemplateGrid templates={pages} onInsert={handleInsertPage} />
+            </>
+          )}
+          {tab === 'components' && (
+            <ComponentGrid locale={locale} onInsert={handleInsertComponent} />
+          )}
         </div>
       </div>
     </div>
