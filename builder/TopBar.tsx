@@ -14,6 +14,7 @@ import {
 import { LanguageToggle } from './LanguageToggle'
 import { useT } from './i18n'
 import { useTutorialT } from './tutorialI18n'
+import { PageTemplatePickerModal } from './pageTemplates'
 
 export function TopBar() {
   const mode                = useBuilderStore(s => s.mode)
@@ -31,12 +32,15 @@ export function TopBar() {
   const controlPanelTab      = useBuilderStore(s => s.controlPanelTab)
   const setControlPanelTab   = useBuilderStore(s => s.setControlPanelTab)
   const resetTutorial        = useBuilderStore(s => s.resetTutorial)
+  const rootId                = useBuilderStore(s => s.rootId)
+  const selectNode            = useBuilderStore(s => s.selectNode)
   const t                    = useT()
   const tt                   = useTutorialT()
 
   const [toast, setToast]         = useState<string | null>(null)
   const [menuOpen, setMenuOpen]   = useState(false)
   const [hasSave, setHasSave]     = useState(false)
+  const [pageModalOpen, setPageModalOpen] = useState(false)
   const menuRef                   = useRef<HTMLDivElement>(null)
   const importRef                 = useRef<HTMLInputElement>(null)
   const replayAnimations = useBuilderStore(s => s.replayAnimations) 
@@ -64,6 +68,17 @@ export function TopBar() {
   function handleSetMode(next: 'edit' | 'preview') {
     if (next === 'preview') setPreviewWidth(editingBreakpoint)
     setMode(next)
+  }
+
+  // Jumps straight to the root node's Style tab — the root is a plain
+  // `type: 'section'` node like any other (see INITIAL_NODES in store.ts),
+  // so this is nothing more than selectNode + setControlPanelTab using the
+  // exact same mechanism every other block already uses. See the
+  // PageWideBadge comment in ControlPanel.tsx for why this counts as
+  // "page defaults" without needing any separate system.
+  function handleOpenPageSettings() {
+    selectNode(rootId)
+    setControlPanelTab('style')
   }
 
   useEffect(() => {
@@ -141,7 +156,6 @@ function handleExportHTML() {
     nodes,
     rootId,
     globalColors,
-    globalTypography,
     globalCustomCss,
     seo,
     locale,
@@ -197,6 +211,23 @@ function handleExportHTML() {
         <TopBtn onClick={undo} disabled={!canUndo} title={t('undoTitle')}>↩</TopBtn>
         <TopBtn onClick={redo} disabled={!canRedo} title={t('redoTitle')}>↪</TopBtn>
       </div>
+
+      {/* Opens the root node's own Style tab — see handleOpenPageSettings
+          above. Sits next to the Theme/SEO switcher since it's the same
+          category of "whole page" control, but deliberately its own
+          button rather than a third option inside that switcher: Theme
+          holds reusable PRESETS (palette + text styles), this jumps to the
+          page's actual CURRENT typography/background — a related but
+          different concept, same distinction PageWideBadge draws in
+          ControlPanel.tsx. */}
+      <button
+        onClick={handleOpenPageSettings}
+        title={t('pageSettingsBtnTitle')}
+        data-tutorial="page-settings-btn"
+        className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-neutral-200 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-800 transition-colors shrink-0"
+      >
+        <span>🌐</span> {t('pageSettingsBtn')}
+      </button>
 
       <div className="flex bg-neutral-100 rounded-lg p-0.5 gap-0.5 shrink-0" data-tutorial="theme-seo-switcher">
         <button
@@ -294,6 +325,22 @@ function handleExportHTML() {
       <div className="flex items-center gap-2 shrink-0 relative" ref={menuRef}>
         <LanguageToggle />
 
+        {/* Opens a page-template picker that can be used at any time — not
+            just on an empty canvas (see EmptyCanvasPrompt/AddContentModal's
+            own "Pages" tab in TemplatePicker.tsx for the empty-canvas
+            entry point). Because there may already be content on the page,
+            PageTemplatePickerModal itself inserts an explicit "this
+            replaces everything" confirmation step before actually swapping
+            the canvas — see pageTemplates.ts. */}
+        <button
+          onClick={() => setPageModalOpen(true)}
+          title={t('pagesTabTitle')}
+          data-tutorial="pages-menu"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-neutral-200 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-800 transition-colors"
+        >
+          <span>📄</span> {t('pagesTab')}
+        </button>
+
         {/* Restart the guided tour on demand — clears the "seen" flag and
             reopens the language-choice modal, same starting point as a
             first-time visitor (see resetTutorial in store.ts). */}
@@ -386,6 +433,8 @@ function handleExportHTML() {
           {toast}
         </div>
       )}
+
+      {pageModalOpen && <PageTemplatePickerModal onClose={() => setPageModalOpen(false)} />}
     </header>
   )
 }

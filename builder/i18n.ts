@@ -27,9 +27,10 @@ export function useDirection(): Direction {
 // BoxSpacingField/AlignField/ColorField/GradientField/HoverToggle), plus
 // ControlPanel.tsx's own tab bar, Layers tab, Theme tab intro, and the two
 // panel empty states, DropSlot.tsx's BlockPicker, TemplatePicker.tsx /
-// EmptyCanvasPrompt, and TopBar.tsx in full (undo/redo, Theme/SEO tab
-// switcher, Edit/Preview mode + breakpoint switchers, the replay button,
-// the Save/Export menu and all its items, and the toast messages), and
+// EmptyCanvasPrompt, pageTemplates.ts's page-template picker/modal, and
+// TopBar.tsx in full (undo/redo, Theme/SEO tab switcher, Edit/Preview mode +
+// breakpoint switchers, the replay button, the Page/Pages buttons, the
+// Save/Export menu and all its items, and the toast messages), and
 // formNodes.tsx's Form/field panels.
 // NOT yet covered: the individual per-node-type Content panels in
 // nodeComponents.tsx (Button's "Label"/"Link" fields, Image's "Source"/
@@ -86,6 +87,25 @@ const DICT = {
     chooseTemplate: '+ Choose a template',
     dismiss: 'Dismiss',
     addContentTitle: 'Add content', closeAria: 'Close',
+
+    // ── Page templates (pageTemplates.ts) ──
+    pagesTab: 'Pages',
+    pagesTabTitle: 'Start from a full page template',
+    pageTemplatesTitle: 'Page templates',
+    pageTemplatesIntro: 'Insert a complete, ready-made page — this replaces everything currently on the canvas.',
+    confirmReplaceBody: "This will replace everything on your current page with this template. You can undo it afterwards with ⌘Z. Continue?",
+    confirmReplaceBtn: 'Replace page',
+    cancelBtn: 'Cancel',
+
+    // ── Page-wide defaults (TopBar "Page" button + ControlPanel.tsx's
+    // PageWideBadge) — selects the root node and jumps to its Style tab,
+    // so typography/background set there cascades to the whole page via
+    // the exact same per-node style mechanism every other block uses. ──
+    pageSettingsBtn: 'Page',
+    pageSettingsBtnTitle: 'Edit page-wide typography & background — applies everywhere via the root section',
+    pageStyleBadge: '🌐 Page-wide style — typography set here cascades to every block on the page.',
+    pageContentBadge: "🌐 Page-wide background & layout — this is your whole page's outer section.",
+    pageBadgeThemeLink: 'Manage reusable colors & text styles in Theme →',
 
     // Language toggle — shows the OTHER language's own name, since tapping
     // it switches you TO that language.
@@ -425,6 +445,22 @@ const DICT = {
     chooseTemplate: '+ انتخاب قالب',
     dismiss: 'رد کردن',
     addContentTitle: 'افزودن محتوا', closeAria: 'بستن',
+
+    // ── Page templates (pageTemplates.ts) ──
+    pagesTab: 'صفحات',
+    pagesTabTitle: 'شروع از یک قالب صفحه کامل',
+    pageTemplatesTitle: 'قالب‌های صفحه',
+    pageTemplatesIntro: 'یک صفحه کامل و آماده درج کنید — این کار همه‌چیز روی بوم فعلی را جایگزین می‌کند.',
+    confirmReplaceBody: 'این کار همه‌چیز روی صفحه فعلی شما را با این قالب جایگزین می‌کند. بعداً می‌توانید با ⌘Z آن را واگرد کنید. ادامه می‌دهید؟',
+    confirmReplaceBtn: 'جایگزینی صفحه',
+    cancelBtn: 'انصراف',
+
+    // ── Page-wide defaults ──
+    pageSettingsBtn: 'صفحه',
+    pageSettingsBtnTitle: 'ویرایش تایپوگرافی و پس‌زمینه کل صفحه — از طریق بخش ریشه در همه‌جا اعمال می‌شود',
+    pageStyleBadge: '🌐 استایل کل صفحه — تایپوگرافی تنظیم‌شده در اینجا به همه بلوک‌های صفحه سرایت می‌کند.',
+    pageContentBadge: '🌐 پس‌زمینه و چیدمان کل صفحه — این همان بخش بیرونیِ کل صفحه شماست.',
+    pageBadgeThemeLink: 'مدیریت رنگ‌ها و استایل‌های متنی قابل استفاده مجدد در پوسته ←',
 
     languageToggleLabel: 'English',
 

@@ -129,11 +129,44 @@ function LayerNode({
   )
 }
 
+// ─── Page-wide badge (shown on Style/Content tabs when the ROOT node is
+// selected) ──────────────────────────────────────────────────────────────
+// Purely a discoverability layer — no new mechanism. The root node is a
+// perfectly ordinary `type: 'section'` node (see INITIAL_NODES in
+// store.ts), so its Style tab (fontFamily/textColor, which cascade to every
+// descendant via buildSectionOuterStyle in styleMapper.ts — see the doc
+// comment on StyleProps.fontFamily there) and Content tab (SectionPanel's
+// own background/gradient/image controls) already ARE "page defaults" —
+// nothing about how patchNodeStyle/onUpdate work changes here. This badge
+// just makes that fact visible instead of silent, and TopBar's new "Page"
+// button (see TopBar.tsx) is what gets a user here in the first place by
+// calling selectNode(rootId) + setControlPanelTab('style').
+function PageWideBadge({ variant }: { variant: 'style' | 'content' }) {
+  const setControlPanelTab = useBuilderStore(s => s.setControlPanelTab)
+  const t = useT()
+  return (
+    <div className="px-4 pt-3.5 pb-1">
+      <div className="bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+        <p className="text-[11px] text-violet-700 leading-snug">
+          {variant === 'style' ? t('pageStyleBadge') : t('pageContentBadge')}
+        </p>
+      </div>
+      <button
+        onClick={() => setControlPanelTab('theme')}
+        className="text-[10px] font-medium text-violet-500 hover:text-violet-700 transition-colors mt-1.5"
+      >
+        {t('pageBadgeThemeLink')}
+      </button>
+    </div>
+  )
+}
+
 function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
   const style             = useNodeStyle(node)
   const globalCustomCss    = useBuilderStore(s => s.globalCustomCss)
   const setGlobalCustomCss = useBuilderStore(s => s.setGlobalCustomCss)
+  const rootId             = useBuilderStore(s => s.rootId)
   const t                  = useT()
 
   if (!node) {
@@ -145,6 +178,7 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
     )
   }
 
+  const isRoot                = node.id === rootId
   const isOverrideBreakpoint = editingBreakpoint !== 'desktop'
   const hasOverride           = isOverrideBreakpoint && hasOverrideAt(node, editingBreakpoint)
   const isSection             = node.type === 'section'
@@ -155,6 +189,7 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 
   return (
     <div>
+      {isRoot && <PageWideBadge variant="style" />}
       {isOverrideBreakpoint && (
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
           <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
@@ -195,20 +230,23 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
 }
 
 function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: string, p: Record<string, unknown>) => void }) {
-  const nodes = useBuilderStore(s => s.nodes)
-  const style = useNodeStyle(node)
-  const t     = useT()
+  const nodes  = useBuilderStore(s => s.nodes)
+  const style  = useNodeStyle(node)
+  const rootId = useBuilderStore(s => s.rootId)
+  const t      = useT()
 
   if (!node) return <Empty text={t('selectBlockForContent')} />
   const def = NODE_REGISTRY[node.type]
   if (!def) return null
-  const Panel = def.EditorPanel
+  const Panel  = def.EditorPanel
+  const isRoot = node.id === rootId
 
   const parentNode  = node.parentId ? nodes[node.parentId] : null
   const isGridChild = parentNode?.type === 'grid'
 
   return (
     <>
+      {isRoot && <PageWideBadge variant="content" />}
       {isGridChild && (
         <GridCellSpanField
           style={style}
