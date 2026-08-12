@@ -4,20 +4,38 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Editor } from '@tiptap/react'
 import { getFontFamilies, getFontSizes, getFontWeights, getHighlightColors, ensurePersianFontsLoaded } from './richText'
 import { useBuilderStore } from './store'
+import { useT } from './i18n'
 
 const MARGIN = 8  // gap kept from viewport edges when clamping
 const GAP    = 8  // vertical gap kept between the toolbar and the text itself
 
+// Shown as the first item in the toolbar whenever the currently-edited
+// breakpoint isn't Desktop — mirrors the exact "differs from Desktop" pill
+// StyleTab/AnimationPanel already show above their own panels (see
+// ControlPanel.tsx / AnimationPanel in panelComponents.tsx), just placed
+// inline in the toolbar's button row since there's no separate wrapper
+// component here the way StyleTab wraps StylePanel. `hasOverride` false
+// means "you're editing at Tablet/Mobile but haven't diverged from Desktop
+// yet — any change you make here will create one"; true means an override
+// already exists and can be reset.
+export interface RichTextBreakpointBadge {
+  label:        string
+  hasOverride:  boolean
+  onClear:      () => void
+}
+
 export function RichTextToolbar({
-  editor: editorProp, allowBlocks = true,
+  editor: editorProp, allowBlocks = true, breakpointBadge,
 }: {
   editor: Editor | null
   allowBlocks?: boolean
+  breakpointBadge?: RichTextBreakpointBadge
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [placement, setPlacement] = useState<'above' | 'below'>('above')
   const [leftOffset, setLeftOffset] = useState(0)
   const [maxWidth, setMaxWidth] = useState<number | undefined>(undefined)
+  const t = useT()
 
   // Locale drives which dropdown option lists are shown (Persian fonts,
   // translated weight/size/highlight labels — see richText.ts's
@@ -173,6 +191,25 @@ export function RichTextToolbar({
       onMouseDown={e => e.stopPropagation()}
     >
       <div className="flex flex-wrap items-center gap-1 bg-white border border-neutral-200 rounded-lg shadow-lg px-1.5 py-1">
+        {/* Breakpoint override pill + reset — see the doc comment on
+            RichTextBreakpointBadge above. Placed first so it's never
+            pushed out of view by wrapping, and set off from the rest of
+            the toolbar with its own trailing Divider. */}
+        {breakpointBadge && (
+          <>
+            <span
+              title={t('editingContentAt', breakpointBadge.label)}
+              className="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-full shrink-0 whitespace-nowrap select-none"
+            >
+              {breakpointBadge.label}
+            </span>
+            {breakpointBadge.hasOverride && (
+              <ToolBtn title={t('removeContentOverrideTitle')} onClick={breakpointBadge.onClear}>↺</ToolBtn>
+            )}
+            <Divider />
+          </>
+        )}
+
         <ToolBtn active={editor.isActive('bold')}      title="Bold (⌘B)"          onClick={() => editor.chain().focus().toggleBold().run()}>B</ToolBtn>
         <ToolBtn active={editor.isActive('italic')}    title="Italic (⌘I)"        onClick={() => editor.chain().focus().toggleItalic().run()}><em>I</em></ToolBtn>
         <ToolBtn active={editor.isActive('underline')} title="Underline (⌘U)"     onClick={() => editor.chain().focus().toggleUnderline().run()}><u>U</u></ToolBtn>

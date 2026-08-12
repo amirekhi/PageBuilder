@@ -8,6 +8,7 @@ import type { HoverStyleProps } from './customCss'
 import { resolveStyleForBreakpoint, resolveAnimationForBreakpoint } from './responsive'
 import { AnimationProps, EFFECT_KEYFRAME, STARTS_HIDDEN } from './animations'
 import { buildPersianGoogleFontsHref } from './richText'
+import { resolveContentForBreakpoint } from './richTextResponsive'
 import type { GlobalColor, GlobalTypographyStyle, SeoSettings } from './store'
 import type { CSSProperties } from 'react'
 
@@ -443,6 +444,54 @@ const INTERACTIVE_SCRIPT = `<script>
 })();
 </script>`
 
+// ─── Responsive rich-text content (Text/Heading) ───────────────────────────
+// Text/Heading store their content as a fully independent snapshot per
+// breakpoint (see richTextResponsive.ts — content/contentTablet/
+// contentMobile, full-STRING replacement rather than a mergeable style
+// object — see the doc comment there for why). Every other responsive
+// property in this file lives happily in ONE CSS class with different
+// @media declaration sets (see emitResponsiveRule above) — but a single
+// class can't hold three different pieces of TEXT the way it can hold
+// three different declaration sets. So, uniquely among everything else
+// exported here: a node with a genuine content override becomes up to
+// THREE real DOM elements, one per breakpoint's resolved snapshot, with
+// CSS controlling which one is visible at which width. A node with no
+// override at all (the overwhelming majority) still renders as exactly
+// ONE element — zero extra bytes, byte-identical to before this feature
+// existed.
+
+interface ContentTriple { desktop: string; tablet: string; mobile: string; hasOverride: boolean }
+
+function resolveContentTriple(node: PageNode, prop: string): ContentTriple {
+  const desktop = resolveContentForBreakpoint(node, prop, 'desktop')
+  const tablet  = resolveContentForBreakpoint(node, prop, 'tablet')
+  const mobile  = resolveContentForBreakpoint(node, prop, 'mobile')
+  return { desktop, tablet, mobile, hasOverride: !(desktop === tablet && tablet === mobile) }
+}
+
+// Emits the three-way show/hide CSS for a content-overridden node's wrapper
+// class — one BAND per breakpoint, using the exact same 768px/390px
+// cutoffs every other responsive rule in this file already uses. This is
+// intentionally band-based ("Desktop's copy is visible above 768px, full
+// stop") rather than "show if this exact breakpoint has its own override"
+// — that keeps exactly one of the three elements visible at any given
+// width regardless of which specific breakpoint(s) do or don't have their
+// own override (e.g. only a Mobile override set, no Tablet override: the
+// Desktop copy still correctly covers the Tablet band via this banding,
+// since resolveContentTriple's own fallback chain already folded Tablet's
+// resolved value down to Desktop's before we ever get here).
+function buildContentVisibilityCss(wrapCls: string): string {
+  return [
+    `.${wrapCls}-d{display:block}`,
+    `@media (max-width:768px){.${wrapCls}-d{display:none}}`,
+    `.${wrapCls}-t{display:none}`,
+    `@media (max-width:768px){.${wrapCls}-t{display:block}}`,
+    `@media (max-width:390px){.${wrapCls}-t{display:none}}`,
+    `.${wrapCls}-m{display:none}`,
+    `@media (max-width:390px){.${wrapCls}-m{display:block}}`,
+  ].join('\n')
+}
+
 // ─── Per-node CSS (style + animation + hover-transition + hover + custom CSS) ──
 
 function collectStyleCss(nodes: NodeMap, rootId: string): string {
@@ -485,6 +534,16 @@ function collectStyleCss(nodes: NodeMap, rootId: string): string {
       const tS = resolveStyleForBreakpoint(node, 'tablet')
       const mS = resolveStyleForBreakpoint(node, 'mobile')
       parts.push(emitResponsiveRule(`.${c}`, buildInlineStyle(dS), buildInlineStyle(tS), buildInlineStyle(mS)))
+    }
+
+    // Content-override visibility bands — see the doc comment on
+    // buildContentVisibilityCss above. Only Text/Heading ever have a
+    // `content` prop in the first place; every other node type's
+    // resolveContentTriple call would just see three identical empty
+    // strings and correctly skip this (hasOverride stays false).
+    if (node.type === 'text' || node.type === 'heading') {
+      const triple = resolveContentTriple(node, 'content')
+      if (triple.hasOverride) parts.push(buildContentVisibilityCss(c))
     }
 
     const transitionCss = buildTransitionCss(id, node)
@@ -557,12 +616,34 @@ ${pad}</section>`
     case 'grid':
       return `${pad}<div class="${cls(buildClassName(ds, 'w-full'), wrapCls)}"${anim}>\n${kids}\n${pad}</div>`
 
-    case 'text':
-      return `${pad}<p class="${cls(buildClassName(ds, ''), wrapCls)}"${anim}>${(node.props.content as string) ?? ''}</p>`
+    case 'text': {
+      const triple = resolveContentTriple(node, 'content')
+      if (!triple.hasOverride) {
+        return `${pad}<p class="${cls(buildClassName(ds, ''), wrapCls)}"${anim}>${triple.desktop}</p>`
+      }
+      // See the doc comment on buildContentVisibilityCss above — three
+      // real elements, CSS decides which one is visible at which width.
+      // `anim` is repeated on all three (not just the visible-by-default
+      // one) so that whichever copy actually ends up on screen at a given
+      // width still gets its own IntersectionObserver/animation attrs —
+      // the underlying keyframe CSS is keyed off the shared `wrapCls`
+      // class every copy carries, so this doesn't triple-apply the
+      // animation, it just makes sure it's wired up regardless of which
+      // element the browser is currently showing.
+      return `${pad}<p class="${cls(buildClassName(ds, ''), wrapCls, `${wrapCls}-d`)}"${anim}>${triple.desktop}</p>
+${pad}<p class="${cls(buildClassName(ds, ''), wrapCls, `${wrapCls}-t`)}"${anim}>${triple.tablet}</p>
+${pad}<p class="${cls(buildClassName(ds, ''), wrapCls, `${wrapCls}-m`)}"${anim}>${triple.mobile}</p>`
+    }
 
     case 'heading': {
       const tag = (node.props.tag as string) || 'h2'
-      return `${pad}<${tag} class="${cls(buildClassName(ds, ''), wrapCls)}"${anim}>${(node.props.content as string) ?? ''}</${tag}>`
+      const triple = resolveContentTriple(node, 'content')
+      if (!triple.hasOverride) {
+        return `${pad}<${tag} class="${cls(buildClassName(ds, ''), wrapCls)}"${anim}>${triple.desktop}</${tag}>`
+      }
+      return `${pad}<${tag} class="${cls(buildClassName(ds, ''), wrapCls, `${wrapCls}-d`)}"${anim}>${triple.desktop}</${tag}>
+${pad}<${tag} class="${cls(buildClassName(ds, ''), wrapCls, `${wrapCls}-t`)}"${anim}>${triple.tablet}</${tag}>
+${pad}<${tag} class="${cls(buildClassName(ds, ''), wrapCls, `${wrapCls}-m`)}"${anim}>${triple.mobile}</${tag}>`
     }
 
     case 'image': {
