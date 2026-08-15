@@ -1,17 +1,6 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragStartEvent,
-  type DragEndEvent,
-} from '@dnd-kit/core'
 import { useBuilderStore, PREVIEW_WIDTHS } from './store'
 import { NODE_REGISTRY } from './registry'
 import { NodeMap } from './types'
@@ -25,45 +14,6 @@ import { useNodeStyle, useNodeAnimation } from './responsive'
 import { setGlobalColorPalette } from './styleMapper'
 import { directionForLocale, type Direction } from './i18n'
 
-// ─── Grid cell placement wrapper ───────────────────────────────────────────
-// THE fix for Editor/Preview disagreeing about which cell holds which
-// child. A child's own persisted style (gridColStart/gridRowStart, read by
-// buildGridItemStyle in styleMapper.ts) is only ever set for children that
-// were explicitly placed via GridCellSlot or drag-and-drop (see
-// moveNode's gridPlacement param in store.ts). Anything else — legacy
-// content, a duplicated node, anything computeGridOccupancy had to
-// auto-place via its top-left fallback scan — has NO explicit coords on
-// its own style, so buildGridItemStyle falls back to a bare `span N` and
-// lets the BROWSER's own CSS grid auto-placement algorithm decide where it
-// actually lands.
-//
-// That's exactly the crack Editor and Preview fell through: auto-placement
-// is DOM-composition-dependent. The Editor's DOM contains the real
-// children PLUS GridCellSlot placeholders for every empty cell (each with
-// its own explicit gridColumn/gridRow, which "reserves" that cell and
-// keeps the browser's auto-placement cursor from stepping into it).
-// Preview's DOM has no slot placeholders at all — nothing else in the DOM
-// to keep the auto-placement cursor honest — so a fallback-positioned
-// child could genuinely land in a different cell there than it did in the
-// Editor, even though both call the exact same computeGridOccupancy().
-//
-// The fix: never let CSS auto-flow decide ANY grid child's position.
-// Every rendered child (in both RenderEditorNode and RenderPreviewNode
-// below) is wrapped in a div carrying the EXACT row/col/span
-// computeGridOccupancy already computed for it — explicit grid-column/
-// grid-row on this wrapper, full stop. Since both renderers call
-// computeGridOccupancy with identical inputs (same childIds, same nodes,
-// same cols/rows) and apply the result identically via this same wrapper,
-// there's no way left for the two views to disagree.
-//
-// display:'grid' on the wrapper itself is a small bonus: it turns the
-// wrapper into a nested single-item grid, so its one child (whatever
-// RenderEditorNode/RenderPreviewNode actually renders — SelectableShell in
-// the Editor, the bare PreviewComponent in Preview) automatically fills
-// the wrapper on BOTH axes via ordinary CSS grid default stretch
-// behavior — no explicit width:100%/height:100% needed on the child
-// itself, and no dependency on whatever sizing that child's own style
-// happens to produce.
 // ─── Grid cell placement wrapper ───────────────────────────────────────────
 // THE fix for Editor/Preview disagreeing about which cell holds which
 // child. A child's own persisted style (gridColStart/gridRowStart, read by
@@ -123,6 +73,7 @@ function gridCellPlacementStyle(origin: GridCellOrigin): React.CSSProperties {
     minHeight:  0,
   }
 }
+
 // ─── EditorRenderer ───────────────────────────────────────────────────────────
 // Desktop editing: the canvas simply fills 100% of whatever horizontal room
 // is actually available in the editor panel (window minus the ControlPanel
@@ -144,14 +95,37 @@ function gridCellPlacementStyle(origin: GridCellOrigin): React.CSSProperties {
 // static (post-animation) state while editing, so drag handles, inline text
 // editing, and the resize UI never have to fight a moving/fading target.
 // Animations only play in PreviewRenderer, further down this file.
+//
+// ─── DndContext moved OUT of this component ────────────────────────────────
+// EditorRenderer no longer creates or owns a DndContext, sensors, or drag
+// handlers of its own — all of that now lives ONE level up, in the
+// top-level page component (page.tsx), wrapping BOTH <ControlPanel /> and
+// this canvas as siblings under a single shared DndContext. A draggable
+// and a droppable only ever detect each other when both are registered to
+// the SAME DndContext instance — dnd-kit scopes that registration per
+// context, not globally. Previously this component had its own *second*,
+// fully independent DndContext nested inside the outer one from page.tsx.
+// Every DropSlot/GridCellSlot on the canvas registered against THIS inner
+// context, and so did dragging an existing on-page node (its useDraggable
+// lives on SelectableShell, also inside this component) — so reordering an
+// existing block worked perfectly. But PaletteTile/TemplateTile in
+// ControlPanel.tsx only ever registered against the OUTER context in
+// page.tsx, which has no visibility into this inner context's droppables.
+// Dragging one in visually "armed" the slots (draggingId still flipped
+// true, since the outer context's own onDragStart fired and updated the
+// store) but `over` could never resolve, so isOver/highlighting never
+// fired — a fresh block or template could be dropped without any visual
+// feedback at all. Deleting this inner DndContext (and the now-redundant
+// sensors/handleDragStart/handleDragEnd/DragOverlay that came with it)
+// fixes that: the canvas is now a plain child of the single DndContext in
+// page.tsx, exactly like ControlPanel already is, so every draggable and
+// every droppable share one registration space regardless of which panel
+// they live in.
 
 export function EditorRenderer() {
   const nodes             = useBuilderStore(s => s.nodes)
   const rootId            = useBuilderStore(s => s.rootId)
-  const moveNode          = useBuilderStore(s => s.moveNode)
   const selectNode        = useBuilderStore(s => s.selectNode)
-  const setDragging       = useBuilderStore(s => s.setDragging)
-  const draggingId        = useBuilderStore(s => s.draggingId)
   const editingBreakpoint = useBuilderStore(s => s.editingBreakpoint)
   const setCanvasScale    = useBuilderStore(s => s.setCanvasScale)
   const globalColors      = useBuilderStore(s => s.globalColors)
@@ -207,117 +181,51 @@ export function EditorRenderer() {
     setCanvasScale(scale)
   }, [scale, setCanvasScale])
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor)
-  )
-
-  function handleDragStart(event: DragStartEvent) {
-    const id = event.active.id as string
-    setDragging(id)
-    selectNode(id)
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setDragging(null)
-    const { active, over } = event
-    if (!over) return
-    const draggedId = active.id as string
-    const node = nodes[draggedId]
-    if (!node) return
-
-    // Dropped onto a specific empty grid cell — reparent/reorder AND stamp
-    // gridColStart/gridRowStart in one transaction (see moveNode's
-    // gridPlacement param in store.ts). Checked before the generic slot
-    // parse below since the two id formats never collide (different
-    // prefixes — 'gridcell::' vs 'slot::').
-    const gridCell = parseGridCellDropId(over.id as string)
-    if (gridCell) {
-      const targetChildren = nodes[gridCell.parentId]?.children.length ?? 0
-      moveNode(draggedId, gridCell.parentId, targetChildren, { col: gridCell.col, row: gridCell.row })
-      return
-    }
-
-    const slot = parseSlotId(over.id as string)
-    if (!slot) return
-    moveNode(draggedId, slot.parentId, slot.index)
-  }
-
-  const draggingNode = draggingId ? nodes[draggingId] : null
-  const draggingDef  = draggingNode ? NODE_REGISTRY[draggingNode.type] : null
-
   return (
-    <DndContext
-      id="page-builder-dnd"
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+    // Very subtle dot grid — just enough to show it's an editor canvas
+    <div
+      className="min-h-full py-8 px-4"
+      style={{
+        backgroundImage: 'radial-gradient(circle, #d4d4d4 1px, transparent 1px)',
+        backgroundSize: '24px 24px',
+        backgroundColor: '#f9fafb',
+      }}
+      onClick={() => selectNode(null)}
     >
-      {/* Very subtle dot grid — just enough to show it's an editor canvas */}
-      <div
-        className="min-h-full py-8 px-4"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #d4d4d4 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-          backgroundColor: '#f9fafb',
-        }}
-        onClick={() => selectNode(null)}
-      >
-        <CustomCssStyleSheet />
-        <div ref={outerRef} className="w-full flex justify-center">
+      <CustomCssStyleSheet />
+      <div ref={outerRef} className="w-full flex justify-center">
+        <div
+          style={{
+            position: 'relative',
+            width:    simWidth * scale,
+            height:   Math.max(canvasHeight * scale, 1),
+          }}
+        >
           <div
+            ref={canvasRef}
+            dir={dir}
+            className="bg-white"
+            data-tutorial="canvas"
             style={{
-              position: 'relative',
-              width:    simWidth * scale,
-              height:   Math.max(canvasHeight * scale, 1),
+              position:        'absolute',
+              top:             0,
+              left:            0,
+              width:           simWidth,
+              minHeight:       600,
+              borderRadius:    isDesktop ? 6 : 12,
+              border:          '1px solid #e2e8f0',
+              boxShadow:       '0 2px 12px 0 rgba(0,0,0,0.06)',
+              transform:       `scale(${scale})`,
+              transformOrigin: 'top left',
+              transition:      'width 0.15s ease, transform 0.15s ease',
             }}
           >
-            <div
-              ref={canvasRef}
-              dir={dir}
-              className="bg-white"
-               data-tutorial="canvas"
-              style={{
-                position:        'absolute',
-                top:             0,
-                left:            0,
-                width:           simWidth,
-                minHeight:       600,
-                borderRadius:    isDesktop ? 6 : 12,
-                border:          '1px solid #e2e8f0',
-                boxShadow:       '0 2px 12px 0 rgba(0,0,0,0.06)',
-                transform:       `scale(${scale})`,
-                transformOrigin: 'top left',
-                transition:      'width 0.15s ease, transform 0.15s ease',
-              }}
-            >
-              <EmptyCanvasPrompt />
-              <RenderEditorNode nodeId={rootId} nodes={nodes} />
-            </div>
+            <EmptyCanvasPrompt />
+            <RenderEditorNode nodeId={rootId} nodes={nodes} />
           </div>
         </div>
       </div>
-
-      <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>
-        {draggingDef && draggingNode ? (
-          <div
-            className="rounded-lg ring-2 ring-violet-400 shadow-2xl opacity-90 bg-white overflow-hidden"
-            style={{ minWidth: 120, maxWidth: 320, pointerEvents: 'none' }}
-          >
-            <div className="bg-violet-600 px-3 py-1 text-white text-xs font-medium flex items-center gap-1.5">
-              <span>{draggingDef.icon}</span>
-              <span>{draggingDef.label}</span>
-            </div>
-            <div className="p-3 text-sm text-neutral-500 truncate">
-              {draggingNode.type === 'text' || draggingNode.type === 'heading'
-                ? (draggingNode.props.content as string) || draggingDef.label
-                : draggingDef.label}
-            </div>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+    </div>
   )
 }
 
@@ -552,29 +460,28 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
       ? (resolvedStyle.gap ?? 0) * 4
       : 0
 
- 
-      const ids = node.children
-            if (ids.length === 0) {
-              if (node.type === 'section') {
-                content = null
-              } else {
-                const slot = <DropSlot parentId={node.id} index={0} isOnly />
-                content = isGrid ? <div style={{ gridColumn: '1 / -1' }}>{slot}</div> : slot
-              }
+    const ids = node.children
+    if (ids.length === 0) {
+      if (node.type === 'section') {
+        content = null
       } else {
-        const willShowPersistentAdd = selectedId === node.id // matches showPersistentAdd's condition below
-        const items: React.ReactNode[] = [
-          wrapIfGrid('slot-pre', <DropSlot key="slot-pre-inner" parentId={node.id} index={0} axis={axis} />),
-        ]
-        ids.forEach((childId, i) => {
-          items.push(<RenderEditorNode key={childId} nodeId={childId} nodes={nodes} />)
-          const isLast = i === ids.length - 1
-          if (!(isLast && willShowPersistentAdd)) {
-            items.push(wrapIfGrid(`slot-${i}`, <DropSlot key={`slot-${i}-inner`} parentId={node.id} index={i + 1} axis={axis} />))
-          }
-        })
-        content = <>{items}</>
+        const slot = <DropSlot parentId={node.id} index={0} isOnly />
+        content = isGrid ? <div style={{ gridColumn: '1 / -1' }}>{slot}</div> : slot
       }
+    } else {
+      const willShowPersistentAdd = selectedId === node.id // matches showPersistentAdd's condition below
+      const items: React.ReactNode[] = [
+        wrapIfGrid('slot-pre', <DropSlot key="slot-pre-inner" parentId={node.id} index={0} axis={axis} />),
+      ]
+      ids.forEach((childId, i) => {
+        items.push(<RenderEditorNode key={childId} nodeId={childId} nodes={nodes} />)
+        const isLast = i === ids.length - 1
+        if (!(isLast && willShowPersistentAdd)) {
+          items.push(wrapIfGrid(`slot-${i}`, <DropSlot key={`slot-${i}-inner`} parentId={node.id} index={i + 1} axis={axis} />))
+        }
+      })
+      content = <>{items}</>
+    }
   }
 
   // When this container is selected, show a persistent "Add block" button
@@ -584,7 +491,7 @@ function RenderEditorNode({ nodeId, nodes }: { nodeId: string; nodes: NodeMap })
   // dedicated action instead ("+ Add tab" / "+ Add slide" for Tabs/
   // Carousel, or simply increasing rows/cols in GridPanel for Grid — more
   // cells means more GridCellSlots appear automatically).
-const showPersistentAdd = def.isContainer
+  const showPersistentAdd = def.isContainer
     && node.type !== 'tabs' && node.type !== 'carousel' && node.type !== 'grid' && node.type !== 'section'
     && selectedId === node.id && node.children.length > 0
   const isGridForAdd = def.isContainer && resolvedStyle.display === 'grid'
