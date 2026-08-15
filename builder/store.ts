@@ -106,12 +106,17 @@ export type Locale = 'en' | 'fa'
 // Lifted into the store (rather than local useState inside ControlPanel)
 // specifically so TopBar — a completely separate component — can switch to
 // Theme/SEO from its own buttons. ControlPanel's own visible tab BAR only
-// ever renders layers/style/content (see ControlPanel.tsx); Theme and SEO
-// are still perfectly normal values this same field can hold and still
-// render the exact same tab body they always did — they've just lost their
-// own button in that particular tab bar, in favor of a button living in
-// TopBar instead. Nothing about how the tab content itself works changes.
-export type ControlPanelTab = 'layers' | 'style' | 'content' | 'theme' | 'seo'
+// ever renders elements/layers/style/content (see ControlPanel.tsx); Theme
+// and SEO are still perfectly normal values this same field can hold and
+// still render the exact same tab body they always did — they've just lost
+// their own button in that particular tab bar, in favor of a button living
+// in TopBar instead. Nothing about how the tab content itself works
+// changes.
+//
+// 'elements' ADDED: the new Elementor-style block palette tab (see
+// ElementsTab in ControlPanel.tsx) — a plain new value in this same union,
+// no new mechanism needed to support it.
+export type ControlPanelTab = 'elements' | 'layers' | 'style' | 'content' | 'theme' | 'seo'
 
 // ─── Guided tutorial (onboarding walkthrough) ──────────────────────────────
 // A one-time, step-by-step spotlight tour (see TutorialOverlay.tsx) that
@@ -253,7 +258,7 @@ type ImageEditCallback = (editedDataUrl: string) => void
 
 // Placement info for dropping/moving a node directly into a specific Grid
 // cell — see GridCellSlot in DropSlot.tsx (clicking "+" in an empty cell)
-// and the grid-cell branch of handleDragEnd in Renderer.tsx (drag-and-drop
+// and the grid-cell branch of handleDragEnd in page.tsx (drag-and-drop
 // onto an empty cell). Bundled into the SAME history entry as the
 // move/create itself (see moveNode/addNode below) rather than a separate
 // follow-up updateProps call — otherwise a cell-targeted add/move would
@@ -338,13 +343,29 @@ interface BuilderStore {
   // extraStyle: merged into the new node's default style in the SAME
   // history entry — used by GridCellSlot (DropSlot.tsx) to stamp
   // gridColStart/gridRowStart onto a block the instant it's created, so it
-  // never renders unplaced even for one frame.
+  // never renders unplaced even for one frame. Also used the same way by
+  // page.tsx's handleDragEnd when a palette-tile drag lands on an empty
+  // grid cell.
   addNode:         (type: NodeType, parentId: string, index: number, extraStyle?: Partial<StyleProps>) => void
   // gridPlacement: when moving a node into (or within) a Grid via drag-and-
   // drop onto a specific empty cell — see GridCellSlot's droppable id and
-  // handleDragEnd in Renderer.tsx. Stamps gridColStart/gridRowStart onto
+  // handleDragEnd in page.tsx. Stamps gridColStart/gridRowStart onto
   // the moved node's style in the same transaction as the reparent/reorder.
   moveNode:        (id: string, newParentId: string, index: number, gridPlacement?: GridPlacement) => void
+  // Grafts an already-built template subtree (the return value of a
+  // Template's own .build() — see templates.ts) onto an arbitrary drop
+  // target: parentId + index, exactly like addNode, plus the same optional
+  // gridPlacement addNode/moveNode already support. This is the piece the
+  // OLD template-insertion call sites (DropSlot.tsx's BlockPicker,
+  // GridCellSlot, TemplatePicker.tsx's useInsertTemplate) never needed —
+  // they only ever grafted onto ONE fixed target each (a specific slot
+  // already known at that call site, or always the root's end for
+  // useInsertTemplate). Dragging a template tile in from ControlPanel's
+  // Elements tab needs to graft onto WHATEVER slot the user actually
+  // dropped on, discovered only at drop time in page.tsx's handleDragEnd —
+  // hence a proper store action instead of another one-off inline
+  // useBuilderStore.setState(...) block.
+  insertTemplateNodes: (builtNodes: NodeMap, rootChildId: string, parentId: string, index: number, gridPlacement?: GridPlacement) => void
   deleteNode:      (id: string) => void
   duplicateNode:   (id: string) => void
   undo:            () => void
@@ -386,7 +407,11 @@ export const useBuilderStore = create<BuilderStore>()(
 
       locale: 'en',
 
-      controlPanelTab: 'layers',
+      // Default to the new Elements tab so a brand-new page opens straight
+      // onto the block palette — matches the empty canvas's own
+      // EmptyCanvasPrompt call-to-action rather than landing on an empty
+      // Layers tree first.
+      controlPanelTab: 'elements',
 
       hasSeenTutorial:       false, // hydrated client-side — see hydrateTutorialFlag
       tutorialLangModalOpen: false,
@@ -546,6 +571,31 @@ export const useBuilderStore = create<BuilderStore>()(
             gridRowStart: gridPlacement.row,
           }
         }
+      }),
+
+      insertTemplateNodes: (builtNodes, rootChildId, parentId, index, gridPlacement) => set(s => {
+        pushHistory(s)
+        // Merge every node from the template's build() output in — same
+        // graft step BlockPicker.onSelectTemplate/GridCellSlot.
+        // handleSelectTemplate/useInsertTemplate each already do inline via
+        // Object.values(builtNodes).forEach. builtNodes are fresh plain
+        // objects produced by that template's own build() call (never
+        // shared/mutated elsewhere), so handing them straight to immer's
+        // draft here is safe — no defensive JSON clone needed the way the
+        // OLD manual-setState call sites did, since those were bypassing
+        // immer entirely and had to clone by hand for safety.
+        Object.values(builtNodes).forEach(n => { s.nodes[n.id] = n })
+        if (gridPlacement) {
+          const style = (s.nodes[rootChildId].props.style as Record<string, unknown>) ?? {}
+          s.nodes[rootChildId].props.style = {
+            ...style,
+            gridColStart: gridPlacement.col,
+            gridRowStart: gridPlacement.row,
+          }
+        }
+        s.nodes[parentId].children.splice(index, 0, rootChildId)
+        s.nodes[rootChildId].parentId = parentId
+        s.selectedId = rootChildId
       }),
 
       deleteNode: (id) => set(s => {

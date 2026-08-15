@@ -25,9 +25,10 @@ export function useDirection(): Direction {
 // Covers the shared, high-leverage panel surfaces in panelComponents.tsx
 // (StylePanel/AnimationPanel/managers/SEO/ElementId/GridCellSpanField/
 // BoxSpacingField/AlignField/ColorField/GradientField/HoverToggle), plus
-// ControlPanel.tsx's own tab bar, Layers tab, Theme tab intro, and the two
-// panel empty states, DropSlot.tsx's BlockPicker, TemplatePicker.tsx /
-// EmptyCanvasPrompt, pageTemplates.ts's page-template picker/modal, and
+// ControlPanel.tsx's own tab bar (now including the Elements palette tab —
+// tabElements / elementsTabIntro below), Layers tab, Theme tab intro, and
+// the two panel empty states, DropSlot.tsx's BlockPicker, TemplatePicker.tsx
+// / EmptyCanvasPrompt, pageTemplates.ts's page-template picker/modal, and
 // TopBar.tsx in full (undo/redo, Theme/SEO tab switcher, Edit/Preview mode +
 // breakpoint switchers, the replay button, the Page/Pages buttons, the
 // Save/Export menu and all its items, and the toast messages), and
@@ -41,6 +42,11 @@ const DICT = {
   en: {
     // Tab bar / Layers / Style / Content shells (ControlPanel.tsx)
     tabLayers: 'Layers', tabStyle: 'Style', tabContent: 'Content',
+    // ── Elements tab (ControlPanel.tsx's new Elementor-style block
+    // palette) — tab bar label plus the one-line hint shown at the top of
+    // the panel, above the BLOCK_GROUPS-grouped tile grid. ──
+    tabElements: 'Elements',
+    elementsTabIntro: 'Drag any block onto the canvas, or click to add it to the end of the page.',
     pageTree: 'Page tree',
     selectBlockForStyle: "Select a block to edit its style — or set page-wide CSS below, applied everywhere regardless of what's selected.",
     selectBlockForContent: 'Select a block to edit its content',
@@ -405,6 +411,9 @@ const DICT = {
   },
   fa: {
     tabLayers: 'لایه‌ها', tabStyle: 'استایل', tabContent: 'محتوا',
+    // ── Elements tab — see the matching en entries above for context. ──
+    tabElements: 'المان‌ها',
+    elementsTabIntro: 'هر بلوک را روی بوم بکشید، یا برای افزودن آن به انتهای صفحه روی آن کلیک کنید.',
     pageTree: 'درخت صفحه',
     selectBlockForStyle: 'یک بلوک را برای ویرایش استایل انتخاب کنید — یا CSS سراسری صفحه را در پایین تنظیم کنید که صرف‌نظر از انتخاب فعلی روی همه‌جا اعمال می‌شود.',
     selectBlockForContent: 'یک بلوک را برای ویرایش محتوا انتخاب کنید',

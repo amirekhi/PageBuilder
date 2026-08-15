@@ -16,8 +16,15 @@ import { NODE_REGISTRY, BLOCK_GROUPS } from './registry'
 // inserting a template always grafted its English build() onto the canvas,
 // regardless of which language the picker was actually showing. Same fix,
 // same reasoning, as what DropSlot.tsx's BlockPicker already does.
-
-function useInsertTemplate(templates: Template[]) {
+//
+// EXPORTED (was module-private): ControlPanel.tsx's new Elements → Templates
+// sub-tab reuses this exact same hook for its own click-to-insert tiles,
+// rather than duplicating the graft-onto-root logic a second time. Drag-
+// and-drop from that same sub-tab uses a DIFFERENT mechanism (the store's
+// insertTemplateNodes action, see store.ts) since a drag can target any
+// arbitrary slot on the canvas, not just "always append to root" the way
+// this hook always does.
+export function useInsertTemplate(templates: Template[]) {
   return function insertTemplate(index: number) {
     const template = templates[index]
     if (!template) return
@@ -209,6 +216,9 @@ function AddContentModal({
   // so a page template has nothing to destroy. The TopBar entry point (see
   // PageTemplatePickerModal in pageTemplates.ts) is the one that needs the
   // confirm step, since it can be opened with existing content on the page.
+  // ControlPanel.tsx's Elements → Pages sub-tab is a THIRD entry point with
+  // the same "can be opened with existing content" problem as TopBar's —
+  // see the confirm-dialog logic added there.
   const handleInsertPage = useCallback((index: number) => {
     insertPage(index)
     onClose()
