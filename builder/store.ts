@@ -280,6 +280,15 @@ interface BuilderStore {
   previewReplayNonce: number
   richEditingId: string | null
   globalCustomCss: string
+  // Page-wide Custom JS — sibling to globalCustomCss above, same
+  // treatment (not undo-tracked, plain textarea in StyleTab's no-selection
+  // state — see panelComponents.tsx's CustomJsField and ControlPanel.tsx).
+  // Unlike a per-node script (see the doc comment on customJs in
+  // customJs.ts), this one has no single element to bind — it's meant for
+  // page-wide setup code (analytics snippets, global event delegation,
+  // etc.), reaching specific blocks via document.getElementById(...) using
+  // their own Element ID field same as any external script would.
+  globalCustomJs: string
 
   // Page-wide language/direction — see the doc comment on Locale above.
   locale:    Locale
@@ -336,6 +345,7 @@ interface BuilderStore {
   replayAnimations:     () => void
   setRichEditing:       (id: string | null) => void
   setGlobalCustomCss:   (css: string) => void
+  setGlobalCustomJs:    (js: string) => void
   selectNode:      (id: string | null) => void
   setDragging:     (id: string | null) => void
   setResizing:     (id: string | null) => void
@@ -404,6 +414,7 @@ export const useBuilderStore = create<BuilderStore>()(
       previewReplayNonce: 0,
       richEditingId: null,
       globalCustomCss: '',
+      globalCustomJs: '',
 
       locale: 'en',
 
@@ -446,6 +457,7 @@ export const useBuilderStore = create<BuilderStore>()(
       replayAnimations:     () => set(s => { s.previewReplayNonce += 1 }),
       setRichEditing:       (id) => set(s => { s.richEditingId = id }),
       setGlobalCustomCss:   (css) => set(s => { s.globalCustomCss = css }),
+      setGlobalCustomJs:    (js)  => set(s => { s.globalCustomJs = js }),
       setLocale:            (locale) => set(s => { s.locale = locale }),
       setControlPanelTab:   (tab) => set(s => { s.controlPanelTab = tab }),
 

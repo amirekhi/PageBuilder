@@ -68,6 +68,9 @@ const DICT = {
     sectionAnimation: 'Animation', sectionCustomCss: 'Custom CSS', sectionElementId: 'Element ID',
     sectionCellSpan: 'Cell span', sectionColorPalette: 'Color palette',
     sectionTypographyStyles: 'Typography styles',
+    sectionCustomJs: 'Custom JS',
+    customJsNote: "Runs once in Preview and in the exported page — never in the editor canvas. `el` is bound to this block's own element; use document.getElementById(...) to reach any other block that has an Element ID set. Return a function from your code to have it run as cleanup.",
+    globalCustomJsNote: "Runs once, page-wide, in Preview and in the exported page — never in the editor canvas. No `el` binding here (this isn't scoped to one block) — use document.getElementById(...) to reach specific blocks that have an Element ID set.",
 
     hideOnBreakpoint: (label: string) => `Hide on ${label}`,
     hideOnlyThisBreakpointNote: (label: string) =>
@@ -433,7 +436,9 @@ const DICT = {
     sectionAnimation: 'انیمیشن', sectionCustomCss: 'CSS دلخواه', sectionElementId: 'شناسه المان',
     sectionCellSpan: 'اشغال خانه‌ها', sectionColorPalette: 'پالت رنگ',
     sectionTypographyStyles: 'استایل‌های تایپوگرافی',
-
+    sectionCustomJs: 'جاوااسکریپت دلخواه',
+    customJsNote: 'فقط در پیش‌نمایش و در صفحه خروجی‌گرفته‌شده اجرا می‌شود — هرگز در بوم ویرایشگر. `el` به المان خودِ همین بلوک متصل است؛ برای دسترسی به بلوک‌های دیگری که شناسه المان دارند از document.getElementById(...) استفاده کنید. برای اجرای یک تابع پاک‌سازی، آن را از کد خود بازگردانید (return).',
+    globalCustomJsNote: 'فقط یک‌بار، در سطح کل صفحه، در پیش‌نمایش و در صفحه خروجی‌گرفته‌شده اجرا می‌شود — هرگز در بوم ویرایشگر. اینجا اتصال `el` وجود ندارد (به یک بلوک خاص محدود نیست) — برای دسترسی به بلوک‌های خاصی که شناسه المان دارند از document.getElementById(...) استفاده کنید.',
     hideOnBreakpoint: (label: string) => `مخفی در ${label}`,
     hideOnlyThisBreakpointNote: (label: string) =>
       `این بلوک را فقط هنگام مشاهده/ویرایش در ${label} مخفی می‌کند — در سایر اندازه‌ها همچنان نمایان است مگر آنجا هم مخفی شود.`,

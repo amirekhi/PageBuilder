@@ -13,7 +13,7 @@ import { CustomCssStyleSheet } from './CustomCssStyleSheet'
 import { useNodeStyle, useNodeAnimation } from './responsive'
 import { setGlobalColorPalette } from './styleMapper'
 import { directionForLocale, type Direction } from './i18n'
-
+import { CustomJsRunner } from './CustomJsRunner'
 // ─── Grid cell placement wrapper ───────────────────────────────────────────
 // THE fix for Editor/Preview disagreeing about which cell holds which
 // child. A child's own persisted style (gridColStart/gridRowStart, read by
@@ -545,7 +545,7 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
   const globalColors  = useBuilderStore(s => s.globalColors)
   const locale        = useBuilderStore(s => s.locale)
   const dir           = directionForLocale(locale)
-
+  const previewReplayNonce = useBuilderStore(s => s.previewReplayNonce)
   // Same reasoning as EditorRenderer above — Preview is a separate render
   // root, so it needs its own subscription/cache-refresh rather than
   // relying on EditorRenderer's.
@@ -564,6 +564,7 @@ export function PreviewRenderer({ nodes, rootId }: { nodes: NodeMap; rootId: str
       }}
     >
       <AnimationStyleSheet />
+      <CustomJsRunner key={previewReplayNonce} />
       <CustomCssStyleSheet />
       {previewWidth !== 'desktop' ? (
         <div
