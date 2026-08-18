@@ -5,7 +5,9 @@ import { useDraggable } from '@dnd-kit/core'
 import { useBuilderStore, PREVIEW_WIDTHS, ControlPanelTab } from './store'
 import { NODE_REGISTRY, BLOCK_GROUPS } from './registry'
 import { NodeMap, PageNode, NodeType } from './types'
+
 import { StylePanel,CustomJsField, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel, GridCellSpanField } from './panelComponents'
+
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 import { paletteDragId, templateDragId } from './DropSlot'
 import { getTemplates, type Template } from './templates'

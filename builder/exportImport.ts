@@ -1068,6 +1068,27 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
   const needsAnimationKeyframes = /data-pb-animate/.test(body)
   const styleBlock = [globalCss, needsAnimationKeyframes ? ANIMATION_KEYFRAMES : '', styleCss].filter(Boolean).join('\n\n')
 
+  // BUG FIX: the exported CSS references `animation-name: pb-fade-in-up`
+  // etc. (see buildAnimationCssForNode above) and the JS toggles a
+  // `pb-play` class to trigger it — but neither of those means anything
+  // without the actual `@keyframes pb-fade-in-up { ... }` DEFINITIONS
+  // somewhere in the document. Those live in ANIMATION_KEYFRAMES
+  // (animations.ts) — the same constant AnimationStyleSheet injects for
+  // the live Editor/Preview via a plain <style> tag — and were previously
+  // never included in the exported HTML at all. A browser given an
+  // animation-name with no matching @keyframes anywhere just silently
+  // no-ops the animation: no error, nothing in the console, the element
+  // simply never transitions. Combined with STARTS_HIDDEN's opacity:0
+  // (applied up front so there's no flash-of-visible-content before the
+  // animation plays), the element was left stuck invisible FOREVER —
+  // "the element is not shown" is exactly what a permanently-inert
+  // animation-name looks like, not merely "doesn't animate".
+  // Only included when at least one node actually uses an animation
+  // (same detection needsInteractiveScript already does, narrowed to just
+  // the animate marker) — a page with no animations pays nothing extra.
+  const needsAnimationKeyframes = /data-pb-animate/.test(body)
+  const styleBlock = [globalCss, needsAnimationKeyframes ? ANIMATION_KEYFRAMES : '', styleCss].filter(Boolean).join('\n\n')
+
   const locale = opts.locale ?? 'en'
   const dir    = locale === 'fa' ? 'rtl' : 'ltr'
 
