@@ -1,12 +1,17 @@
 import { PageNode } from './types'
 import { resolveColor, SHADOW_CSS } from './styleMapper'
 
-// The class every node with custom CSS OR hover styles gets, so both the
-// user's {{WRAPPER}} token in Custom CSS and the auto-generated hover rule
-// (see compileHoverCss below) resolve to something that ONLY ever matches
-// this one block, never any other node using the same node TYPE elsewhere
-// on the page. Deterministic from the node's own id, so it survives
-// re-renders without needing to be stored anywhere separately.
+// The class every node with custom CSS, custom JS, OR hover styles gets, so
+// both the user's {{WRAPPER}} token in Custom CSS and the auto-generated
+// hover rule (see compileHoverCss below) resolve to something that ONLY
+// ever matches this one block, never any other node using the same node
+// TYPE elsewhere on the page. Deterministic from the node's own id, so it
+// survives re-renders without needing to be stored anywhere separately.
+//
+// Also the SAME class Custom JS binds `el` to at runtime — see customJs.ts
+// and CustomJsRunner.tsx. A node's Custom JS field genuinely needs a real
+// element to attach to, so it reuses this exact wrapper class rather than
+// inventing a second, parallel node-to-DOM lookup mechanism.
 export function wrapperClassFor(nodeId: string): string {
   return `cc-${nodeId}`
 }
@@ -32,17 +37,29 @@ function hasHoverStyles(node: PageNode): boolean {
   return !!hover && Object.values(hover).some(v => v !== undefined)
 }
 
+// Whether this node has any Custom JS set — see customJs.ts. Kept as a
+// tiny local helper (mirroring hasHoverStyles above) rather than importing
+// customJs.ts here, since customJs.ts itself needs wrapperClassFor from
+// THIS file (to know which element to bind `el` to) — importing back the
+// other way would create a cycle for no real benefit; the check itself is
+// a one-liner.
+function hasCustomJs(node: PageNode): boolean {
+  return !!(node.props.customJs as string | undefined)?.trim()
+}
+
 // Returns the class to actually add to a node's rendered className, or ''
-// if the node has neither custom CSS nor hover styles — so call sites can
-// safely do `buildClassName(s, [existingExtra, customCssClass(node)].filter(Boolean).join(' '))`
-// with zero cost for the (vast majority of) nodes that never use either.
-// Widened to also fire for hover styles (not just customCss) so the SAME
-// wrapper class serves both features — a node with hover styles set but no
-// Custom CSS text still needs the class for its auto-generated hover rule
-// (compileHoverCss below) to have something to attach to.
+// if the node has neither custom CSS, custom JS, nor hover styles — so call
+// sites can safely do `buildClassName(s, [existingExtra, customCssClass(node)].filter(Boolean).join(' '))`
+// with zero cost for the (vast majority of) nodes that never use any of
+// them.
+// Widened to also fire for hover styles and Custom JS (not just customCss)
+// so the SAME wrapper class serves all three features — a node with only
+// Custom JS set (no Custom CSS, no hover styles) still needs the class for
+// CustomJsRunner.tsx (Preview) and the exported HTML's own script block to
+// have a real element to attach to.
 export function customCssClass(node: PageNode): string {
   const hasCustom = !!(node.props.customCss as string)
-  return (hasCustom || hasHoverStyles(node)) ? wrapperClassFor(node.id) : ''
+  return (hasCustom || hasHoverStyles(node) || hasCustomJs(node)) ? wrapperClassFor(node.id) : ''
 }
 
 // Compiles one node's raw CSS text into real, scoped CSS by replacing every

@@ -5,7 +5,9 @@ import { useDraggable } from '@dnd-kit/core'
 import { useBuilderStore, PREVIEW_WIDTHS, ControlPanelTab } from './store'
 import { NODE_REGISTRY, BLOCK_GROUPS } from './registry'
 import { NodeMap, PageNode, NodeType } from './types'
-import { StylePanel, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel, GridCellSpanField } from './panelComponents'
+
+import { StylePanel,CustomJsField, CustomCssField, ElementIdField, GlobalColorManager, GlobalTypographyManager, SeoPanel, GridCellSpanField } from './panelComponents'
+
 import { useNodeStyle, patchNodeStyle, hasOverrideAt, clearNodeStyleOverride } from './responsive'
 import { paletteDragId, templateDragId } from './DropSlot'
 import { getTemplates, type Template } from './templates'
@@ -511,6 +513,8 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
   const style             = useNodeStyle(node)
   const globalCustomCss    = useBuilderStore(s => s.globalCustomCss)
   const setGlobalCustomCss = useBuilderStore(s => s.setGlobalCustomCss)
+  const globalCustomJs = useBuilderStore(s => s.globalCustomJs)
+  const setGlobalCustomJs = useBuilderStore(s => s.setGlobalCustomJs)
   const rootId             = useBuilderStore(s => s.rootId)
   const t                  = useT()
 
@@ -518,7 +522,14 @@ function StyleTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: st
     return (
       <div className="p-4 space-y-4">
         <p className="text-neutral-400 text-sm">{t('selectBlockForStyle')}</p>
-        <CustomCssField value={globalCustomCss} onChange={setGlobalCustomCss} />
+        <CustomCssField 
+          value={globalCustomCss} 
+          onChange={setGlobalCustomCss} />
+        <CustomJsField
+          value={globalCustomJs}
+          onChange={setGlobalCustomJs}
+          note={t('globalCustomJsNote')}
+        />
       </div>
     )
   }
@@ -606,6 +617,10 @@ function ContentTab({ node, onUpdate }: { node: PageNode | null; onUpdate: (id: 
       <CustomCssField
         value={node.props.customCss as string}
         onChange={css => onUpdate(node.id, { customCss: css })}
+      />
+      <CustomJsField
+        value={node.props.customJs as string}
+        onChange={js => onUpdate(node.id, { customJs: js })}
       />
     </>
   )

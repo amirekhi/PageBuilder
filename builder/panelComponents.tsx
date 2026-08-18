@@ -1216,6 +1216,41 @@ export function CustomCssField({
   )
 }
 
+// ─── Custom JS field ────────────────────────────────────────────────────────
+// Mirrors CustomCssField exactly — see the doc comment at the top of
+// customJs.ts for the full execution model (Preview + export only, never
+// the Editor canvas; `el` bound to this exact block via the same
+// cc-<nodeId> wrapper class Custom CSS/hover already use).
+//
+// `note` is overridable so the SAME field can serve both the per-node case
+// (called with no `note` — defaults to the "el is bound to this block"
+// explanation) and the page-wide case in StyleTab's no-selection state
+// (called with note={t('globalCustomJsNote')} — a different explanation,
+// since the page-wide script has no `el` to bind).
+export function CustomJsField({
+  value, onChange, note,
+}: {
+  value?: string
+  onChange: (js: string) => void
+  note?: string
+}) {
+  const t = useT()
+  return (
+    <FieldGroup label={t('sectionCustomJs')}>
+      <textarea
+        className="w-full border border-neutral-200 rounded-md text-xs font-mono p-2 resize-y min-h-24 focus:outline-none focus:ring-1 focus:ring-violet-400"
+        placeholder={'el.addEventListener("click", () => {\n  // ...\n});\n\n// optionally return a cleanup function:\n// return () => { /* teardown */ }'}
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value)}
+        spellCheck={false}
+      />
+      <p className="text-[10px] text-neutral-400 -mt-1">
+        {note ?? t('customJsNote')}
+      </p>
+    </FieldGroup>
+  )
+}
+
 // ─── Global color palette manager (Theme tab) ──────────────────────────────
 // Page-wide, not node-scoped — lives in the Theme tab (see ControlPanel.tsx)
 // rather than anywhere in the per-node Style/Content tabs. Every color here

@@ -45,7 +45,6 @@ export function TopBar() {
   const importRef                 = useRef<HTMLInputElement>(null)
   const replayAnimations = useBuilderStore(s => s.replayAnimations) 
 
-
   useEffect(() => {
     setHasSave(hasLocalStorageSave())
   }, [])
@@ -110,8 +109,22 @@ export function TopBar() {
   }, [undo, redo, del, dup])
 
   function handleSave() {
-    const { nodes, rootId } = useBuilderStore.getState()
-    const ok = saveToLocalStorage(nodes, rootId)
+    const {
+    nodes,
+    rootId,
+    globalColors,
+    globalTypography,
+    globalCustomCss,
+    globalCustomJs,
+    seo,
+} = useBuilderStore.getState()
+    const ok = saveToLocalStorage(nodes, rootId, {
+        globalColors,
+        globalTypography,
+        globalCustomCss,
+        globalCustomJs,
+        seo,
+      })
     setHasSave(true)
     showToast(ok ? t('toastSaved') : t('toastSaveFailed'))
     setMenuOpen(false)
@@ -120,13 +133,14 @@ export function TopBar() {
   function handleLoadLocal() {
     const saved = loadFromLocalStorage()
     if (!saved) { showToast(t('toastNoSavedPage')); return }
-    useBuilderStore.setState(prev => ({
-      nodes:      saved.nodes,
-      rootId:     saved.rootId,
-      selectedId: null,
-      past:       [JSON.parse(JSON.stringify(prev.nodes))],
-      future:     [],
-    }))
+      useBuilderStore.setState(prev => ({
+        nodes: saved.nodes,
+        rootId: saved.rootId,
+        globalCustomJs: saved.globalCustomJs ?? prev.globalCustomJs,
+        selectedId: null,
+        past: [JSON.parse(JSON.stringify(prev.nodes))],
+        future: [],
+      }))
     showToast(t('toastPageLoaded'))
     setMenuOpen(false)
   }
@@ -137,7 +151,8 @@ function handleExportJSON() {
     rootId,
     globalColors,
     globalTypography,
-    globalCustomCss,
+    globalCustomCss,  
+    globalCustomJs,
     seo,
   } = useBuilderStore.getState()
 
@@ -145,9 +160,9 @@ function handleExportJSON() {
     globalColors,
     globalTypography,
     globalCustomCss,
-    seo,
+    globalCustomJs,
+    seo
   })
-
   setMenuOpen(false)
 }
 
@@ -157,17 +172,12 @@ function handleExportHTML() {
     rootId,
     globalColors,
     globalCustomCss,
+    globalCustomJs,
     seo,
     locale,
   } = useBuilderStore.getState()
 
-  downloadHtml(nodes, rootId, 'page.html', {
-    title: seo.title || 'My Page',
-    globalColors,
-    globalCustomCss,
-    seo,
-    locale,
-  })
+downloadHtml(nodes, rootId, 'page.html', { title: seo.title || 'My Page', globalColors, globalCustomCss, globalCustomJs, seo, locale })
 
   setMenuOpen(false)
 }
@@ -182,13 +192,14 @@ function handleExportHTML() {
         showToast(t('toastImportError', result.error ?? ''))
         return
       }
-      useBuilderStore.setState(prev => ({
-        nodes:      result.nodes!,
-        rootId:     result.rootId!,
-        selectedId: null,
-        past:       [JSON.parse(JSON.stringify(prev.nodes))],
-        future:     [],
-      }))
+        useBuilderStore.setState(prev => ({
+          nodes: result.nodes!,
+          rootId: result.rootId!,
+          globalCustomJs: result.globalCustomJs ?? prev.globalCustomJs,
+          selectedId: null,
+          past: [JSON.parse(JSON.stringify(prev.nodes))],
+          future: [],
+      })) 
       showToast(t('toastPageImported'))
     } catch {
       showToast(t('toastCouldNotRead'))
