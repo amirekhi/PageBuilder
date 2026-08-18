@@ -1086,8 +1086,7 @@ export function exportToHtml(nodes: NodeMap, rootId: string, opts: ExportOptions
   // Only included when at least one node actually uses an animation
   // (same detection needsInteractiveScript already does, narrowed to just
   // the animate marker) — a page with no animations pays nothing extra.
-  const needsAnimationKeyframes = /data-pb-animate/.test(body)
-  const styleBlock = [globalCss, needsAnimationKeyframes ? ANIMATION_KEYFRAMES : '', styleCss].filter(Boolean).join('\n\n')
+
 
   const locale = opts.locale ?? 'en'
   const dir    = locale === 'fa' ? 'rtl' : 'ltr'
