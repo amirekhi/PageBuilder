@@ -31,8 +31,9 @@ export function useDirection(): Direction {
 // / EmptyCanvasPrompt, pageTemplates.ts's page-template picker/modal, and
 // TopBar.tsx in full (undo/redo, Theme/SEO tab switcher, Edit/Preview mode +
 // breakpoint switchers, the replay button, the Page/Pages buttons, the
-// Save/Export menu and all its items, and the toast messages), and
-// formNodes.tsx's Form/field panels.
+// Save/Export menu and all its items, and the toast messages), formNodes.tsx's
+// Form/field panels, and the autosave restore banner + status indicator
+// (autosave.ts / RestoreBanner.tsx / AutosaveIndicator.tsx).
 // NOT yet covered: the individual per-node-type Content panels in
 // nodeComponents.tsx (Button's "Label"/"Link" fields, Image's "Source"/
 // "Fit" fields, Accordion's "Question"/"Answer" placeholders, etc.) — same
@@ -268,6 +269,16 @@ const DICT = {
     toastNoSavedPage: 'No saved page found', toastPageLoaded: '✓ Page loaded',
     toastPageImported: '✓ Page imported', toastCouldNotRead: '✗ Could not read file',
     toastImportError: (err: string) => `✗ ${err}`,
+
+    // ── Autosave (autosave.ts / RestoreBanner.tsx / AutosaveIndicator.tsx) ──
+    restoreBannerBody:    'We found unsaved changes from your last visit.',
+    restoreBannerDiscard: 'Discard',
+    restoreBannerRestore: 'Restore',
+    autosaveTitle:   'Autosave status',
+    autosavePending: 'Unsaved changes',
+    autosaveSaving:  'Saving…',
+    autosaveSaved:   'Saved',
+    autosaveError:   'Save failed',
 
     // ── nodeComponents.tsx: shared FieldGroup titles not already covered ──
     fgLayout: 'Layout', fgSource: 'Source', fgFrame: 'Frame', fgItems: 'Items',
@@ -626,6 +637,16 @@ const DICT = {
     toastNoSavedPage: 'صفحه ذخیره‌شده‌ای یافت نشد', toastPageLoaded: '✓ صفحه بارگذاری شد',
     toastPageImported: '✓ صفحه وارد شد', toastCouldNotRead: '✗ خواندن فایل ممکن نشد',
     toastImportError: (err: string) => `✗ ${err}`,
+
+    // ── Autosave (autosave.ts / RestoreBanner.tsx / AutosaveIndicator.tsx) ──
+    restoreBannerBody:    'تغییرات ذخیره‌نشده از بازدید قبلی شما پیدا شد.',
+    restoreBannerDiscard: 'نادیده گرفتن',
+    restoreBannerRestore: 'بازیابی',
+    autosaveTitle:   'وضعیت ذخیره خودکار',
+    autosavePending: 'تغییرات ذخیره‌نشده',
+    autosaveSaving:  'در حال ذخیره…',
+    autosaveSaved:   'ذخیره شد',
+    autosaveError:   'ذخیره ناموفق بود',
 
     // ── nodeComponents.tsx: shared FieldGroup titles not already covered ──
     fgLayout: 'چیدمان', fgSource: 'منبع', fgFrame: 'قاب', fgItems: 'موارد',
