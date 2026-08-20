@@ -12,6 +12,7 @@ import {
   readFileAsText,
 } from './exportImport'
 import { LanguageToggle } from './LanguageToggle'
+import { AutosaveIndicator } from './AutosaveIndicator'
 import { useT } from './i18n'
 import { useTutorialT } from './tutorialI18n'
 import { PageTemplatePickerModal } from './pageTemplates'
@@ -334,6 +335,7 @@ downloadHtml(nodes, rootId, 'page.html', { title: seo.title || 'My Page', global
       </div>
 
       <div className="flex items-center gap-2 shrink-0 relative" ref={menuRef}>
+        <AutosaveIndicator />
         <LanguageToggle />
 
         {/* Opens a page-template picker that can be used at any time — not

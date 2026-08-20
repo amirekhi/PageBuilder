@@ -24,6 +24,7 @@ import { ImageEditorModal } from '@/builder/ImageEditorModal'
 import { MobileBlockModal } from '@/builder/MobileBlockModal'
 import { useIsViewportTooNarrow } from '@/builder/useViewportGate'
 import { Tutorial } from '@/builder/Tutorial'
+import { AutoSaveComp } from '@/builder/AutoSaveComp'
 import { NODE_REGISTRY } from '@/builder/registry'
 import { getTemplates } from '@/builder/templates'
 import { parseSlotId, parseGridCellDropId, parsePaletteDragId, parseTemplateDragId } from '@/builder/DropSlot'
@@ -237,6 +238,7 @@ export default function BuilderPage() {
         <MediaPickerModal />
         <ImageEditorModal />
         <Tutorial />
+        <AutoSaveComp />
       </div>
 
       <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>

@@ -118,6 +118,15 @@ export type Locale = 'en' | 'fa'
 // no new mechanism needed to support it.
 export type ControlPanelTab = 'elements' | 'layers' | 'style' | 'content' | 'theme' | 'seo'
 
+// ─── Autosave status ─────────────────────────────────────────────────────
+// Purely UI-facing — read by AutosaveIndicator.tsx, written exclusively by
+// useAutosave (autosave.ts). NOT undo-tracked (same precedent as locale/
+// controlPanelTab/tutorial state above): a save succeeding or failing isn't
+// a content edit. 'idle' is the pre-first-change state — AutosaveIndicator
+// renders nothing at all in that case, so a brand-new, untouched page shows
+// no status pill rather than a premature "Saved".
+export type AutosaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+
 // ─── Guided tutorial (onboarding walkthrough) ──────────────────────────────
 // A one-time, step-by-step spotlight tour (see TutorialOverlay.tsx) that
 // highlights real elements already in the app (the canvas, ControlPanel's
@@ -297,6 +306,15 @@ interface BuilderStore {
   controlPanelTab:    ControlPanelTab
   setControlPanelTab: (tab: ControlPanelTab) => void
 
+  // ── Autosave status (see the doc comment on AutosaveStatus above) ──
+  // Written exclusively by useAutosave (autosave.ts); read by
+  // AutosaveIndicator.tsx. Not undo-tracked, same precedent as every other
+  // UI-only field on this store.
+  autosaveStatus:      AutosaveStatus
+  autosaveLastSavedAt: number | null
+  setAutosaveStatus:      (status: AutosaveStatus) => void
+  setAutosaveLastSavedAt: (ts: number | null) => void
+
   // See the "Guided tutorial" doc comment above for the full rundown.
   hasSeenTutorial:       boolean
   tutorialLangModalOpen: boolean
@@ -424,6 +442,9 @@ export const useBuilderStore = create<BuilderStore>()(
       // Layers tree first.
       controlPanelTab: 'elements',
 
+      autosaveStatus:      'idle',
+      autosaveLastSavedAt: null,
+
       hasSeenTutorial:       false, // hydrated client-side — see hydrateTutorialFlag
       tutorialLangModalOpen: false,
       tutorialStep:          -1,
@@ -460,6 +481,9 @@ export const useBuilderStore = create<BuilderStore>()(
       setGlobalCustomJs:    (js)  => set(s => { s.globalCustomJs = js }),
       setLocale:            (locale) => set(s => { s.locale = locale }),
       setControlPanelTab:   (tab) => set(s => { s.controlPanelTab = tab }),
+
+      setAutosaveStatus:      (status) => set(s => { s.autosaveStatus = status }),
+      setAutosaveLastSavedAt: (ts)     => set(s => { s.autosaveLastSavedAt = ts }),
 
       // Reads the localStorage flag once — call this from a useEffect on
       // mount (see Tutorial.tsx), never at store-creation time, so the
