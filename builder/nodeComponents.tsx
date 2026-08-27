@@ -1418,6 +1418,32 @@ export const ColumnsPanel: React.FC<PanelProps> = ({ node, onChange }) => {
   return (
     <div className="space-y-5 p-4">
       <FieldGroup label={t('fgLayout')}>
+        {/* Direction — this is the fix for "Columns can't be made
+            responsive": the underlying style/styleTablet/styleMobile
+            cascade (responsive.ts) and the renderer (buildFlexInlineProps
+            in styleMapper.ts) already fully support a per-breakpoint
+            flexDir on ANY node, Columns included — an inline
+            flexDirection always wins over ColumnsEditor/ColumnsPreview's
+            own hardcoded 'flex-row' class regardless (inline style beats
+            a class in the cascade). What was actually missing was a UI
+            control to SET it here, unlike Section's own Direction field
+            (SectionPanel above) — so there was previously no way for a
+            person to make a Columns row stack at Tablet/Mobile without
+            hand-editing exported JSON.
+            To use: switch the Desktop/Tablet/Mobile switcher in the top
+            bar to Mobile (or Tablet), select this Columns block, then set
+            this to "Column" — that writes into styleMobile only, so
+            Desktop keeps its own row layout untouched. Pair this with
+            each child Column's own Width Mode control (see ColumnPanel
+            below) — set back to "Fill evenly" at the same breakpoint if a
+            child had a fixed/fractional width, so it fills the stacked
+            row instead of staying narrow. */}
+        <SelectField
+          label={t('directionLabel')}
+          value={s.flexDir ?? 'row'}
+          options={['row', 'col', 'row-reverse', 'col-reverse']}
+          onChange={v => patchStyle(node, onChange, { flexDir: v as StyleProps['flexDir'] })}
+        />
         <SpacingField label={t('fieldGap')}          value={s.gap}    onChange={v => patchStyle(node, onChange, { gap: v })} />
         <SelectField  label={t('alignItemsLabel')}   value={s.align ?? 'stretch'} options={['start','center','end','stretch','baseline']} onChange={v => patchStyle(node, onChange, { align: v as StyleProps['align'] })} />
         <SelectField  label={t('justifyLabel')}      value={s.justify ?? 'between'} options={['start','center','end','between','around','evenly']} onChange={v => patchStyle(node, onChange, { justify: v as StyleProps['justify'] })} />
