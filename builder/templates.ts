@@ -57,7 +57,7 @@ function buildHero(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string
     },
     [btnRowId]: {
       id: btnRowId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 3, justify: 'center', align: 'center' } },
+      props: { style: { display: 'flex', gap: 3, justify: 'center', align: 'center' } },
       children: [btn1Id, btn2Id],
     },
     [btn1Id]: {
@@ -114,7 +114,7 @@ function buildTwoColFeature(locale: Locale = 'en'): { nodes: NodeMap; rootChildI
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 12, align: 'center' } },
+      props: { style: { display: 'flex', gap: 12, align: 'center' } },
       children: [col1Id, col2Id],
     },
     [col1Id]: {
@@ -277,7 +277,7 @@ function buildThreeColFeatures(locale: Locale = 'en'): { nodes: NodeMap; rootChi
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 6, align: 'start' } },
+      props: { style: { display: 'flex', gap: 6, align: 'start' } },
       children: [c1.colId, c2.colId, c3.colId],
     },
     ...c1.nodes,
@@ -383,7 +383,7 @@ function buildPricing(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: str
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 6, align: 'stretch' } },
+      props: { style: { display: 'flex', gap: 6, align: 'stretch' } },
       children: [t1.colId, t2.colId, t3.colId],
     },
     ...t1.nodes, ...t2.nodes, ...t3.nodes,
@@ -509,7 +509,7 @@ function buildStats(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: strin
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 4, justify: 'between' } },
+      props: { style: { display: 'flex', gap: 4, justify: 'between' } },
       children: [s1.colId, s2.colId, s3.colId, s4.colId],
     },
     ...s1.nodes, ...s2.nodes, ...s3.nodes, ...s4.nodes,
@@ -543,7 +543,7 @@ function buildHeader(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: stri
     },
     [rowId]: {
       id: rowId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 6, align: 'center', justify: 'between' } },
+      props: { style: { display: 'flex', gap: 6, align: 'center', justify: 'between' } },
       children: [logoColId, navColId],
     },
     [logoColId]: {
@@ -695,7 +695,7 @@ function buildTeam(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: string
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 4, justify: 'between' } },
+      props: { style: { display: 'flex', gap: 4, justify: 'between' } },
       children: [m1.colId, m2.colId, m3.colId, m4.colId],
     },
     ...m1.nodes, ...m2.nodes, ...m3.nodes, ...m4.nodes,
@@ -807,7 +807,7 @@ function buildLogoCloud(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: s
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 4, justify: 'between', align: 'center' } },
+      props: { style: { display: 'flex', gap: 4, justify: 'between', align: 'center' } },
       children: [l1.colId, l2.colId, l3.colId, l4.colId, l5.colId],
     },
     ...l1.nodes, ...l2.nodes, ...l3.nodes, ...l4.nodes, ...l5.nodes,
@@ -870,7 +870,7 @@ function buildFooter(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: stri
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 8, justify: 'between' } },
+      props: { style: { display: 'flex', gap: 8, justify: 'between' } },
       children: [c1.colId, c2.colId, c3.colId],
     },
     [divId]: {
@@ -960,7 +960,7 @@ function buildComparison(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: 
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 6, align: 'stretch' } },
+      props: { style: { display: 'flex', gap: 6, align: 'stretch' } },
       children: [free.colId, pro.colId, team.colId],
     },
     ...free.nodes, ...pro.nodes, ...team.nodes,
@@ -1042,7 +1042,7 @@ function buildBlogGrid(locale: Locale = 'en'): { nodes: NodeMap; rootChildId: st
     },
     [colsId]: {
       id: colsId, type: 'columns', parentId: sectionId,
-      props: { style: { gap: 8, align: 'start' } },
+      props: { style: { display: 'flex', gap: 8, align: 'start' } },
       children: [p1.colId, p2.colId, p3.colId],
     },
     ...p1.nodes, ...p2.nodes, ...p3.nodes,
@@ -1270,7 +1270,7 @@ function buildFeatureTabs(locale: Locale = 'en'): { nodes: NodeMap; rootChildId:
         },
         [colsId]: {
           id: colsId, type: 'columns', parentId: paneId,
-          props: { style: { gap: 8, align: 'center' } },
+          props: { style: { display: 'flex', gap: 8, align: 'center' } },
           children: [col1Id, col2Id],
         },
         [col1Id]: {
@@ -1455,7 +1455,7 @@ function buildLogoCarousel(locale: Locale = 'en'): { nodes: NodeMap; rootChildId
     const txtIds  = names.map(() => id())
     const nodes: Record<string, PageNode> = {
       [slideId]: { id: slideId, type: 'slide', parentId: parent, props: { style: { px: 4, py: 6 } }, children: [colsId] },
-      [colsId]:  { id: colsId, type: 'columns', parentId: slideId, props: { style: { gap: 4, justify: 'between', align: 'center' } }, children: colIds },
+      [colsId]:  { id: colsId, type: 'columns', parentId: slideId, props: { style: { display: 'flex', gap: 4, justify: 'between', align: 'center' } }, children: colIds },
     }
     names.forEach((name, i) => {
       nodes[colIds[i]] = { id: colIds[i], type: 'column', parentId: colsId, props: { style: { px: 2, py: 2, display: 'flex', align: 'center', justify: 'center' } }, children: [txtIds[i]] }
