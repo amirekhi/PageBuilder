@@ -176,7 +176,7 @@ function buildAuthorBio(locale: Locale): { nodes: NodeMap; rootChildId: string }
   const nameId = id(); const roleId = id(); const bioId = id()
   const nodes: NodeMap = {
     [sectionId]: { id: sectionId, type: 'section', parentId: null, props: { style: { py: 10, px: 8, maxWidth: '3xl', centerContent: true } }, children: [rowId] },
-    [rowId]: { id: rowId, type: 'columns', parentId: sectionId, props: { style: { gap: 4, align: 'center', bgColor: 'neutral-50', rounded: 'xl', px: 6, py: 6 } }, children: [avId, colId] },
+    [rowId]: { id: rowId, type: 'columns', parentId: sectionId, props: { style: { display: 'flex', gap: 4, align: 'center', bgColor: 'neutral-50', rounded: 'xl', px: 6, py: 6 } }, children: [avId, colId] },
     [avId]: { id: avId, type: 'avatar', parentId: rowId, props: { src: '', initials: 'JL', size: 56 }, children: [] },
     [colId]: { id: colId, type: 'column', parentId: rowId, props: { style: { px: 0, py: 0, display: 'flex', flexDir: 'col', gap: 1 } }, children: [nameId, roleId, bioId] },
     [nameId]: { id: nameId, type: 'heading', parentId: colId, props: { tag: 'h4', content: c.name, style: { fontSize: 'base', fontWeight: 'semibold' } }, children: [] },
@@ -199,7 +199,7 @@ function buildStorySection(locale: Locale): { nodes: NodeMap; rootChildId: strin
   const imgId = id(); const eyebrowId = id(); const headId = id(); const bodyId = id()
   const nodes: NodeMap = {
     [sectionId]: { id: sectionId, type: 'section', parentId: null, props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 8, maxWidth: '5xl', centerContent: true } }, children: [colsId] },
-    [colsId]: { id: colsId, type: 'columns', parentId: sectionId, props: { style: { gap: 12, align: 'center' } }, children: [col1Id, col2Id] },
+    [colsId]: { id: colsId, type: 'columns', parentId: sectionId, props: { style: { display: 'flex', gap: 12, align: 'center' } }, children: [col1Id, col2Id] },
     [col1Id]: { id: col1Id, type: 'column', parentId: colsId, props: { style: { px: 0, py: 0 } }, children: [imgId] },
     [col2Id]: { id: col2Id, type: 'column', parentId: colsId, props: { style: { px: 0, py: 4, display: 'flex', flexDir: 'col', gap: 4 } }, children: [eyebrowId, headId, bodyId] },
     [imgId]: { id: imgId, type: 'image', parentId: col1Id, props: { src: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&q=80', alt: c.imgAlt, style: { width: 'full', rounded: 'xl', aspectRatio: '4/3', objectFit: 'cover' } }, children: [] },
@@ -256,7 +256,7 @@ function buildProjectsGrid(locale: Locale): { nodes: NodeMap; rootChildId: strin
   const nodes: NodeMap = {
     [sectionId]: { id: sectionId, type: 'section', parentId: null, props: { style: { py: 16, px: 8, display: 'flex', flexDir: 'col', gap: 10, maxWidth: '6xl', centerContent: true } }, children: [headId, colsId] },
     [headId]: { id: headId, type: 'heading', parentId: sectionId, props: { tag: 'h2', content: c.heading, style: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } }, children: [] },
-    [colsId]: { id: colsId, type: 'columns', parentId: sectionId, props: { style: { gap: 8, align: 'start' } }, children: [p1.colId, p2.colId, p3.colId] },
+    [colsId]: { id: colsId, type: 'columns', parentId: sectionId, props: { style: { display: 'flex', gap: 8, align: 'start' } }, children: [p1.colId, p2.colId, p3.colId] },
     ...p1.nodes, ...p2.nodes, ...p3.nodes,
   }
   return { nodes, rootChildId: sectionId }
@@ -300,7 +300,7 @@ function buildContactInfo(locale: Locale): { nodes: NodeMap; rootChildId: string
 
   const nodes: NodeMap = {
     [sectionId]: { id: sectionId, type: 'section', parentId: null, props: { style: { py: 8, px: 8, display: 'flex', flexDir: 'col', maxWidth: '5xl', centerContent: true } }, children: [colsId] },
-    [colsId]: { id: colsId, type: 'columns', parentId: sectionId, props: { style: { gap: 4, justify: 'between' } }, children: [i1.colId, i2.colId, i3.colId] },
+    [colsId]: { id: colsId, type: 'columns', parentId: sectionId, props: { style: { display: 'flex', gap: 4, justify: 'between' } }, children: [i1.colId, i2.colId, i3.colId] },
     ...i1.nodes, ...i2.nodes, ...i3.nodes,
   }
   return { nodes, rootChildId: sectionId }
