@@ -25,6 +25,7 @@ import { MobileBlockModal } from '@/builder/MobileBlockModal'
 import { useIsViewportTooNarrow } from '@/builder/useViewportGate'
 import { Tutorial } from '@/builder/Tutorial'
 import { AutoSaveComp } from '@/builder/AutoSaveComp'
+import { AgentCanvasLock } from '@/builder/agent/AgentCanvasLock'
 import { NODE_REGISTRY } from '@/builder/registry'
 import { getTemplates } from '@/builder/templates'
 import { parseSlotId, parseGridCellDropId, parsePaletteDragId, parseTemplateDragId } from '@/builder/DropSlot'
@@ -239,6 +240,9 @@ export default function BuilderPage() {
         <ImageEditorModal />
         <Tutorial />
         <AutoSaveComp />
+        {/* Blocks canvas input + shows a Stop pill while the AI agent is
+            streaming edits (see agent/AgentCanvasLock.tsx). */}
+        {mode === 'edit' && <AgentCanvasLock />}
       </div>
 
       <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>
