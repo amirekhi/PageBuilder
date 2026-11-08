@@ -116,7 +116,7 @@ export type Locale = 'en' | 'fa'
 // 'elements' ADDED: the new Elementor-style block palette tab (see
 // ElementsTab in ControlPanel.tsx) — a plain new value in this same union,
 // no new mechanism needed to support it.
-export type ControlPanelTab = 'elements' | 'layers' | 'style' | 'content' | 'theme' | 'seo'
+export type ControlPanelTab = 'elements' | 'layers' | 'style' | 'content' | 'theme' | 'seo' | 'agent'
 
 // ─── Autosave status ─────────────────────────────────────────────────────
 // Purely UI-facing — read by AutosaveIndicator.tsx, written exclusively by
@@ -152,6 +152,8 @@ export type AutosaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 // or completes its last step, so it never auto-opens again until the user
 // deliberately clicks "Restart tutorial" in TopBar (resetTutorial, which
 // clears the flag and reopens the language modal).
+
+
 const TUTORIAL_SEEN_KEY = 'pagebuilder_tutorial_seen_v1'
 
 function readTutorialSeenFlag(): boolean {

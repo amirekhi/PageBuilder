@@ -15,16 +15,19 @@ import { getPageTemplates, useInsertPageTemplate, PageTemplateGrid } from './pag
 import { useInsertTemplate } from './TemplatePicker'
 import type { HoverStyleProps } from './customCss'
 import { useT, useDirection, nodeLabel, blockGroupLabel, type DictKey } from './i18n'
+import { AgentPanel } from './agent/AgentPanel'
 
 // 'elements' added FIRST — this is the new Elementor-style palette tab (see
-// ElementsTab below). Everything else in this file is unchanged; this tab
-// slots into the exact same tab-bar/tab-body machinery layers/style/content
-// already use.
-const VISIBLE_TABS: ControlPanelTab[] = ['elements', 'layers', 'style', 'content']
+// ElementsTab below). 'agent' added LAST — the AI page assistant chat (see
+// agent/AgentPanel.tsx). Everything else in this file is unchanged; both
+// tabs slot into the exact same tab-bar/tab-body machinery
+// layers/style/content already use.
+const VISIBLE_TABS: ControlPanelTab[] = ['elements', 'layers', 'style', 'content', 'agent']
 
 const TAB_LABEL_KEY: Record<ControlPanelTab, DictKey> = {
   elements: 'tabElements',
   layers: 'tabLayers', style: 'tabStyle', content: 'tabContent',
+  agent: 'tabAgent',
   theme: 'tabLayers', seo: 'tabLayers',
 }
 
@@ -58,6 +61,7 @@ export function ControlPanel() {
         {tab === 'layers'  && <LayersTab />}
         {tab === 'style'   && <StyleTab   node={selectedNode} onUpdate={updateProps} />}
         {tab === 'content' && <ContentTab node={selectedNode} onUpdate={updateProps} />}
+        {tab === 'agent'   && <AgentPanel />}
         {tab === 'theme'   && <ThemeTab />}
         {tab === 'seo'     && <div className="p-4"><SeoPanel /></div>}
       </div>

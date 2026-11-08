@@ -422,6 +422,8 @@ const DICT = {
     formRowsLabel: 'Rows',
     formOptionsSection: 'Options',
     formAddOptionBtn: '+ Add option',
+    tabAgent: '✨ AI',
+
   },
   fa: {
     tabLayers: 'لایه‌ها', tabStyle: 'استایل', tabContent: 'محتوا',
@@ -790,6 +792,7 @@ const DICT = {
     formRowsLabel: 'تعداد ردیف',
     formOptionsSection: 'گزینه‌ها',
     formAddOptionBtn: '+ افزودن گزینه',
+    tabAgent: '✨ AI',
   },
 } as const
 
